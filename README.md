@@ -2,7 +2,7 @@
 Go-Guerrilla SMTPd
 An minimalist SMTP server written in Go, made for receiving large volumes of mail.
 
-![Go Guerrilla](flashmob.github.com/go-guerrilla/GoGuerrilla.png)
+![Go Guerrilla](https://raw.github.com/flashmob/go-guerrilla/master/GoGuerrilla.png)
 
 What is Go Guerrilla SMTPd?
 It's a small SMTP server written in Go, optimized for receiving email.
