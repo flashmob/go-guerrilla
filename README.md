@@ -85,7 +85,7 @@ almost everything, including MySQL.
 
 
 
-HOW TO USE / Installation:
+Getting started
 ===========================
 
 To build, you will need to install the following Go libs:
