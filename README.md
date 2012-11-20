@@ -136,7 +136,7 @@ Why proxy SMTP?
  - Terminate TLS connections: Golang is not there yet when it comes to TLS.
 At present, only a partial implementation of TLS is provided (as of Nov 2012). 
 OpenSSL on the other hand, used in Nginx, has a complete implementation of
- SSL v2/v3 and TLS protocols
+SSL v2/v3 and TLS protocols
 
 - Could be used for load balancing and authentication in the future.
 
@@ -169,6 +169,7 @@ The following Nginx proxy configuration:
 	}
 	
 Assuming that Guerrilla SMTPd has the following configuration settings:
+
 	"GSMTP_MAX_SIZE"		  "15728640",
 	"NGINX_AUTH_ENABLED":     "Y",
 	"NGINX_AUTH":             "127.0.0.1:8025", 
@@ -179,12 +180,12 @@ Starting / Command Line usage
 
 All command line arguments are optional
 
-  -config="goguerrilla.conf": Path to the configuration file
-  -if="": Interface and port to listen on, eg. 127.0.0.1:2525
-  -v="n": Verbose, [y | n]
+	-config="goguerrilla.conf": Path to the configuration file
+	  -if="": Interface and port to listen on, eg. 127.0.0.1:2525
+	  -v="n": Verbose, [y | n]
 
 Starting from the command line (example)
 
-/usr/bin/nohup /home/mike/goguerrilla -config=/home/mike/goguerrilla.conf 2>&1 &
+	/usr/bin/nohup /home/mike/goguerrilla -config=/home/mike/goguerrilla.conf 2>&1 &
 
 This will place goguerrilla in the background and continue running
