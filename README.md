@@ -62,7 +62,7 @@ Besides, our process was I/O bound - there's a better way than to block.
 So how to solve this one? 
 
 Instead of polling/blocking in an infinite loop to see if there are any sockets to be 
-operated, it was more efficent to be notified when the sockets are ready.
+operated, it was more efficient to be notified when the sockets are ready.
 This Wikipedia entry explains it best, 
 http://en.wikipedia.org/wiki/Asynchronous_I/O see "Select(/poll) loops"
 
@@ -78,7 +78,7 @@ decided to give it a go.
 
 As a language, Go is brilliant for writing server back-ends, with support for concurrency. 
 There's a nice tutorial for getting started on the Golang.org website. 
-There were a lot of great discoveries along the way, particulary the 'channels' 
+There were a lot of great discoveries along the way, particularly the 'channels' 
 in Go can be simple, yet very powerful and the defer statement is quite convenient. 
 It looks like there's a wealth of packages available for
 almost everything, including MySQL.
@@ -102,7 +102,7 @@ Setup the following database:
 
 Configuration
 ============================================
-The configuration is in strict JSON format. Here is an anotated configuration
+The configuration is in strict JSON format. Here is an annotated configuration
 
 	{
 	    "GM_ALLOWED_HOSTS":"example.com,sample.com,foo.com,bar.com", // which domains accept mail
@@ -136,8 +136,7 @@ Why proxy SMTP?
  - Terminate TLS connections: Golang is not there yet when it comes to TLS.
 At present, only a partial implementation of TLS is provided (as of Nov 2012). 
 OpenSSL on the other hand, used in Nginx, has a complete implementation of
-SSL v2/v3 and TLS protocols
-
+SSL v2/v3 and TLS protocols.
 - Could be used for load balancing and authentication in the future.
 
 The following Nginx proxy configuration:
@@ -181,8 +180,8 @@ Starting / Command Line usage
 All command line arguments are optional
 
 	-config="goguerrilla.conf": Path to the configuration file
-	  -if="": Interface and port to listen on, eg. 127.0.0.1:2525
-	  -v="n": Verbose, [y | n]
+	 -if="": Interface and port to listen on, eg. 127.0.0.1:2525
+	 -v="n": Verbose, [y | n]
 
 Starting from the command line (example)
 
