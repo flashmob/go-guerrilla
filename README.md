@@ -100,8 +100,6 @@ Rename goguerrilla.conf.sample to goguerrilla.conf
 
 Setup the following database:
 
-
-
 Configuration
 ============================================
 The configuration is in strict JSON format. Here is an anotated configuration
@@ -122,9 +120,10 @@ The configuration is in strict JSON format. Here is an anotated configuration
 	    "MYSQL_HOST":"127.0.0.1:3306", // database connect
 	    "MYSQL_PASS":"$ecure1t", // database connection pass
 	    "MYSQL_USER":"gmail_mail", // database username
-	    "GM_CONN_BACKLOG":"100", // connection backlog queue
 	    "GM_MAX_CLIENTS":"500", // max clients that can be handled
-	    "SGID":"508", // group id of the user from /etc/passwd
+		"NGINX_AUTH_ENABLED":"N",// Y or N
+		"NGINX_AUTH":"127.0.0.1:8025", // If using Nginx proxy, choose an ip and port to serve Auth requsts for Nginx
+	    "SGID":"508",// group id of the user from /etc/passwd
 		"GUID":"504" // uid from /etc/passwd
 	}
 
@@ -145,9 +144,7 @@ The following Nginx proxy configuration:
 
 
 	mail {
-	
-	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to 
-									
+	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to 								
 	        server {
 	                listen  5.9.7.183:25;
 	                protocol smtp;
@@ -168,9 +165,7 @@ The following Nginx proxy configuration:
 					# TLS off unless client issues STARTTLS command
 	                starttls on;
 	                proxy on;
-	
 	        }
-	
 	}
 	
 Assuming that Guerrilla SMTPd has the following configuration settings:

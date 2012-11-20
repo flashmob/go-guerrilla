@@ -15,8 +15,9 @@
     "MYSQL_HOST":"127.0.0.1:3306",
     "MYSQL_PASS":"$ecure1t",
     "MYSQL_USER":"gmail_mail",
-    "GM_CONN_BACKLOG":"100",
     "GM_MAX_CLIENTS":"500",
+	"NGINX_AUTH_ENABLED":"N",
+	"NGINX_AUTH":"127.0.0.1:8025",
     "SGID":"508",
 	"GUID":"504"
 }
