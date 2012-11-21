@@ -167,19 +167,21 @@ OpenSSL on the other hand, used in Nginx, has a complete implementation of
 SSL v2/v3 and TLS protocols.
  *	Could be used for load balancing and authentication in the future.
 
-The following Nginx proxy configuration:
+ 1.	Compile nginx with --with-mail --with-mail_ssl_module
+
+ 2.	Configuration:
 
 
 	mail {
 	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to 								
 	        server {
-	                listen  5.9.7.183:25;
+	                listen  15.29.8.163:25;
 	                protocol smtp;
-	                server_name  ak47.guerrillamail.com;
+	                server_name  ak47.example.com;
 	
 	                smtp_auth none;
 	                timeout 30000;
-					smtp_capabilities "SIZE 15728640"
+					smtp_capabilities "SIZE 15728640";
 					
 					# ssl default off. Leave off if starttls is on
 	                #ssl                  on;
