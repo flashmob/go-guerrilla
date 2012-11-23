@@ -24,66 +24,39 @@ The server does NOT send any email including bounces. This should
 be performed by a separate program.
 
 
-### So what's the story?
+### History and purpose
 
-Originally, Guerrilla Mail was running the Exim mail server, and the emails
-were fetched using POP.
+GoGuerrilla is a port of the original 'Guerrilla' SMTP daemon written in PHP using
+an event-driven I/O library (libevent)
 
-This proved to be inefficient and unreliable, so the system was replaced in 
-favour of piping the emails directly in to a PHP script.
+https://github.com/flashmob/Guerrilla-SMTPd
 
-Soon, the piping solution  became a problem too; it required a new process to 
-be started for each arriving email, and it also required a new database 
-connection every time. 
+It's not a direct port, while the purpose and functionality remains identical.
 
-So, how was the bottleneck eliminated? Conveniently, PHP has a socket 
-library which means we can use PHP to quickly prototype a simple SMTP server.
-If the server runs as a daemon, then the system doesn't need to launch a new 
-process for each incoming email. It also doesn't need to run and insane amount 
-of checks for each connection (eg, NS Lookups, white-lists, black-lists, SPF
-domain keys, Spam Assassin, etc).
+This Go version was made in order to take advantage of our new server with 8 cores. 
+Not that the PHP version was taking much CPU anyway, it always stayed at about 1-5%
+despite guzzling down a ton of email every day...
 
-We only need to open a single database connection and a single process can be 
-re-used indefinitely. The PHP server was able to multiplex simultaneous 
-connections without the need for forking/threading thanks to socket_select()
+As always, the bottleneck today is the network and secondary storage. It's highly probable
+that in the near future, secondary storage will become so fast that the I/O bottleneck
+will not be an issue. Prices of Solid State Drives are dropping fast, their speeds are rapidly
+increasing. So if I/O bottleneck would disappear, it will be replaced by a new bottleneck,
+the CPU. 
 
-Therefore, we could receive, process and store email all in the one process.
-The performance improvement has been dramatic. 
+To prepare for the CPU bottleneck, we need to be able to scale our software to multiple cores.
+Since PHP runs in a single  process, it can only run on a single core. Sure, it would
+have been possible to use fork(), but that can get messy and doesn't play well with
+libevent. Also, it would have been possible to start an instance for each core and
+use a proxy to distribute the traffic to each instance, but that would make the system too
+ complicated.
 
-However, a few months later, the volume of email increased again and
-this time our server's CPU was under pressure. You see, the problem was that
-the SMTP server was checking the sockets in a loop all the time. This is fine
-if you have a few sockets, but horrible if you have 1000! A common way to solve
-this is to have a connection per thread - and a thread can sleep while it is
-waiting for a socket, not polling all the time.
+The most alluring aspect of Go are the Goroutines! It makes concurrent programming
+easy, clean and fun! Go programs can also take advantage of all your machine's multiple 
+cores without much effort that you would otherwise need with forking or managing your
+event loop callbacks, etc.
 
-Threads are great if you have many CPU cores, but our server only had two.
-Besides, our process was I/O bound - there's a better way than to block.
-So how to solve this one? 
-
-Instead of polling/blocking in an infinite loop to see if there are any sockets to be 
-operated, it was more efficient to be notified when the sockets are ready.
-This Wikipedia entry explains it best, 
-http://en.wikipedia.org/wiki/Asynchronous_I/O see "Select(/poll) loops"
-
-Luck had it that an extension is available for PHP! One night later, and version 2 was made
-to use libevent http://pecl.php.net/package/libevent
-
-The improvement was superb. The load average has decreased
-substantially, freeing the CPU for other tasks. It was even surprising to see that
-PHP could handle so many emails.
-
-Fast forward to 2012, to where we are now. Golang 1.0 was released, so it was
-decided to give it a go.
-
-As a language, Go is brilliant for writing server back-ends, with support for concurrency. 
-There's a nice tutorial for getting started on the Golang.org website. 
-There were a lot of great discoveries along the way, particularly the 'channels' 
-in Go can be simple, yet very powerful and the defer statement is quite convenient. 
-It looks like there's a wealth of packages available for
-almost everything, including MySQL.
-
-
+If you do invite GoGuerrilla in to your system, please remember to feed it with lots
+of spam - spam is what it likes best!
 
 Getting started
 ===========================
@@ -218,3 +191,6 @@ Starting from the command line (example)
 	/usr/bin/nohup /home/mike/goguerrilla -config=/home/mike/goguerrilla.conf 2>&1 &
 
 This will place goguerrilla in the background and continue running
+
+You may also put another process to watch your goguerrilla process and re-start it
+if something goes wrong.
