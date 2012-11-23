@@ -145,8 +145,8 @@ SSL v2/v3 and TLS protocols.
 
  2.	Configuration:
 
-
-	mail {
+	
+		mail {
 	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to 								
 	        server {
 	                listen  15.29.8.163:25;
@@ -169,8 +169,9 @@ SSL v2/v3 and TLS protocols.
 	                starttls on;
 	                proxy on;
 	        }
-	}
+		}
 	
+			
 Assuming that Guerrilla SMTPd has the following configuration settings:
 
 	"GSMTP_MAX_SIZE"		  "15728640",
