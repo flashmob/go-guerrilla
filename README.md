@@ -31,7 +31,7 @@ an event-driven I/O library (libevent)
 
 https://github.com/flashmob/Guerrilla-SMTPd
 
-It's not a direct port, while the purpose and functionality remains identical.
+It's not a direct port, although the purpose and functionality remains identical.
 
 This Go version was made in order to take advantage of our new server with 8 cores. 
 Not that the PHP version was taking much CPU anyway, it always stayed at about 1-5%
@@ -40,11 +40,11 @@ despite guzzling down a ton of email every day...
 As always, the bottleneck today is the network and secondary storage. It's highly probable
 that in the near future, secondary storage will become so fast that the I/O bottleneck
 will not be an issue. Prices of Solid State Drives are dropping fast, their speeds are rapidly
-increasing. So if I/O bottleneck would disappear, it will be replaced by a new bottleneck,
+increasing. So if the I/O bottleneck would disappear, it will be replaced by a new bottleneck,
 the CPU. 
 
 To prepare for the CPU bottleneck, we need to be able to scale our software to multiple cores.
-Since PHP runs in a single  process, it can only run on a single core. Sure, it would
+Since PHP runs in a single process, it can only run on a single core. Sure, it would
 have been possible to use fork(), but that can get messy and doesn't play well with
 libevent. Also, it would have been possible to start an instance for each core and
 use a proxy to distribute the traffic to each instance, but that would make the system too
