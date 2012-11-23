@@ -53,7 +53,8 @@ use a proxy to distribute the traffic to each instance, but that would make the 
 The most alluring aspect of Go are the Goroutines! It makes concurrent programming
 easy, clean and fun! Go programs can also take advantage of all your machine's multiple 
 cores without much effort that you would otherwise need with forking or managing your
-event loop callbacks, etc.
+event loop callbacks, etc. Golang solves the C10K problem in a very interesting way
+ http://en.wikipedia.org/wiki/C10k_problem
 
 If you do invite GoGuerrilla in to your system, please remember to feed it with lots
 of spam - spam is what it likes best!
