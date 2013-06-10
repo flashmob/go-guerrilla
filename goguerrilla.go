@@ -71,7 +71,7 @@ import (
 	"github.com/sloonz/go-iconv"
 	"github.com/sloonz/go-qprintable"
 	"github.com/ziutek/mymysql/autorc"
-	_ "github.com/ziutek/mymysql/godrv"
+	"github.com/ziutek/mymysql/godrv"
 	"io"
 	"io/ioutil"
 	"log"
