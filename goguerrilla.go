@@ -6,18 +6,7 @@ TO DO: add http server for nginx
 
 Copyright (c) 2012 Flashmob, GuerrillaMail.com
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
-rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+See LICENSE for licensing details
 
 What is Go Guerrilla SMTPd?
 It's a small SMTP server written in Go, optimized for receiving email.
@@ -112,25 +101,25 @@ var max_size int // max email DATA size
 var timeout time.Duration
 var allowedHosts = make(map[string]bool, 15)
 var sem chan int // currently active clients
-
 var SaveMailChan chan *Client // workers for saving mail
+
 // defaults. Overwrite any of these in the configure() function which loads them from a json file
 var gConfig = map[string]string{
 	"GSMTP_MAX_SIZE":         "131072",
-	"GSMTP_HOST_NAME":        "server.example.com", // This should also be set to reflect your RDNS
+	"GSMTP_HOST_NAME":        "gsmtp.example.com", // This should also be set to reflect your RDNS
 	"GSMTP_VERBOSE":          "Y",
 	"GSMTP_LOG_FILE":         "",    // Eg. /var/log/goguerrilla.log or leave blank if no logging
 	"GSMTP_TIMEOUT":          "100", // how many seconds before timeout.
 	"MYSQL_HOST":             "127.0.0.1:3306",
-	"MYSQL_USER":             "gmail_mail",
+	"MYSQL_USER":             "go_guerrilla",
 	"MYSQL_PASS":             "ok",
-	"MYSQL_DB":               "gmail_mail",
-	"GM_MAIL_TABLE":          "new_mail",
-	"GSTMP_LISTEN_INTERFACE": "0.0.0.0:25",
-	"GSMTP_PUB_KEY":          "/etc/ssl/certs/ssl-cert-snakeoil.pem",
-	"GSMTP_PRV_KEY":          "/etc/ssl/private/ssl-cert-snakeoil.key",
-	"GM_ALLOWED_HOSTS":       "guerrillamail.de,guerrillamailblock.com",
-	"GM_PRIMARY_MAIL_HOST":   "guerrillamail.com",
+	"MYSQL_DB":               "go_guerrilla",
+	"GM_MAIL_TABLE":          "mail_queue",
+	"GSTMP_LISTEN_INTERFACE": "127.0.0.1:25",
+	"GSMTP_PUB_KEY":          "./certs/ssl-cert-snakeoil.pem",
+	"GSMTP_PRV_KEY":          "./certs/ssl-cert-snakeoil.key",
+	"GM_ALLOWED_HOSTS":       "example.com",
+	"GM_PRIMARY_MAIL_HOST":   "smarthost.example.com",
 	"GM_MAX_CLIENTS":         "500",
 	"NGINX_AUTH_ENABLED":     "N",              // Y or N
 	"NGINX_AUTH":             "127.0.0.1:8025", // If using Nginx proxy, ip and port to serve Auth requsts
@@ -484,7 +473,7 @@ func saveMail() {
 	if sql_err != nil {
 		logln(2, fmt.Sprintf("Sql statement incorrect: %s", sql_err))
 	}
-	sql = "UPDATE gm2_setting SET `setting_value` = `setting_value`+1 WHERE `setting_name`='received_emails' LIMIT 1"
+	sql = "UPDATE _settings SET `setting_value` = `setting_value`+1 WHERE `setting_name`='received_emails' LIMIT 1"
 	incr, sql_err := db.Prepare(sql)
 	if sql_err != nil {
 		logln(2, fmt.Sprintf("Sql statement incorrect: %s", sql_err))
