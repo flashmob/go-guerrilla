@@ -211,9 +211,6 @@ Assuming that GoGuerrilla has the following configuration settings:
 	"NGINX_AUTH_ENABLED":     "Y",
 	"NGINX_AUTH":             "127.0.0.1:8025", 
 
-## License
-See LICENSE
-
   [1]: http://www.golang.org
   [2]: https://github.com/flashmob/Guerrilla-SMTPd
   [3]: http://golang.org/doc/effective_go.html#goroutines
