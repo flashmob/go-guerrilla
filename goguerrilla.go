@@ -1,35 +1,7 @@
 /** 
 Go-Guerrilla SMTPd
-A minimalist SMTP server written in Go, made for receiving large volumes of mail.
-Works either as a stand-alone or in conjunction with Nginx SMTP proxy.
-TO DO: add http server for nginx
 
-Copyright (c) 2012 Flashmob, GuerrillaMail.com
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
-rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-What is Go Guerrilla SMTPd?
-It's a small SMTP server written in Go, optimized for receiving email.
-Written for GuerrillaMail.com which processes tens of thousands of emails
-every hour.
-
-Benchmarking:
-http://www.jrh.org/smtp/index.html
-Test 500 clients:
-$ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183
-
-Version: 1.1
+Version: 1.2
 Author: Flashmob, GuerrillaMail.com
 Contact: flashmob@gmail.com
 License: MIT
@@ -38,17 +10,6 @@ Site: http://www.guerrillamail.com/
 
 See README for more details
 
-To build
-Install the following
-$ go get github.com/ziutek/mymysql/thrsafe
-$ go get github.com/ziutek/mymysql/autorc
-$ go get github.com/ziutek/mymysql/godrv
-$ go get github.com/sloonz/go-iconv
-
-TODO: after failing tls, 
-
-patch:
-rebuild all: go build -a -v new.go
 
 */
 
@@ -78,10 +39,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+        "syscall"
 	"time"
 )
 
@@ -112,8 +75,9 @@ var max_size int // max email DATA size
 var timeout time.Duration
 var allowedHosts = make(map[string]bool, 15)
 var sem chan int // currently active clients
-
+var signalChannel = make(chan os.Signal, 1)
 var SaveMailChan chan *Client // workers for saving mail
+var flagVerbouse, flagIface, flagConfigFile string;
 // defaults. Overwrite any of these in the configure() function which loads them from a json file
 var gConfig = map[string]string{
 	"GSMTP_MAX_SIZE":         "131072",
@@ -134,8 +98,7 @@ var gConfig = map[string]string{
 	"GM_MAX_CLIENTS":         "500",
 	"NGINX_AUTH_ENABLED":     "N",              // Y or N
 	"NGINX_AUTH":             "127.0.0.1:8025", // If using Nginx proxy, ip and port to serve Auth requsts
-	"SGID":                   "1008",           // group id
-	"SUID":                   "1008",           // user id, from /etc/passwd
+	"PID_FILE":		  "/var/run/go-guerrilla.pid",
 }
 
 type redisClient struct {
@@ -157,30 +120,36 @@ func logln(level int, s string) {
 	}
 }
 
-func configure() {
-	var configFile, verbose, iface string
+func readConfig() {
 	log.SetOutput(os.Stdout)
 	// parse command line arguments
-	flag.StringVar(&configFile, "config", "goguerrilla.conf", "Path to the configuration file")
-	flag.StringVar(&verbose, "v", "n", "Verbose, [y | n] ")
-	flag.StringVar(&iface, "if", "", "Interface and port to listen on, eg. 127.0.0.1:2525 ")
-	flag.Parse()
+	if !flag.Parsed() {
+		flag.StringVar(&flagConfigFile, "config", "goguerrilla.conf", "Path to the configuration file")
+		flag.StringVar(&flagVerbouse, "v", "n", "Verbose, [y | n] ")
+		flag.StringVar(&flagIface, "if", "127.0.0.1:2525", "Interface and port to listen on, eg. 127.0.0.1:2525 ")
+		flag.Parse()
+	}
+
 	// load in the config.
-	b, err := ioutil.ReadFile(configFile)
+	b, err := ioutil.ReadFile(flagConfigFile)
 	if err != nil {
-		log.Fatalln("Could not read config file")
+		log.Fatalln("Could not read config file", err)
 	}
 	var myConfig map[string]string
 	err = json.Unmarshal(b, &myConfig)
 	if err != nil {
-		log.Fatalln("Could not parse config file")
+		log.Fatalln("Could not parse config file:", err)
 	}
 	for k, v := range myConfig {
 		gConfig[k] = v
 	}
-	gConfig["GSMTP_VERBOSE"] = strings.ToUpper(verbose)
-	if len(iface) > 0 {
-		gConfig["GSTMP_LISTEN_INTERFACE"] = iface
+	// copy command line flag over so it takes precedence
+	if len(flagVerbouse) > 0 {
+		gConfig["GSMTP_VERBOSE"] = strings.ToUpper(flagVerbouse)
+	}
+
+	if len(flagIface) > 0 {
+		gConfig["GSTMP_LISTEN_INTERFACE"] = flagIface
 	}
 	// map the allow hosts for easy lookup
 	if arr := strings.Split(gConfig["GM_ALLOWED_HOSTS"], ","); len(arr) > 0 {
@@ -190,14 +159,7 @@ func configure() {
 	}
 	var n int
 	var n_err error
-	// sem is an active clients channel used for counting clients
-	if n, n_err = strconv.Atoi(gConfig["GM_MAX_CLIENTS"]); n_err != nil {
-		n = 50
-	}
-	// currently active client list
-	sem = make(chan int, n)
-	// database writing workers
-	SaveMailChan = make(chan *Client, 5)
+
 	// timeout for reads
 	if n, n_err = strconv.Atoi(gConfig["GSMTP_TIMEOUT"]); n_err != nil {
 		timeout = time.Duration(10)
@@ -208,6 +170,27 @@ func configure() {
 	if max_size, n_err = strconv.Atoi(gConfig["GSMTP_MAX_SIZE"]); n_err != nil {
 		max_size = 131072
 	}
+	return
+}
+
+func sigHandler() {
+	for range signalChannel {
+		readConfig()
+		fmt.Printf("Reloading Configuration!\n")
+	}
+}
+
+func initialise() {
+	var n int
+	var n_err error
+	// sem is an active clients channel used for counting clients
+	if n, n_err = strconv.Atoi(gConfig["GM_MAX_CLIENTS"]); n_err != nil {
+		n = 50
+	}
+	// currently active client list
+	sem = make(chan int, n)
+	// database writing workers
+	SaveMailChan = make(chan *Client, 5)
 	// custom log file
 	if len(gConfig["GSMTP_LOG_FILE"]) > 0 {
 		logfile, err := os.OpenFile(gConfig["GSMTP_LOG_FILE"], os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_SYNC, 0600)
@@ -216,12 +199,25 @@ func configure() {
 		}
 		log.SetOutput(logfile)
 	}
+	if f, err := os.Create(gConfig["PID_FILE"]); err == nil {
+		defer f.Close()
+		if _, err := f.WriteString(strconv.Itoa(os.Getpid())); err == nil {
+			f.Sync()
+		}
+	}
+	// handle SIGHUP for reloading the configuration while running
+
+	signal.Notify(signalChannel, syscall.SIGHUP)
+	go sigHandler()
 
 	return
 }
 
+
+
 func main() {
-	configure()
+	readConfig()
+	initialise()
 	cert, err := tls.LoadX509KeyPair(gConfig["GSMTP_PUB_KEY"], gConfig["GSMTP_PRV_KEY"])
 	if err != nil {
 		logln(2, fmt.Sprintf("There was a problem with loading the certificate: %s", err))
@@ -478,8 +474,8 @@ func saveMail() {
 	db := autorc.New("tcp", "", gConfig["MYSQL_HOST"], gConfig["MYSQL_USER"], gConfig["MYSQL_PASS"], gConfig["MYSQL_DB"])
 	db.Register("set names utf8")
 	sql := "INSERT INTO " + gConfig["GM_MAIL_TABLE"] + " "
-	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`)"
-	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?)"
+	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`)"
+	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?)"
 	ins, sql_err := db.Prepare(sql)
 	if sql_err != nil {
 		logln(2, fmt.Sprintf("Sql statement incorrect: %s", sql_err))
@@ -533,7 +529,8 @@ func saveMail() {
 			client.data,
 			client.hash,
 			to,
-			client.address)
+			client.address,
+			client.mail_from)
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {

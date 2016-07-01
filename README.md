@@ -125,23 +125,27 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 	    "GM_MAX_CLIENTS":"500", // max clients that can be handled
 		"NGINX_AUTH_ENABLED":"N",// Y or N
 		"NGINX_AUTH":"127.0.0.1:8025", // If using Nginx proxy, choose an ip and port to serve Auth requsts for Nginx
-	    "SGID":"508",// group id of the user from /etc/passwd
-		"GUID":"504" // uid from /etc/passwd
+	    "PID_FILE":		  "/var/run/go-guerrilla.pid",
 	}
+
+Releases
+=========================================================
+
+- Reload config on SIGHUP
+- Write current process id (pid) to a file, /var/run/go-guerrilla.pid by default
+
 
 Using Nginx as a proxy
 =========================================================
 Nginx can be used to proxy SMTP traffic for GoGuerrilla SMTPd
 
-Why proxy SMTP?
+Why proxy SMTP with Nginx?
 
- *	Terminate TLS connections: Golang is not there yet when it comes to TLS.
-At present, only a partial implementation of TLS is provided (as of Nov 2012). 
-OpenSSL on the other hand, used in Nginx, has a complete implementation of
-SSL v2/v3 and TLS protocols.
- *	Could be used for load balancing and authentication in the future.
+ *	Terminate TLS connections: Early Golang was not there yet when it came to TLS.
+ OpenSSL on the other hand, used in Nginx, has a complete implementation of TLS with familiar configuration.
+ *	Nginx could be used for load balancing and authentication
 
- 1.	Compile nginx with --with-mail --with-mail_ssl_module
+ 1.	Compile nginx with --with-mail --with-mail_ssl_module (most current nginx packages have this compiled already)
 
  2.	Configuration:
 
@@ -196,3 +200,10 @@ This will place goguerrilla in the background and continue running
 
 You may also put another process to watch your goguerrilla process and re-start it
 if something goes wrong.
+
+Benchmarking:
+==========================================================
+
+http://www.jrh.org/smtp/index.html
+Test 500 clients:
+$ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183

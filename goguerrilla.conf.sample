@@ -18,6 +18,5 @@
     "GM_MAX_CLIENTS":"500",
 	"NGINX_AUTH_ENABLED":"N",
 	"NGINX_AUTH":"127.0.0.1:8025",
-    "SGID":"508",
-	"GUID":"504"
+    "PID_FILE":		  "/var/run/go-guerrilla.pid",
 }
