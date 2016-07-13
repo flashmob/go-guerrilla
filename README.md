@@ -67,7 +67,7 @@ To build, you will need to install the following Go libs:
 	$ go get github.com/ziutek/mymysql/thrsafe
 	$ go get github.com/ziutek/mymysql/autorc
 	$ go get github.com/ziutek/mymysql/godrv
-	$ go get github.com/sloonz/go-iconv
+	$ go get gopkg.in/iconv.v1
 	$ go get github.com/garyburd/redigo/redis
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
@@ -131,6 +131,15 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 Releases
 =========================================================
 
+1.3
+- Number of saveMail workers added to config (GM_SAVE_WORKERS) 
+- convenience function for reading int values form config
+- advertise PIPELINING
+- added HELP command
+- rcpt to host validation: now case insensitive and done earlier (after DATA)
+- iconv switched to: go get gopkg.in/iconv.v1
+
+1.2
 - Reload config on SIGHUP
 - Write current process id (pid) to a file, /var/run/go-guerrilla.pid by default
 

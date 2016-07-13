@@ -1,7 +1,7 @@
 /** 
 Go-Guerrilla SMTPd
 
-Version: 1.2
+Version: 1.3
 Author: Flashmob, GuerrillaMail.com
 Contact: flashmob@gmail.com
 License: MIT
@@ -29,12 +29,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"github.com/sloonz/go-iconv"
 	"github.com/sloonz/go-qprintable"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 	"io"
 	"io/ioutil"
+	"gopkg.in/iconv.v1"
 	"log"
 	"net"
 	"net/http"
@@ -99,6 +99,15 @@ var gConfig = map[string]string{
 	"NGINX_AUTH_ENABLED":     "N",              // Y or N
 	"NGINX_AUTH":             "127.0.0.1:8025", // If using Nginx proxy, ip and port to serve Auth requsts
 	"PID_FILE":		  "/var/run/go-guerrilla.pid",
+	"GSMTP_MAIL_EXPIRE_SECONDS" : "72000",
+}
+
+func getConfigInt(key string, defaultVal int) int {
+	ret := defaultVal
+	if n, n_err := strconv.Atoi(gConfig[key]); n_err == nil {
+		ret = n
+	}
+	return ret
 }
 
 type redisClient struct {
@@ -112,12 +121,15 @@ func logln(level int, s string) {
 	if gConfig["GSMTP_VERBOSE"] == "Y" {
 		fmt.Println(s)
 	}
+	// fatal errors
 	if level == 2 {
 		log.Fatalf(s)
 	}
-	if len(gConfig["GSMTP_LOG_FILE"]) > 0 {
+	// warnings
+	if level == 1 && len(gConfig["GSMTP_LOG_FILE"]) > 0 {
 		log.Println(s)
 	}
+
 }
 
 func readConfig() {
@@ -126,10 +138,9 @@ func readConfig() {
 	if !flag.Parsed() {
 		flag.StringVar(&flagConfigFile, "config", "goguerrilla.conf", "Path to the configuration file")
 		flag.StringVar(&flagVerbouse, "v", "n", "Verbose, [y | n] ")
-		flag.StringVar(&flagIface, "if", "127.0.0.1:2525", "Interface and port to listen on, eg. 127.0.0.1:2525 ")
+		flag.StringVar(&flagIface, "if", "", "Interface and port to listen on, eg. 127.0.0.1:2525 ")
 		flag.Parse()
 	}
-
 	// load in the config.
 	b, err := ioutil.ReadFile(flagConfigFile)
 	if err != nil {
@@ -157,19 +168,8 @@ func readConfig() {
 			allowedHosts[arr[i]] = true
 		}
 	}
-	var n int
-	var n_err error
-
-	// timeout for reads
-	if n, n_err = strconv.Atoi(gConfig["GSMTP_TIMEOUT"]); n_err != nil {
-		timeout = time.Duration(10)
-	} else {
-		timeout = time.Duration(n)
-	}
-	// max email size
-	if max_size, n_err = strconv.Atoi(gConfig["GSMTP_MAX_SIZE"]); n_err != nil {
-		max_size = 131072
-	}
+	timeout = time.Duration(getConfigInt("GSMTP_TIMEOUT", 10))
+	max_size = getConfigInt("GSMTP_MAX_SIZE", 131072)
 	return
 }
 
@@ -181,16 +181,10 @@ func sigHandler() {
 }
 
 func initialise() {
-	var n int
-	var n_err error
-	// sem is an active clients channel used for counting clients
-	if n, n_err = strconv.Atoi(gConfig["GM_MAX_CLIENTS"]); n_err != nil {
-		n = 50
-	}
 	// currently active client list
-	sem = make(chan int, n)
+	sem = make(chan int, getConfigInt("GM_MAX_CLIENTS", 50))
 	// database writing workers
-	SaveMailChan = make(chan *Client, 5)
+	SaveMailChan = make(chan *Client, getConfigInt("GM_SAVE_WORKERS", 3))
 	// custom log file
 	if len(gConfig["GSMTP_LOG_FILE"]) > 0 {
 		logfile, err := os.OpenFile(gConfig["GSMTP_LOG_FILE"], os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_SYNC, 0600)
@@ -206,10 +200,8 @@ func initialise() {
 		}
 	}
 	// handle SIGHUP for reloading the configuration while running
-
 	signal.Notify(signalChannel, syscall.SIGHUP)
 	go sigHandler()
-
 	return
 }
 
@@ -246,7 +238,7 @@ func main() {
 			logln(1, fmt.Sprintf("Accept error: %s", err))
 			continue
 		}
-		logln(1, fmt.Sprintf(" There are now "+strconv.Itoa(runtime.NumGoroutine())+" serving goroutines"))
+		logln(0, fmt.Sprintf(" There are now "+strconv.Itoa(runtime.NumGoroutine())+" serving goroutines"))
 		sem <- 1 // Wait for active queue to drain.
 		go handleClient(&Client{
 			conn:        conn,
@@ -275,19 +267,25 @@ func handleClient(client *Client) {
 		case 1:
 			input, err := readSmtp(client)
 			if err != nil {
-				logln(1, fmt.Sprintf("Read error: %v", err))
 				if err == io.EOF {
 					// client closed the connection already
+					logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
 				}
 				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 					// too slow, timeout
+					logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
 				}
+				logln(1, fmt.Sprintf("Read error: %v", err))
 				break
 			}
 			input = strings.Trim(input, " \n\r")
-			cmd := strings.ToUpper(input)
+			bound := len(input);
+			if bound > 16 {
+				bound = 16;
+			}
+			cmd := strings.ToUpper(input[0:bound])
 			switch {
 			case strings.Index(cmd, "HELO") == 0:
 				if len(input) > 5 {
@@ -298,7 +296,13 @@ func handleClient(client *Client) {
 				if len(input) > 5 {
 					client.helo = input[5:]
 				}
-				responseAdd(client, "250-"+gConfig["GSMTP_HOST_NAME"]+" Hello "+client.helo+"["+client.address+"]"+"\r\n"+"250-SIZE "+gConfig["GSMTP_MAX_SIZE"]+"\r\n"+advertiseTls+"250 HELP")
+				responseAdd(client, "250-"+gConfig["GSMTP_HOST_NAME"]+
+				" Hello "+client.helo+"["+client.address+"]"+"\r\n"+
+				"250-SIZE "+gConfig["GSMTP_MAX_SIZE"]+"\r\n"+
+				"250-PIPELINING \r\n" +
+				advertiseTls+"250 HELP")
+			case strings.Index(cmd, "HELP") == 0:
+				responseAdd(client, "250 Help! I need somebody...")
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if len(input) > 10 {
 					client.mail_from = input[10:]
@@ -344,17 +348,21 @@ func handleClient(client *Client) {
 			var err error
 			client.data, err = readSmtp(client)
 			if err == nil {
-				// to do: timeout when adding to SaveMailChan
-				// place on the channel so that one of the save mail workers can pick it up
-				SaveMailChan <- client
-				// wait for the save to complete
-				status := <-client.savedNotify
-
-				if status == 1 {
-					responseAdd(client, "250 OK : queued as "+client.hash)
+				if _, _, mailErr:= validateEmailData(client); mailErr == nil {
+					// to do: timeout when adding to SaveMailChan
+					// place on the channel so that one of the save mail workers can pick it up
+					SaveMailChan <- client
+					// wait for the save to complete
+					status := <-client.savedNotify
+					if status == 1 {
+						responseAdd(client, "250 OK : queued as "+client.hash)
+					} else {
+						responseAdd(client, "554 Error: transaction failed, blame it on the weather")
+					}
 				} else {
-					responseAdd(client, "554 Error: transaction failed, blame it on the weather")
+					responseAdd(client, "550 Error: " + mailErr.Error())
 				}
+
 			} else {
 				logln(1, fmt.Sprintf("DATA read error: %v", err))
 			}
@@ -478,18 +486,18 @@ func saveMail() {
 	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?)"
 	ins, sql_err := db.Prepare(sql)
 	if sql_err != nil {
-		logln(2, fmt.Sprintf("Sql statement incorrect: %s", sql_err))
+		logln(2, fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
 	}
 	sql = "UPDATE gm2_setting SET `setting_value` = `setting_value`+1 WHERE `setting_name`='received_emails' LIMIT 1"
 	incr, sql_err := db.Prepare(sql)
 	if sql_err != nil {
-		logln(2, fmt.Sprintf("Sql statement incorrect: %s", sql_err))
+		logln(2, fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
 	}
 
 	//  receives values from the channel repeatedly until it is closed.
 	for {
 		client := <-SaveMailChan
-		if user, _, addr_err := validateEmailData(client); addr_err != nil { // user, host, addr_err
+		if user, _, addr_err := validateEmailData(client); addr_err != nil {
 			logln(1, fmt.Sprintln("mail_from didnt validate: %v", addr_err)+" client.mail_from:"+client.mail_from)
 			// notify client that a save completed, -1 = error
 			client.savedNotify <- -1
@@ -512,7 +520,7 @@ func saveMail() {
 		body = "gzencode"
 		redis_err = redis.redisConnection()
 		if redis_err == nil {
-			_, do_err := redis.conn.Do("SETEX", client.hash, 3600, client.data)
+			_, do_err := redis.conn.Do("SETEX", client.hash, getConfigInt("GSMTP_MAIL_EXPIRE_SECONDS", 7200), client.data)
 			if do_err == nil {
 				client.data = ""
 				body = "redis"
@@ -534,13 +542,13 @@ func saveMail() {
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {
-			logln(1, fmt.Sprintf("Database error, %v %v", err))
+			logln(1, fmt.Sprintf("Database error, %v ", err))
 			client.savedNotify <- -1
 		} else {
-			logln(1, "Email saved "+client.hash+" len:"+strconv.Itoa(length))
+			logln(0, "Email saved "+client.hash+" len:"+strconv.Itoa(length))
 			_, _, err = incr.Exec()
 			if err != nil {
-				logln(1, fmt.Sprintf("Failed to incr count:", err))
+				logln(1, fmt.Sprintf("Failed to incr count: %v", err))
 			}
 			client.savedNotify <- 1
 		}
@@ -572,7 +580,7 @@ func validateEmailData(client *Client) (user string, host string, addr_err error
 	}
 	client.rcpt_to = user + "@" + host
 	// check if on allowed hosts
-	if allowed := allowedHosts[host]; !allowed {
+	if allowed := allowedHosts[strings.ToLower(host)]; !allowed {
 		return user, host, errors.New("invalid host:" + host)
 	}
 	return user, host, addr_err
@@ -641,13 +649,20 @@ func mailTransportDecode(str string, encoding_type string, charset string) strin
 	} else if encoding_type == "quoted-printable" {
 		str = fromQuotedP(str)
 	}
+
 	if charset != "UTF-8" {
 		charset = fixCharset(charset)
-		// eg. charset can be "ISO-2022-JP"
-		convstr, err := iconv.Conv(str, "UTF-8", charset)
-		if err == nil {
-			return convstr
+		if cd, err := iconv.Open("UTF-8", charset); err == nil{
+			defer func() {
+				cd.Close()
+				if r := recover(); r != nil {
+					logln(1, fmt.Sprintf("Recovered in %v", r))
+				}
+			}()
+			// eg. charset can be "ISO-2022-JP"
+			return cd.ConvString(str)
 		}
+
 	}
 	return str
 }
