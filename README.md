@@ -188,9 +188,9 @@ Why proxy SMTP with Nginx?
 
  2.	Configuration:
 
-	
+
 		mail {
-	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to 								
+	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to
 	        server {
 	                listen  15.29.8.163:25;
 	                protocol smtp;
@@ -198,23 +198,24 @@ Why proxy SMTP with Nginx?
 	
 	                smtp_auth none;
 	                timeout 30000;
-					smtp_capabilities "SIZE 15728640";
-					
-					# ssl default off. Leave off if starttls is on
+	                smtp_capabilities "SIZE 15728640";
+	
+	                # ssl default off. Leave off if starttls is on
 	                #ssl                  on;
 	                ssl_certificate      /etc/ssl/certs/ssl-cert-snakeoil.pem;
 	                ssl_certificate_key  /etc/ssl/private/ssl-cert-snakeoil.key;
 	                ssl_session_timeout  5m;
-	                ssl_protocols  SSLv2 SSLv3 TLSv1;
-	                ssl_ciphers  HIGH:!aNULL:!MD5;
-	                ssl_prefer_server_ciphers   on;
-					# TLS off unless client issues STARTTLS command
+	                # See https://mozilla.github.io/server-side-tls/ssl-config-generator/ Intermediate settings
+	                ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+	                ssl_ciphers 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS';
+	                ssl_prefer_server_ciphers on;
+	                # TLS off unless client issues STARTTLS command
 	                starttls on;
 	                proxy on;
 	        }
 		}
-	
-			
+
+
 Assuming that Guerrilla SMTPd has the following configuration settings:
 
 	"GSMTP_MAX_SIZE"		  "15728640",
