@@ -54,8 +54,8 @@ Show the top senders by: IP, by domain & by HELO message.
 Using websocket via https & password protected. 
 (1 BTC for a successful merge)
 
-Contact by opening an issue on Github you need more clarification / details.
-Also, welcome your suggestions for adding things to this Roadmap.
+If you need more clarification / details, please open an issue on Github.
+Also, welcome your suggestions for adding things to this Roadmap - please open an issue.
 
 Another way to contribute is to donate to our bitcoin address to help
 us fund more bounties!
@@ -81,13 +81,9 @@ event driven I/O (2012). A year later, the latest script also became inadequate
 Getting started
 ===========================
 
-To build, you will need to install the following Go libs:
+To build, just run
 
-	$ go get github.com/ziutek/mymysql/thrsafe
-	$ go get github.com/ziutek/mymysql/autorc
-	$ go get github.com/ziutek/mymysql/godrv
-	$ go get gopkg.in/iconv.v1
-	$ go get github.com/garyburd/redigo/redis
+$ go build
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
 
