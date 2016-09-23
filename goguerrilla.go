@@ -255,7 +255,6 @@ func main() {
 
 func handleClient(client *Client) {
 	defer closeClient(client)
-	//	defer closeClient(client)
 	greeting := "220 " + gConfig["GSMTP_HOST_NAME"] +
 		" SMTP Guerrilla-SMTPd #" + strconv.FormatInt(client.clientId, 10) + " (" + strconv.Itoa(len(sem)) + ") " + time.Now().Format(time.RFC1123Z)
 	advertiseTls := "250-STARTTLS\r\n"
@@ -473,9 +472,9 @@ func responseWrite(client *Client) (err error) {
 }
 
 func saveMail() {
-	var to string
+	var to, recipient, body string
 	var err error
-	var body string
+
 	var redis_err error
 	var length int
 	redis := &redisClient{}
@@ -497,12 +496,13 @@ func saveMail() {
 	//  receives values from the channel repeatedly until it is closed.
 	for {
 		client := <-SaveMailChan
-		if user, _, addr_err := validateEmailData(client); addr_err != nil {
+		if user, host, addr_err := validateEmailData(client); addr_err != nil {
 			logln(1, fmt.Sprintln("mail_from didnt validate: %v", addr_err)+" client.mail_from:"+client.mail_from)
 			// notify client that a save completed, -1 = error
 			client.savedNotify <- -1
 			continue
 		} else {
+			recipient = user + "@" + host
 			to = user + "@" + gConfig["GM_PRIMARY_MAIL_HOST"]
 		}
 		length = len(client.data)
@@ -536,7 +536,7 @@ func saveMail() {
 			body,
 			client.data,
 			client.hash,
-			to,
+			recipient,
 			client.address,
 			client.mail_from)
 		// save, discard result
@@ -556,10 +556,10 @@ func saveMail() {
 }
 
 func (c *redisClient) redisConnection() (err error) {
-	if c.count > 100 {
-		c.conn.Close()
-		c.count = 0
-	}
+	// if c.count > 100 {
+	//	c.conn.Close()
+	//	c.count = 0
+	// }
 	if c.count == 0 {
 		c.conn, err = redis.Dial("tcp", ":6379")
 		if err != nil {

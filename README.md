@@ -23,41 +23,60 @@ verification. These steps should be performed by other programs.
 The server does NOT send any email including bounces. This should
 be performed by a separate program.
 
+The software is using MIT License (MIT) - contributors welcome.
 
-### History and purpose
+### Roadmap / Contributing & Bounties
 
-GoGuerrilla is a port of the original 'Guerrilla' SMTP daemon written in PHP using
-an event-driven I/O library (libevent)
+Wow, this project did not expect to get so many stars! 
+However, not that much pull requests...
+To encourage more pull requests, we are now offering bounties funded 
+from our bitcoin donation address:
 
-https://github.com/flashmob/Guerrilla-SMTPd
+```1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A```
 
-It's not a direct port, although the purpose and functionality remains identical.
+So far we have the following bounties:
 
-This Go version was made in order to take advantage of our new server with 8 cores. 
-Not that the PHP version was taking much CPU anyway, it always stayed at about 1-5%
-despite guzzling down a ton of email every day...
+- Client Pooling: When a client is finished, it should be placed into a 
+pool instead of being destroyed. Looking for a idiomatic 
+Go solution with channels. (0.5 BTC for a successful merge)
 
-As always, the bottleneck today is the network and secondary storage. It's highly probable
-that in the near future, secondary storage will become so fast that the I/O bottleneck
-will not be an issue. Prices of Solid State Drives are dropping fast, their speeds are rapidly
-increasing. So if the I/O bottleneck would disappear, it will be replaced by a new bottleneck,
-the CPU. 
+- Modularize: Ability for the server to be used as a module. If it used
+as a module, the new program would be able to start several servers on 
+different ports, would be possible to specify a config file for 
+each server, and specify its own saveMail function (otherwise, revert to
+default). Ideas on how to best refactor this welcome too. 
+(0.5 BTC for a successful merge)
 
-To prepare for the CPU bottleneck, we need to be able to scale our software to multiple cores.
-Since PHP runs in a single process, it can only run on a single core. Sure, it would
-have been possible to use fork(), but that can get messy and doesn't play well with
-libevent. Also, it would have been possible to start an instance for each core and
-use a proxy to distribute the traffic to each instance, but that would make the system too
- complicated.
+- Analytics: A web based admin panel that displays live statistics,
+including the number of clients, memory usage, graph the number of
+connections/bytes/memory used for the last 24h. 
+Show the top senders by: IP, by domain & by HELO message. 
+Using websocket via https & password protected. 
+(1 BTC for a successful merge)
 
-The most alluring aspect of Go are the Goroutines! It makes concurrent programming
-easy, clean and fun! Go programs can also take advantage of all your machine's multiple 
-cores without much effort that you would otherwise need with forking or managing your
-event loop callbacks, etc. Golang solves the C10K problem in a very interesting way
- http://en.wikipedia.org/wiki/C10k_problem
+Contact by opening an issue on Github you need more clarification / details.
+Also, welcome your suggestions for adding things to this Roadmap.
 
-If you do invite GoGuerrilla in to your system, please remember to feed it with lots
-of spam - spam is what it likes best!
+Another way to contribute is to donate to our bitcoin address to help
+us fund more bounties!
+```1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A```
+
+### Brief History and purpose
+
+Go-Guerrilla is used as the primary server for receiving email at 
+Guerrilla Mail. As of 2016, it's handling all connections without any 
+proxy (Nginx).
+
+Originally, Guerrilla Mail ran Exim which piped email to a php script (2009). 
+As as the site got popular and more email came through, this approach
+eventually swamped the server.
+
+The next solution was to decrease the heavy setup into something more 
+lightweight. A small script was written to implement a basic SMTP server (2010).
+Eventually that script also got swamped, so it was re-written to use
+event driven I/O (2012). A year later, the latest script also became inadequate
+ so it was ported to Go and has served us well since.
+ 
 
 Getting started
 ===========================
@@ -72,8 +91,11 @@ To build, you will need to install the following Go libs:
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
 
-Setup the following table:
-(The vanilla saveMail function also uses Redis)
+By default, the saveMail() function saves the meta-data of an email
+into MySQL while the body is saved in Redis.
+
+If you want to use the default saveMail() function, setup the following table
+in MySQL:
 
 	CREATE TABLE IF NOT EXISTS `new_mail` (
 	  `mail_id` int(11) NOT NULL auto_increment,
@@ -98,6 +120,13 @@ Setup the following table:
 	  KEY `hash` (`hash`),
 	  KEY `date` (`date`)
 	) ENGINE=InnoDB  DEFAULT CHARSET=utf8
+
+The above table does not store the body of the email which makes it quick
+to query and join, while the body of the email is fetched from Redis 
+if needed.
+
+You can implement your own saveMail function to use whatever storage /
+backend fits for you.
 
 
 Configuration
@@ -126,6 +155,7 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 		"NGINX_AUTH_ENABLED":"N",// Y or N
 		"NGINX_AUTH":"127.0.0.1:8025", // If using Nginx proxy, choose an ip and port to serve Auth requsts for Nginx
 	    "PID_FILE":		  "/var/run/go-guerrilla.pid",
+	    "GM_SAVE_WORKERS : "3" // how many workers saving email to the storage
 	}
 
 Releases

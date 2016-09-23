@@ -19,4 +19,5 @@
 	"NGINX_AUTH_ENABLED":"N",
 	"NGINX_AUTH":"127.0.0.1:8025",
     "PID_FILE":		  "/var/run/go-guerrilla.pid",
+    GM_SAVE_WORKERS : "3"
 }
