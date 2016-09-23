@@ -32,7 +32,7 @@ However, not that much pull requests...
 To encourage more pull requests, we are now offering bounties funded 
 from our bitcoin donation address:
 
-```1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A```
+`1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
 So far we have the following bounties:
 
@@ -59,7 +59,7 @@ Also, welcome your suggestions for adding things to this Roadmap.
 
 Another way to contribute is to donate to our bitcoin address to help
 us fund more bounties!
-```1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A```
+`1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
 ### Brief History and purpose
 
