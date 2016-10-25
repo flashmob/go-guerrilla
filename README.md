@@ -131,50 +131,50 @@ The configuration is in strict JSON format. Here is an annotated configuration.
 Copy goguerrilla.conf.sample to goguerrilla.conf
 
 
-{
-    "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept mail for
-    "primary_mail_host":"sharklasers.com", // main domain
-    "verbose":false, // report all events to log
-    "mysql_db":"gmail_mail", // name of mysql database
-    "mysql_host":"127.0.0.1:3306", // mysql host and port (tcp)
-    "mysql_pass":"ok", // mysql password
-    "mysql_user":"gmail_mail", // mysql username
-    "mail_table":"new_mail", // mysql save table. Email meta-data is saved there
-    "redis_interface" : "127.0.0.1:6379", // redis host and port, email data payload is saved there
-	"redis_expire_seconds" : 3600, // how long to keep in redis
-	"save_workers_size" : 3, // number workers saving email from all servers
-	"pid_file" : "/var/run/go-guerrilla.pid", // pid = process id, so that other programs can send signals to our server
-    	"servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
-    	    {
-                "is_enabled" : true, // boolean
-                "host_name":"mail.test.com", // the hostname of the server as set by MX record
-                "max_size": 1000000, // maximum size of an email in bytes
-                "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
-                "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
-                "timeout":180, // timeout in number of seconds before an idle connection is closed
-                "listen_interface":"127.0.0.1:25", // listen on ip and port
-                "start_tls_on":true, // supports the STARTTLS command?
-                "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
-                "max_clients": 1000, // max clients at one time
-                "log_file":"/dev/stdout" // where to log to
-    	    },
-    	    // the following is a second server, but listening on port 465 and always using TLS
-    	    {
-                "is_enabled" : true,
-                "host_name":"mail.test.com",
-                "max_size":1000000,
-                "private_key_file":"/path/to/pem/file/test.com.key",
-                "public_key_file":"/path/to/pem/file/test.com.crt",
-                "timeout":180,
-                "listen_interface":"127.0.0.1:465",
-                "start_tls_on":false,
-                "tls_always_on":true,
-                "max_clients":500,
-                "log_file":"/dev/stdout"
-            }
-            // repeat as many servers as you need
-    	]
-}
+    {
+        "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept 
+        "primary_mail_host":"sharklasers.com", // main domain
+        "verbose":false, // report all events to log
+        "mysql_db":"gmail_mail", // name of mysql database
+        "mysql_host":"127.0.0.1:3306", // mysql host and port (tcp)
+        "mysql_pass":"ok", // mysql password
+        "mysql_user":"gmail_mail", // mysql username
+        "mail_table":"new_mail", // mysql save table. Email meta-data is saved there
+        "redis_interface" : "127.0.0.1:6379", // redis host and port, email data payload is saved there
+        "redis_expire_seconds" : 3600, // how long to keep in redis
+        "save_workers_size" : 3, // number workers saving email from all servers
+        "pid_file" : "/var/run/go-guerrilla.pid", // pid = process id, so that other programs can send signals to our server
+            "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
+                {
+                    "is_enabled" : true, // boolean
+                    "host_name":"mail.test.com", // the hostname of the server as set by MX record
+                    "max_size": 1000000, // maximum size of an email in bytes
+                    "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
+                    "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
+                    "timeout":180, // timeout in number of seconds before an idle connection is closed
+                    "listen_interface":"127.0.0.1:25", // listen on ip and port
+                    "start_tls_on":true, // supports the STARTTLS command?
+                    "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
+                    "max_clients": 1000, // max clients at one time
+                    "log_file":"/dev/stdout" // where to log to
+                },
+                // the following is a second server, but listening on port 465 and always using TLS
+                {
+                    "is_enabled" : true,
+                    "host_name":"mail.test.com",
+                    "max_size":1000000,
+                    "private_key_file":"/path/to/pem/file/test.com.key",
+                    "public_key_file":"/path/to/pem/file/test.com.crt",
+                    "timeout":180,
+                    "listen_interface":"127.0.0.1:465",
+                    "start_tls_on":false,
+                    "tls_always_on":true,
+                    "max_clients":500,
+                    "log_file":"/dev/stdout"
+                }
+                // repeat as many servers as you need
+            ]
+    }
 
 	
 
