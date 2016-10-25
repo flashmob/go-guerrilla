@@ -40,32 +40,6 @@ type ServerConfig struct {
 	Log_file         string `json:"log_file"`
 }
 
-// defaults. Overwrite any of these in the configure() function which loads them from a json file
-/*
-var gConfig = map[string]interface{}{
-	"GSMTP_MAX_SIZE":            "131072",
-	"GSMTP_HOST_NAME":           "server.example.com", // This should also be set to reflect your RDNS
-	"GSMTP_VERBOSE":             "Y",
-	"GSMTP_LOG_FILE":            "",    // Eg. /var/log/goguerrilla.log or leave blank if no logging
-	"GSMTP_TIMEOUT":             "100", // how many seconds before timeout.
-	"MYSQL_HOST":                "127.0.0.1:3306",
-	"MYSQL_USER":                "gmail_mail",
-	"MYSQL_PASS":                "ok",
-	"MYSQL_DB":                  "gmail_mail",
-	"GM_MAIL_TABLE":             "new_mail",
-	"GSTMP_LISTEN_INTERFACE":    "0.0.0.0:25",
-	"GSMTP_PUB_KEY":             "/etc/ssl/certs/ssl-cert-snakeoil.pem",
-	"GSMTP_PRV_KEY":             "/etc/ssl/private/ssl-cert-snakeoil.key",
-	"GM_ALLOWED_HOSTS":          "guerrillamail.de,guerrillamailblock.com",
-	"GM_PRIMARY_MAIL_HOST":      "guerrillamail.com",
-	"GM_MAX_CLIENTS":            "500",
-	"NGINX_AUTH_ENABLED":        "N",              // Y or N
-	"NGINX_AUTH":                "127.0.0.1:8025", // If using Nginx proxy, ip and port to serve Auth requsts
-	"PID_FILE":                  "/var/run/go-guerrilla.pid",
-	"GSMTP_MAIL_EXPIRE_SECONDS": "72000",
-}
-
-*/
 var mainConfig GlobalConfig
 var flagVerbose, flagIface, flagConfigFile string
 

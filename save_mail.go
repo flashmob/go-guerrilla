@@ -1,11 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 	"log"
-	"fmt"
 	"strconv"
 	"time"
 )
@@ -15,7 +15,7 @@ type savePayload struct {
 	server *SmtpdServer
 }
 
-var SaveMailChan chan *savePayload          // workers for saving mail
+var SaveMailChan chan *savePayload // workers for saving mail
 
 type redisClient struct {
 	count int

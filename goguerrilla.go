@@ -29,11 +29,9 @@ import (
 	"time"
 )
 
-
-
 var allowedHosts = make(map[string]bool, 15)
 
-//var sem chan int // currently active clients
+
 var signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUB
 
 func sigHandler() {
@@ -62,7 +60,7 @@ func initialise() {
 	}
 	// handle SIGHUP for reloading the configuration while running
 	signal.Notify(signalChannel, syscall.SIGHUP)
-	//go sigHandler()
+
 	return
 }
 
@@ -130,5 +128,5 @@ func main() {
 			go runServer(mainConfig.Servers[serverId])
 		}
 	}
-	sigHandler();
+	sigHandler()
 }

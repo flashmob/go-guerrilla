@@ -131,33 +131,66 @@ The configuration is in strict JSON format. Here is an annotated configuration.
 Copy goguerrilla.conf.sample to goguerrilla.conf
 
 
-	{
-	    "GM_ALLOWED_HOSTS":"example.com,sample.com,foo.com,bar.com", // which domains accept mail
-	    "GM_MAIL_TABLE":"new_mail", // name of new email table
-	    "GM_PRIMARY_MAIL_HOST":"mail.example.com", // given in the SMTP greeting
-	    "GSMTP_HOST_NAME":"mail.example.com", // given in the SMTP greeting
-	    "GSMTP_LOG_FILE":"/dev/stdout", // not used yet
-	    "GSMTP_MAX_SIZE":"131072", // max size of DATA command
-	    "GSMTP_PRV_KEY":"/etc/ssl/private/example.com.key", // private key for TLS
-	    "GSMTP_PUB_KEY":"/etc/ssl/certs/example.com.crt", // public key for TLS
-	    "GSMTP_TIMEOUT":"100", // tcp connection timeout
-	    "GSMTP_VERBOSE":"N", // set to Y for debugging
-	    "GSTMP_LISTEN_INTERFACE":"5.9.7.183:25",
-	    "MYSQL_DB":"gmail_mail", // database name
-	    "MYSQL_HOST":"127.0.0.1:3306", // database connect
-	    "MYSQL_PASS":"$ecure1t", // database connection pass
-	    "MYSQL_USER":"gmail_mail", // database username
-	    "GM_MAX_CLIENTS":"500", // max clients that can be handled
-		"NGINX_AUTH_ENABLED":"N",// Y or N
-		"NGINX_AUTH":"127.0.0.1:8025", // If using Nginx proxy, choose an ip and port to serve Auth requsts for Nginx
-	    "PID_FILE":		  "/var/run/go-guerrilla.pid",
-	    "GM_SAVE_WORKERS : "3" // how many workers saving email to the storage
-	}
+{
+    "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept mail for
+    "primary_mail_host":"sharklasers.com", // main domain
+    "verbose":false, // report all events to log
+    "mysql_db":"gmail_mail", // name of mysql database
+    "mysql_host":"127.0.0.1:3306", // mysql host and port (tcp)
+    "mysql_pass":"ok", // mysql password
+    "mysql_user":"gmail_mail", // mysql username
+    "mail_table":"new_mail", // mysql save table. Email meta-data is saved there
+    "redis_interface" : "127.0.0.1:6379", // redis host and port, email data payload is saved there
+	"redis_expire_seconds" : 3600, // how long to keep in redis
+	"save_workers_size" : 3, // number workers saving email from all servers
+	"pid_file" : "/var/run/go-guerrilla.pid", // pid = process id, so that other programs can send signals to our server
+    	"servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
+    	    {
+                "is_enabled" : true, // boolean
+                "host_name":"mail.test.com", // the hostname of the server as set by MX record
+                "max_size": 1000000, // maximum size of an email in bytes
+                "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
+                "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
+                "timeout":180, // timeout in number of seconds before an idle connection is closed
+                "listen_interface":"127.0.0.1:25", // listen on ip and port
+                "start_tls_on":true, // supports the STARTTLS command?
+                "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
+                "max_clients": 1000, // max clients at one time
+                "log_file":"/dev/stdout" // where to log to
+    	    },
+    	    // the following is a second server, but listening on port 465 and always using TLS
+    	    {
+                "is_enabled" : true,
+                "host_name":"mail.test.com",
+                "max_size":1000000,
+                "private_key_file":"/path/to/pem/file/test.com.key",
+                "public_key_file":"/path/to/pem/file/test.com.crt",
+                "timeout":180,
+                "listen_interface":"127.0.0.1:465",
+                "start_tls_on":false,
+                "tls_always_on":true,
+                "max_clients":500,
+                "log_file":"/dev/stdout"
+            }
+            // repeat as many servers as you need
+    	]
+}
+
+	
 
 Releases
 =========================================================
 
-1.3
+1.4 - 25th Oct 2016
+- New Feature: multiple servers!
+- Changed the configuration file format to support multiple servers,
+this means that a new configuration file would need to be created form the
+sample (goguerrilla.conf.sample)
+- Organised code into separate files. Config is now strongly typed, etc
+- Deprecated nginx proxy support
+
+
+1.3 14th July 2016
 - Number of saveMail workers added to config (GM_SAVE_WORKERS) 
 - convenience function for reading int values form config
 - advertise PIPELINING
@@ -165,7 +198,7 @@ Releases
 - rcpt to host validation: now case insensitive and done earlier (after DATA)
 - iconv switched to: go get gopkg.in/iconv.v1
 
-1.2
+1.2 1st July 2016
 - Reload config on SIGHUP
 - Write current process id (pid) to a file, /var/run/go-guerrilla.pid by default
 
@@ -176,7 +209,7 @@ Nginx can be used to proxy SMTP traffic for GoGuerrilla SMTPd
 
 Why proxy SMTP with Nginx?
 
- *	Terminate TLS connections: Early Golang was not there yet when it came to TLS.
+ *	Terminate TLS connections: (eg. Early Golang versions were not there yet when it came to TLS.)
  OpenSSL on the other hand, used in Nginx, has a complete implementation of TLS with familiar configuration.
  *	Nginx could be used for load balancing and authentication
 
@@ -186,12 +219,11 @@ Why proxy SMTP with Nginx?
 
 
 		mail {
-	        auth_http 127.0.0.1:8025/; # This is the URL to GoGuerrilla's http service which tells Nginx where to proxy the traffic to
 	        server {
 	                listen  15.29.8.163:25;
 	                protocol smtp;
 	                server_name  ak47.example.com;
-	
+	                auth_http smtpauth.local:80/auth.txt;
 	                smtp_auth none;
 	                timeout 30000;
 	                smtp_capabilities "SIZE 15728640";
@@ -210,13 +242,31 @@ Why proxy SMTP with Nginx?
 	                proxy on;
 	        }
 		}
+		
+		http {
+		
+		    # Add somewhere inside your http block..
+		    # make sure that you have added smtpauth.local to /etc/hosts
+		    # What this block does is tell the above stmp server to connect
+		    # to our golang server configured to run on 127.0.0.1:2525
+		    
+		    server {
+                    listen 15.29.8.163:80;
+                    server_name 15.29.8.163 smtpauth.local;
+                    root /home/user/http/auth/;
+                    access_log off;
+                    location /auth.txt {
+                        add_header Auth-Status OK;
+                        # where to find your smtp server?
+                        add_header Auth-Server 127.0.0.1;
+                        add_header Auth-Port 2525;
+                    }
+                   
+                }
+
+		}
 
 
-Assuming that Guerrilla SMTPd has the following configuration settings:
-
-	"GSMTP_MAX_SIZE"		  "15728640",
-	"NGINX_AUTH_ENABLED":     "Y",
-	"NGINX_AUTH":             "127.0.0.1:8025", 
 
 
 Starting / Command Line usage

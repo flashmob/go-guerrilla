@@ -1,17 +1,17 @@
 package main
 
 import (
-	"strings"
+	"bytes"
+	"compress/zlib"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"regexp"
-	"bytes"
-	"encoding/base64"
-	"io/ioutil"
 	"github.com/sloonz/go-qprintable"
-	"compress/zlib"
 	"gopkg.in/iconv.v1"
+	"io/ioutil"
+	"regexp"
+	"strings"
 )
 
 func validateEmailData(client *Client) (user string, host string, addr_err error) {

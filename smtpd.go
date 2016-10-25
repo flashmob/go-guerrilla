@@ -1,18 +1,18 @@
 package main
 
 import (
-	"net"
 	"bufio"
-	"crypto/tls"
-	"time"
-	"log"
-	"fmt"
 	"bytes"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"strconv"
-	"io"
 	"strings"
-	"errors"
+	"time"
 )
 
 type Client struct {
@@ -46,7 +46,6 @@ type SmtpdServer struct {
 	Config       ServerConfig
 	logger       *log.Logger
 }
-
 
 func (server *SmtpdServer) logln(level int, s string) {
 
@@ -88,14 +87,13 @@ func (server *SmtpdServer) upgradeToTls(client *Client) bool {
 		client.bufin = bufio.NewReader(client.conn)
 		client.bufout = bufio.NewWriter(client.conn)
 		client.tls_on = true
-		return true;
+		return true
 	} else {
 		server.logln(1, fmt.Sprintf("Could not TLS handshake:%v", err))
-		return false;
+		return false
 	}
 
 }
-
 
 func (server *SmtpdServer) handleClient(client *Client) {
 	defer server.closeClient(client)
