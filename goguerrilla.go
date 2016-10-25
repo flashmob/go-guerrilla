@@ -1,4 +1,4 @@
-/** 
+/**
 Go-Guerrilla SMTPd
 
 Version: 1.3
@@ -24,27 +24,24 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/sloonz/go-qprintable"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
+	"gopkg.in/iconv.v1"
 	"io"
 	"io/ioutil"
-	"gopkg.in/iconv.v1"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-        "syscall"
+	"syscall"
 	"time"
 )
 
@@ -70,45 +67,26 @@ type Client struct {
 	savedNotify chan int
 }
 
-var TLSconfig *tls.Config
-var max_size int // max email DATA size
-var timeout time.Duration
-var allowedHosts = make(map[string]bool, 15)
-var sem chan int // currently active clients
-var signalChannel = make(chan os.Signal, 1)
-var SaveMailChan chan *Client // workers for saving mail
-var flagVerbouse, flagIface, flagConfigFile string;
-// defaults. Overwrite any of these in the configure() function which loads them from a json file
-var gConfig = map[string]string{
-	"GSMTP_MAX_SIZE":         "131072",
-	"GSMTP_HOST_NAME":        "server.example.com", // This should also be set to reflect your RDNS
-	"GSMTP_VERBOSE":          "Y",
-	"GSMTP_LOG_FILE":         "",    // Eg. /var/log/goguerrilla.log or leave blank if no logging
-	"GSMTP_TIMEOUT":          "100", // how many seconds before timeout.
-	"MYSQL_HOST":             "127.0.0.1:3306",
-	"MYSQL_USER":             "gmail_mail",
-	"MYSQL_PASS":             "ok",
-	"MYSQL_DB":               "gmail_mail",
-	"GM_MAIL_TABLE":          "new_mail",
-	"GSTMP_LISTEN_INTERFACE": "0.0.0.0:25",
-	"GSMTP_PUB_KEY":          "/etc/ssl/certs/ssl-cert-snakeoil.pem",
-	"GSMTP_PRV_KEY":          "/etc/ssl/private/ssl-cert-snakeoil.key",
-	"GM_ALLOWED_HOSTS":       "guerrillamail.de,guerrillamailblock.com",
-	"GM_PRIMARY_MAIL_HOST":   "guerrillamail.com",
-	"GM_MAX_CLIENTS":         "500",
-	"NGINX_AUTH_ENABLED":     "N",              // Y or N
-	"NGINX_AUTH":             "127.0.0.1:8025", // If using Nginx proxy, ip and port to serve Auth requsts
-	"PID_FILE":		  "/var/run/go-guerrilla.pid",
-	"GSMTP_MAIL_EXPIRE_SECONDS" : "72000",
+type SmtpdServer struct {
+	tlsConfig    *tls.Config
+	max_size     int // max email DATA size
+	timeout      time.Duration
+	allowedHosts map[string]bool
+	sem          chan int // currently active client list
+	Config       ServerConfig
+	logger       *log.Logger
 }
 
-func getConfigInt(key string, defaultVal int) int {
-	ret := defaultVal
-	if n, n_err := strconv.Atoi(gConfig[key]); n_err == nil {
-		ret = n
-	}
-	return ret
+type savePayload struct {
+	client *Client
+	server *SmtpdServer
 }
+
+var allowedHosts = make(map[string]bool, 15)
+
+//var sem chan int // currently active clients
+var signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUB
+var SaveMailChan chan *savePayload          // workers for saving mail
 
 type redisClient struct {
 	count int
@@ -116,84 +94,56 @@ type redisClient struct {
 	time  int
 }
 
-func logln(level int, s string) {
+func (server *SmtpdServer) logln(level int, s string) {
 
-	if gConfig["GSMTP_VERBOSE"] == "Y" {
+	if theConfig.Verbose {
 		fmt.Println(s)
 	}
 	// fatal errors
 	if level == 2 {
-		log.Fatalf(s)
+		server.logger.Fatalf(s)
 	}
 	// warnings
-	if level == 1 && len(gConfig["GSMTP_LOG_FILE"]) > 0 {
-		log.Println(s)
+	if level == 1 && len(server.Config.Log_file) > 0 {
+		server.logger.Println(s)
 	}
 
 }
 
-func readConfig() {
-	log.SetOutput(os.Stdout)
-	// parse command line arguments
-	if !flag.Parsed() {
-		flag.StringVar(&flagConfigFile, "config", "goguerrilla.conf", "Path to the configuration file")
-		flag.StringVar(&flagVerbouse, "v", "n", "Verbose, [y | n] ")
-		flag.StringVar(&flagIface, "if", "", "Interface and port to listen on, eg. 127.0.0.1:2525 ")
-		flag.Parse()
-	}
-	// load in the config.
-	b, err := ioutil.ReadFile(flagConfigFile)
-	if err != nil {
-		log.Fatalln("Could not read config file", err)
-	}
-	var myConfig map[string]string
-	err = json.Unmarshal(b, &myConfig)
-	if err != nil {
-		log.Fatalln("Could not parse config file:", err)
-	}
-	for k, v := range myConfig {
-		gConfig[k] = v
-	}
-	// copy command line flag over so it takes precedence
-	if len(flagVerbouse) > 0 {
-		gConfig["GSMTP_VERBOSE"] = strings.ToUpper(flagVerbouse)
-	}
+func (server *SmtpdServer) openLog() {
 
-	if len(flagIface) > 0 {
-		gConfig["GSTMP_LISTEN_INTERFACE"] = flagIface
-	}
-	// map the allow hosts for easy lookup
-	if arr := strings.Split(gConfig["GM_ALLOWED_HOSTS"], ","); len(arr) > 0 {
-		for i := 0; i < len(arr); i++ {
-			allowedHosts[arr[i]] = true
+	server.logger = log.New(&bytes.Buffer{}, "", log.Lshortfile)
+	// custom log file
+	if len(server.Config.Log_file) > 0 {
+		logfile, err := os.OpenFile(
+			server.Config.Log_file,
+			os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_SYNC, 0600)
+		if err != nil {
+			server.logln(1, fmt.Sprintf("Unable to open log file [%s]: %s ", server.Config.Log_file, err))
 		}
+		server.logger.SetOutput(logfile)
 	}
-	timeout = time.Duration(getConfigInt("GSMTP_TIMEOUT", 10))
-	max_size = getConfigInt("GSMTP_MAX_SIZE", 131072)
-	return
 }
 
 func sigHandler() {
-	for range signalChannel {
-		readConfig()
-		fmt.Printf("Reloading Configuration!\n")
+	for sig := range signalChannel {
+		if sig == syscall.SIGHUP {
+			readConfig()
+			fmt.Print("Reloading Configuration!\n")
+		} else {
+			os.Exit(0)
+		}
+
 	}
 }
 
 func initialise() {
-	// currently active client list
-	sem = make(chan int, getConfigInt("GM_MAX_CLIENTS", 50))
+
 	// database writing workers
-	SaveMailChan = make(chan *Client, getConfigInt("GM_SAVE_WORKERS", 3))
-	// custom log file
-	if len(gConfig["GSMTP_LOG_FILE"]) > 0 {
-		logfile, err := os.OpenFile(gConfig["GSMTP_LOG_FILE"], os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_SYNC, 0600)
-		if err != nil {
-			log.Fatal("Unable to open log file ["+gConfig["GSMTP_LOG_FILE"]+"]: ", err)
-		}
-		log.SetOutput(logfile)
-	}
-	if f, err := os.Create(gConfig["PID_FILE"]); err == nil {
+	SaveMailChan = make(chan *savePayload, theConfig.Save_workers_size)
+
+	// write out our PID
+	if f, err := os.Create(theConfig.Pid_file); err == nil {
 		defer f.Close()
 		if _, err := f.WriteString(strconv.Itoa(os.Getpid())); err == nil {
 			f.Sync()
@@ -201,46 +151,49 @@ func initialise() {
 	}
 	// handle SIGHUP for reloading the configuration while running
 	signal.Notify(signalChannel, syscall.SIGHUP)
-	go sigHandler()
+	//go sigHandler()
 	return
 }
 
+func runServer(sConfig ServerConfig) {
+	server := SmtpdServer{Config: sConfig, sem: make(chan int, sConfig.Max_clients)}
 
+	// setup logging
+	server.openLog()
 
-func main() {
-	readConfig()
-	initialise()
-	cert, err := tls.LoadX509KeyPair(gConfig["GSMTP_PUB_KEY"], gConfig["GSMTP_PRV_KEY"])
+	// configure ssl
+	cert, err := tls.LoadX509KeyPair(sConfig.Public_key_file, sConfig.Private_key_file)
 	if err != nil {
-		logln(2, fmt.Sprintf("There was a problem with loading the certificate: %s", err))
+		server.logln(2, fmt.Sprintf("There was a problem with loading the certificate: %s", err))
 	}
-	TLSconfig = &tls.Config{Certificates: []tls.Certificate{cert}, ClientAuth: tls.VerifyClientCertIfGiven, ServerName: gConfig["GSMTP_HOST_NAME"]}
-	TLSconfig.Rand = rand.Reader
-	// start some savemail workers
-	for i := 0; i < 3; i++ {
-		go saveMail()
+	server.tlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.VerifyClientCertIfGiven,
+		ServerName:   sConfig.Host_name,
 	}
-	if gConfig["NGINX_AUTH_ENABLED"] == "Y" {
-		go nginxHTTPAuth()
-	}
+	server.tlsConfig.Rand = rand.Reader
+
+	// configure timeout
+	server.timeout = time.Duration(sConfig.Timeout)
+
 	// Start listening for SMTP connections
-	listener, err := net.Listen("tcp", gConfig["GSTMP_LISTEN_INTERFACE"])
+	listener, err := net.Listen("tcp", sConfig.Listen_interface)
 	if err != nil {
-		logln(2, fmt.Sprintf("Cannot listen on port, %v", err))
+		server.logln(2, fmt.Sprintf("Cannot listen on port, %v", err))
 	} else {
-		logln(1, fmt.Sprintf("Listening on tcp %s", gConfig["GSTMP_LISTEN_INTERFACE"]))
+		server.logln(1, fmt.Sprintf("Listening on tcp %s", sConfig.Listen_interface))
 	}
 	var clientId int64
 	clientId = 1
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logln(1, fmt.Sprintf("Accept error: %s", err))
+			server.logln(1, fmt.Sprintf("Accept error: %s", err))
 			continue
 		}
-		logln(0, fmt.Sprintf(" There are now "+strconv.Itoa(runtime.NumGoroutine())+" serving goroutines"))
-		sem <- 1 // Wait for active queue to drain.
-		go handleClient(&Client{
+		server.logln(0, fmt.Sprintf(" There are now "+strconv.Itoa(runtime.NumGoroutine())+" serving goroutines"))
+		server.sem <- 1 // Wait for active queue to drain.
+		go server.handleClient(&Client{
 			conn:        conn,
 			address:     conn.RemoteAddr().String(),
 			time:        time.Now().Unix(),
@@ -251,38 +204,61 @@ func main() {
 		})
 		clientId++
 	}
+
 }
 
-func handleClient(client *Client) {
-	defer closeClient(client)
-	greeting := "220 " + gConfig["GSMTP_HOST_NAME"] +
-		" SMTP Guerrilla-SMTPd #" + strconv.FormatInt(client.clientId, 10) + " (" + strconv.Itoa(len(sem)) + ") " + time.Now().Format(time.RFC1123Z)
+func main() {
+	readConfig()
+	initialise()
+	// start some savemail workers
+	for i := 0; i < 3; i++ {
+		go saveMail()
+	}
+	// run our servers
+	for serverId := 0; serverId < len(theConfig.Servers); serverId++ {
+		if theConfig.Servers[serverId].Is_enabled {
+			go runServer(theConfig.Servers[serverId])
+		}
+	}
+	sigHandler();
+
+}
+
+func (server *SmtpdServer) handleClient(client *Client) {
+	defer server.closeClient(client)
+	greeting := "220 " + server.Config.Host_name +
+		" SMTP Guerrilla-SMTPd #" +
+		strconv.FormatInt(client.clientId, 10) +
+		" (" + strconv.Itoa(len(server.sem)) + ") " + time.Now().Format(time.RFC1123Z)
 	advertiseTls := "250-STARTTLS\r\n"
+	if server.Config.Start_tls_on {
+		advertiseTls = ""
+	}
 	for i := 0; i < 100; i++ {
 		switch client.state {
 		case 0:
 			responseAdd(client, greeting)
 			client.state = 1
 		case 1:
-			input, err := readSmtp(client)
+			input, err := server.readSmtp(client)
 			if err != nil {
 				if err == io.EOF {
 					// client closed the connection already
-					logln(0, fmt.Sprintf("%s: %v", client.address, err))
+					server.logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
 				}
 				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 					// too slow, timeout
-					logln(0, fmt.Sprintf("%s: %v", client.address, err))
+					server.logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
 				}
-				logln(1, fmt.Sprintf("Read error: %v", err))
+				server.logln(1, fmt.Sprintf("Read error: %v", err))
 				break
 			}
 			input = strings.Trim(input, " \n\r")
-			bound := len(input);
+			bound := len(input)
 			if bound > 16 {
-				bound = 16;
+				bound = 16
 			}
 			cmd := strings.ToUpper(input[0:bound])
 			switch {
@@ -290,16 +266,16 @@ func handleClient(client *Client) {
 				if len(input) > 5 {
 					client.helo = input[5:]
 				}
-				responseAdd(client, "250 "+gConfig["GSMTP_HOST_NAME"]+" Hello ")
+				responseAdd(client, "250 "+server.Config.Host_name+" Hello ")
 			case strings.Index(cmd, "EHLO") == 0:
 				if len(input) > 5 {
 					client.helo = input[5:]
 				}
-				responseAdd(client, "250-"+gConfig["GSMTP_HOST_NAME"]+
-				" Hello "+client.helo+"["+client.address+"]"+"\r\n"+
-				"250-SIZE "+gConfig["GSMTP_MAX_SIZE"]+"\r\n"+
-				"250-PIPELINING \r\n" +
-				advertiseTls+"250 HELP")
+				responseAdd(client, "250-"+server.Config.Host_name+
+					" Hello "+client.helo+"["+client.address+"]"+"\r\n"+
+					"250-SIZE "+strconv.Itoa(server.Config.Max_size)+"\r\n"+
+					"250-PIPELINING \r\n"+
+					advertiseTls+"250 HELP")
 			case strings.Index(cmd, "HELP") == 0:
 				responseAdd(client, "250 Help! I need somebody...")
 			case strings.Index(cmd, "MAIL FROM:") == 0:
@@ -328,7 +304,9 @@ func handleClient(client *Client) {
 			case strings.Index(cmd, "DATA") == 0:
 				responseAdd(client, "354 Enter message, ending with \".\" on a line by itself")
 				client.state = 2
-			case (strings.Index(cmd, "STARTTLS") == 0) && !client.tls_on:
+			case (strings.Index(cmd, "STARTTLS") == 0) &&
+				!client.tls_on &&
+				server.Config.Start_tls_on:
 				responseAdd(client, "220 Ready to start TLS")
 				// go to start TLS state
 				client.state = 3
@@ -336,21 +314,21 @@ func handleClient(client *Client) {
 				responseAdd(client, "221 Bye")
 				killClient(client)
 			default:
-				responseAdd(client, fmt.Sprintf("500 unrecognized command"))
+				responseAdd(client, "500 unrecognized command")
 				client.errors++
 				if client.errors > 3 {
-					responseAdd(client, fmt.Sprintf("500 Too many unrecognized commands"))
+					responseAdd(client, "500 Too many unrecognized commands")
 					killClient(client)
 				}
 			}
 		case 2:
 			var err error
-			client.data, err = readSmtp(client)
+			client.data, err = server.readSmtp(client)
 			if err == nil {
-				if _, _, mailErr:= validateEmailData(client); mailErr == nil {
+				if _, _, mailErr := validateEmailData(client); mailErr == nil {
 					// to do: timeout when adding to SaveMailChan
 					// place on the channel so that one of the save mail workers can pick it up
-					SaveMailChan <- client
+					SaveMailChan <- &savePayload{client: client, server: server}
 					// wait for the save to complete
 					status := <-client.savedNotify
 					if status == 1 {
@@ -359,17 +337,17 @@ func handleClient(client *Client) {
 						responseAdd(client, "554 Error: transaction failed, blame it on the weather")
 					}
 				} else {
-					responseAdd(client, "550 Error: " + mailErr.Error())
+					responseAdd(client, "550 Error: "+mailErr.Error())
 				}
 
 			} else {
-				logln(1, fmt.Sprintf("DATA read error: %v", err))
+				server.logln(1, fmt.Sprintf("DATA read error: %v", err))
 			}
 			client.state = 1
 		case 3:
 			// upgrade to TLS
 			var tlsConn *tls.Conn
-			tlsConn = tls.Server(client.conn, TLSconfig)
+			tlsConn = tls.Server(client.conn, server.tlsConfig)
 			err := tlsConn.Handshake() // not necessary to call here, but might as well
 			if err == nil {
 				client.conn = net.Conn(tlsConn)
@@ -377,13 +355,13 @@ func handleClient(client *Client) {
 				client.bufout = bufio.NewWriter(client.conn)
 				client.tls_on = true
 			} else {
-				logln(1, fmt.Sprintf("Could not TLS handshake:%v", err))
+				server.logln(1, fmt.Sprintf("Could not TLS handshake:%v", err))
 			}
 			advertiseTls = ""
 			client.state = 1
 		}
 		// Send a response back to the client
-		err := responseWrite(client)
+		err := server.responseWrite(client)
 		if err != nil {
 			if err == io.EOF {
 				// client closed the connection already
@@ -404,15 +382,15 @@ func handleClient(client *Client) {
 func responseAdd(client *Client, line string) {
 	client.response = line + "\r\n"
 }
-func closeClient(client *Client) {
+func (server SmtpdServer) closeClient(client *Client) {
 	client.conn.Close()
-	<-sem // Done; enable next client to run.
+	<-server.sem // Done; enable next client to run.
 }
 func killClient(client *Client) {
 	client.kill_time = time.Now().Unix()
 }
 
-func readSmtp(client *Client) (input string, err error) {
+func (server SmtpdServer) readSmtp(client *Client) (input string, err error) {
 	var reply string
 	// Command state terminator by default
 	suffix := "\r\n"
@@ -421,12 +399,12 @@ func readSmtp(client *Client) (input string, err error) {
 		suffix = "\r\n.\r\n"
 	}
 	for err == nil {
-		client.conn.SetDeadline(time.Now().Add(timeout * time.Second))
+		client.conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
 		reply, err = client.bufin.ReadString('\n')
 		if reply != "" {
 			input = input + reply
-			if len(input) > max_size {
-				err = errors.New("Maximum DATA size exceeded (" + strconv.Itoa(max_size) + ")")
+			if len(input) > server.Config.Max_size {
+				err = errors.New("Maximum DATA size exceeded (" + strconv.Itoa(server.Config.Max_size) + ")")
 				return input, err
 			}
 			if client.state == 2 {
@@ -462,9 +440,9 @@ func scanSubject(client *Client, reply string) {
 	}
 }
 
-func responseWrite(client *Client) (err error) {
+func (server SmtpdServer) responseWrite(client *Client) (err error) {
 	var size int
-	client.conn.SetDeadline(time.Now().Add(timeout * time.Second))
+	client.conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
 	size, err = client.bufout.WriteString(client.response)
 	client.bufout.Flush()
 	client.response = client.response[size:]
@@ -477,89 +455,92 @@ func saveMail() {
 
 	var redis_err error
 	var length int
-	redis := &redisClient{}
-	db := autorc.New("tcp", "", gConfig["MYSQL_HOST"], gConfig["MYSQL_USER"], gConfig["MYSQL_PASS"], gConfig["MYSQL_DB"])
+	redisClient := &redisClient{}
+	db := autorc.New(
+		"tcp",
+		"",
+		theConfig.Mysql_host,
+		theConfig.Mysql_user,
+		theConfig.Mysql_pass,
+		theConfig.Mysql_db)
 	db.Register("set names utf8")
-	sql := "INSERT INTO " + gConfig["GM_MAIL_TABLE"] + " "
+	sql := "INSERT INTO " + theConfig.Mysql_table + " "
 	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`)"
 	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?)"
 	ins, sql_err := db.Prepare(sql)
 	if sql_err != nil {
-		logln(2, fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
+		log.Fatalf(fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
 	}
 	sql = "UPDATE gm2_setting SET `setting_value` = `setting_value`+1 WHERE `setting_name`='received_emails' LIMIT 1"
 	incr, sql_err := db.Prepare(sql)
 	if sql_err != nil {
-		logln(2, fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
+		log.Fatalf(fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
 	}
 
 	//  receives values from the channel repeatedly until it is closed.
 	for {
-		client := <-SaveMailChan
-		if user, host, addr_err := validateEmailData(client); addr_err != nil {
-			logln(1, fmt.Sprintln("mail_from didnt validate: %v", addr_err)+" client.mail_from:"+client.mail_from)
+		payload := <-SaveMailChan
+		if user, host, addr_err := validateEmailData(payload.client); addr_err != nil {
+			payload.server.logln(1, fmt.Sprintf("mail_from didnt validate: %v", addr_err)+" client.mail_from:"+payload.client.mail_from)
 			// notify client that a save completed, -1 = error
-			client.savedNotify <- -1
+			payload.client.savedNotify <- -1
 			continue
 		} else {
 			recipient = user + "@" + host
-			to = user + "@" + gConfig["GM_PRIMARY_MAIL_HOST"]
+			to = user + "@" + theConfig.Primary_host
 		}
-		length = len(client.data)
-		client.subject = mimeHeaderDecode(client.subject)
-		client.hash = md5hex(to + client.mail_from + client.subject + strconv.FormatInt(time.Now().UnixNano(), 10))
+		length = len(payload.client.data)
+		payload.client.subject = mimeHeaderDecode(payload.client.subject)
+		payload.client.hash = md5hex(to + payload.client.mail_from + payload.client.subject + strconv.FormatInt(time.Now().UnixNano(), 10))
 		// Add extra headers
 		add_head := ""
 		add_head += "Delivered-To: " + to + "\r\n"
-		add_head += "Received: from " + client.helo + " (" + client.helo + "  [" + client.address + "])\r\n"
-		add_head += "	by " + gConfig["GSMTP_HOST_NAME"] + " with SMTP id " + client.hash + "@" +
-			gConfig["GSMTP_HOST_NAME"] + ";\r\n"
+		add_head += "Received: from " + payload.client.helo + " (" + payload.client.helo + "  [" + payload.client.address + "])\r\n"
+		add_head += "	by " + payload.server.Config.Host_name + " with SMTP id " + payload.client.hash + "@" +
+			payload.server.Config.Host_name + ";\r\n"
 		add_head += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		client.data = compress(add_head + client.data)
+		payload.client.data = compress(add_head + payload.client.data)
 		body = "gzencode"
-		redis_err = redis.redisConnection()
+		redis_err = redisClient.redisConnection()
 		if redis_err == nil {
-			_, do_err := redis.conn.Do("SETEX", client.hash, getConfigInt("GSMTP_MAIL_EXPIRE_SECONDS", 7200), client.data)
+			_, do_err := redisClient.conn.Do("SETEX", payload.client.hash, theConfig.redis_expire_seconds, payload.client.data)
 			if do_err == nil {
-				client.data = ""
+				payload.client.data = ""
 				body = "redis"
 			}
 		} else {
-			logln(1, fmt.Sprintf("redis: %v", redis_err))
+			payload.server.logln(1, fmt.Sprintf("redis: %v", redis_err))
 		}
 		// bind data to cursor
 		ins.Bind(
 			to,
-			client.mail_from,
-			client.subject,
+			payload.client.mail_from,
+			payload.client.subject,
 			body,
-			client.data,
-			client.hash,
+			payload.client.data,
+			payload.client.hash,
 			recipient,
-			client.address,
-			client.mail_from)
+			payload.client.address,
+			payload.client.mail_from)
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {
-			logln(1, fmt.Sprintf("Database error, %v ", err))
-			client.savedNotify <- -1
+			payload.server.logln(1, fmt.Sprintf("Database error, %v ", err))
+			payload.client.savedNotify <- -1
 		} else {
-			logln(0, "Email saved "+client.hash+" len:"+strconv.Itoa(length))
+			payload.server.logln(0, "Email saved "+payload.client.hash+" len:"+strconv.Itoa(length))
 			_, _, err = incr.Exec()
 			if err != nil {
-				logln(1, fmt.Sprintf("Failed to incr count: %v", err))
+				payload.server.logln(1, fmt.Sprintf("Failed to incr count: %v", err))
 			}
-			client.savedNotify <- 1
+			payload.client.savedNotify <- 1
 		}
 	}
 }
 
 func (c *redisClient) redisConnection() (err error) {
-	// if c.count > 100 {
-	//	c.conn.Close()
-	//	c.count = 0
-	// }
+
 	if c.count == 0 {
 		c.conn, err = redis.Dial("tcp", ":6379")
 		if err != nil {
@@ -617,9 +598,17 @@ func mimeHeaderDecode(str string) string {
 				payload = matched[i][3]
 				switch encoding {
 				case "B":
-					str = strings.Replace(str, matched[i][0], mailTransportDecode(payload, "base64", charset), 1)
+					str = strings.Replace(
+						str,
+						matched[i][0],
+						mailTransportDecode(payload, "base64", charset),
+						1)
 				case "Q":
-					str = strings.Replace(str, matched[i][0], mailTransportDecode(payload, "quoted-printable", charset), 1)
+					str = strings.Replace(
+						str,
+						matched[i][0],
+						mailTransportDecode(payload, "quoted-printable", charset),
+						1)
 				}
 			}
 		}
@@ -652,11 +641,11 @@ func mailTransportDecode(str string, encoding_type string, charset string) strin
 
 	if charset != "UTF-8" {
 		charset = fixCharset(charset)
-		if cd, err := iconv.Open("UTF-8", charset); err == nil{
+		if cd, err := iconv.Open("UTF-8", charset); err == nil {
 			defer func() {
 				cd.Close()
 				if r := recover(); r != nil {
-					logln(1, fmt.Sprintf("Recovered in %v", r))
+					//logln(1, fmt.Sprintf("Recovered in %v", r))
 				}
 			}()
 			// eg. charset can be "ISO-2022-JP"
@@ -717,28 +706,4 @@ func md5hex(str string) string {
 	h.Write([]byte(str))
 	sum := h.Sum([]byte{})
 	return hex.EncodeToString(sum)
-}
-
-// If running Nginx as a proxy, give Nginx the IP address and port for the SMTP server
-// Primary use of Nginx is to terminate TLS so that Go doesn't need to deal with it.
-// This could perform auth and load balancing too
-// See http://wiki.nginx.org/MailCoreModule
-func nginxHTTPAuth() {
-	parts := strings.Split(gConfig["GSTMP_LISTEN_INTERFACE"], ":")
-	gConfig["HTTP_AUTH_HOST"] = parts[0]
-	gConfig["HTTP_AUTH_PORT"] = parts[1]
-	fmt.Println(parts)
-	http.HandleFunc("/", nginxHTTPAuthHandler)
-	err := http.ListenAndServe(gConfig["NGINX_AUTH"], nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
-
-}
-
-func nginxHTTPAuthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Auth-Status", "OK")
-	w.Header().Add("Auth-Server", gConfig["HTTP_AUTH_HOST"])
-	w.Header().Add("Auth-Port", gConfig["HTTP_AUTH_PORT"])
-	fmt.Fprint(w, "")
 }
