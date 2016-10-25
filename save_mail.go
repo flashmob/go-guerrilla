@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/ziutek/mymysql/autorc"
+	_ "github.com/ziutek/mymysql/godrv"
 	"log"
 	"fmt"
 	"strconv"
@@ -38,8 +39,8 @@ func saveMail() {
 		mainConfig.Mysql_db)
 	db.Register("set names utf8")
 	sql := "INSERT INTO " + mainConfig.Mysql_table + " "
-	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`)"
-	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?)"
+	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
+	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
 	ins, sql_err := db.Prepare(sql)
 	if sql_err != nil {
 		log.Fatalf(fmt.Sprintf("Sql statement incorrect: %s\n", sql_err))
@@ -95,7 +96,9 @@ func saveMail() {
 			payload.client.hash,
 			recipient,
 			payload.client.address,
-			payload.client.mail_from)
+			payload.client.mail_from,
+			payload.client.tls_on,
+		)
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {

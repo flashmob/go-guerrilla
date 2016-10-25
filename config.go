@@ -11,14 +11,14 @@ import (
 )
 
 type GlobalConfig struct {
-	Allowed_hosts        string         `json:"GM_ALLOWED_HOSTS"`
-	Primary_host         string         `json:"GM_PRIMARY_MAIL_HOST"`
+	Allowed_hosts        string         `json:"allowed_hosts"`
+	Primary_host         string         `json:"primary_mail_host"`
 	Verbose              bool           `json:"verbose"`
-	Mysql_table          string         `json:"GM_MAIL_TABLE"`
-	Mysql_db             string         `json:"MYSQL_DB"`
-	Mysql_host           string         `json:"MYSQL_HOST"`
-	Mysql_pass           string         `json:"MYSQL_PASS"`
-	Mysql_user           string         `json:"MYSQL_USER"`
+	Mysql_table          string         `json:"mail_table"`
+	Mysql_db             string         `json:"mysql_db"`
+	Mysql_host           string         `json:"mysql_host"`
+	Mysql_pass           string         `json:"mysql_pass"`
+	Mysql_user           string         `json:"mysql_user"`
 	Servers              []ServerConfig `json:"servers"`
 	Pid_file             string         `json:"pid_file,omitempty"`
 	Save_workers_size    int            `json:"save_workers_size"`
