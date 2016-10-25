@@ -22,7 +22,8 @@ type GlobalConfig struct {
 	Servers              []ServerConfig `json:"servers"`
 	Pid_file             string         `json:"pid_file,omitempty"`
 	Save_workers_size    int            `json:"save_workers_size"`
-	redis_expire_seconds int            `json:"redis_expire_seconds"`
+	Redis_expire_seconds int            `json:"redis_expire_seconds"`
+	Redis_interface      string         `json:"redis_interface"`
 }
 
 type ServerConfig struct {
@@ -34,7 +35,7 @@ type ServerConfig struct {
 	Timeout          int    `json:"timeout"`
 	Listen_interface string `json:"listen_interface"`
 	Start_tls_on     bool   `json:"start_tls_on,omitempty"`
-	Is_tls_on        bool   `json:"is_tls_on,omitempty"`
+	Tls_always_on    bool   `json:"tls_always_on,omitempty"`
 	Max_clients      int    `json:"max_clients"`
 	Log_file         string `json:"log_file"`
 }
@@ -65,7 +66,7 @@ var gConfig = map[string]interface{}{
 }
 
 */
-var theConfig GlobalConfig
+var mainConfig GlobalConfig
 var flagVerbose, flagIface, flagConfigFile string
 
 // config is read at startup, or when a SIG_HUP is caught
@@ -84,8 +85,8 @@ func readConfig() {
 		log.Fatalln("Could not read config file", err)
 	}
 
-	theConfig = GlobalConfig{}
-	err = json.Unmarshal(b, &theConfig)
+	mainConfig = GlobalConfig{}
+	err = json.Unmarshal(b, &mainConfig)
 	//fmt.Println(theConfig)
 	//fmt.Println(fmt.Sprintf("allowed hosts: %s", theConfig.Allowed_hosts))
 	//log.Fatalln("Could not parse config file:", theConfig)
@@ -96,15 +97,15 @@ func readConfig() {
 
 	// copy command line flag over so it takes precedence
 	if len(flagVerbose) > 0 && strings.ToUpper(flagVerbose) == "Y" {
-		theConfig.Verbose = true
+		mainConfig.Verbose = true
 	}
 
 	if len(flagIface) > 0 {
-		theConfig.Servers[0].Listen_interface = flagIface
+		mainConfig.Servers[0].Listen_interface = flagIface
 	}
 	// map the allow hosts for easy lookup
-	if len(theConfig.Allowed_hosts) > 0 {
-		if arr := strings.Split(theConfig.Allowed_hosts, ","); len(arr) > 0 {
+	if len(mainConfig.Allowed_hosts) > 0 {
+		if arr := strings.Split(mainConfig.Allowed_hosts, ","); len(arr) > 0 {
 			for i := 0; i < len(arr); i++ {
 				allowedHosts[arr[i]] = true
 			}
@@ -112,8 +113,8 @@ func readConfig() {
 	} else {
 		log.Fatalln("Config error, GM_ALLOWED_HOSTS must be s string.")
 	}
-	if theConfig.Pid_file == "" {
-		theConfig.Pid_file = "/var/run/go-guerrilla.pid"
+	if mainConfig.Pid_file == "" {
+		mainConfig.Pid_file = "/var/run/go-guerrilla.pid"
 	}
 
 	return

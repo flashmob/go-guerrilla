@@ -237,6 +237,13 @@ This will place goguerrilla in the background and continue running
 You may also put another process to watch your goguerrilla process and re-start it
 if something goes wrong.
 
+Testing STARTTLS
+
+Use openssl:
+
+    $ openssl s_client -starttls smtp -crlf -connect 127.0.0.1:2526
+
+
 Benchmarking:
 ==========================================================
 
