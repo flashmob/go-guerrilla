@@ -28,7 +28,7 @@ type Client struct {
 	time        int64
 	tls_on      bool
 	conn        net.Conn
-	bufin       *bufio.Reader
+	bufin       *smtpBufferedReader
 	bufout      *bufio.Writer
 	kill_time   int64
 	errors      int
@@ -259,51 +259,61 @@ func killClient(client *Client) {
 	client.kill_time = time.Now().Unix()
 }
 
+// we need to change the limit, so we extend io.LimitedReader
 type mutableLimitedReader struct {
 	R io.LimitedReader
 }
 
+// bolt this on so we can set the limit
 func (mlr *mutableLimitedReader) setLimit(n int64) {
 	mlr.R.N = n;
 }
 
+// this just delegates to the underlying reader
 func (mlr *mutableLimitedReader) Read(p []byte) (n int, err error) {
 	n, err = mlr.R.Read(p)
 	return
 }
-
-
 
 func newMutableLimitedReader(r io.Reader, n int64) mutableLimitedReader {
 	lr := io.LimitedReader{R:r, N:n}
 	return mutableLimitedReader{lr}
 }
 
-type smtpBufferedReader struct {
+type smtpLimitedReader struct {
 	mlr mutableLimitedReader
 }
 
-func (sbr *smtpBufferedReader) Read(p []byte) (n int, err error) {
+func (sbr *smtpLimitedReader) Read(p []byte) (n int, err error) {
 	n, err = sbr.mlr.Read(p)
 	return
 }
 
-func (sbr *smtpBufferedReader) setLimit(n int64) {
+func (sbr *smtpLimitedReader) setLimit(n int64) {
 	sbr.mlr.setLimit(n);
 }
 
-func newSmtpBufferedReader(rd io.Reader) *bufio.Reader {
-	mlr := newMutableLimitedReader(rd, 20);
-	z := &smtpBufferedReader{mlr}
-	return bufio.NewReader(z)
+type smtpBufferedReader struct {
+	br *bufio.Reader
+	slr *smtpLimitedReader
 }
 
-/*
-func newSmtpBufferedReader(rd io.Reader) *bufio.Reader {
-	mlr := newMutableLimitedReader(rd, 1024);
-	return bufio.NewReader(mlr)
+func newSmtpBufferedReader(rd io.Reader) *smtpBufferedReader {
+	mlr := newMutableLimitedReader(rd, 2);
+	z := &smtpLimitedReader{mlr}
+	s := &smtpBufferedReader{bufio.NewReader(z), z}
+	return s
 }
-*/
+
+func (sbr *smtpBufferedReader) ReadString(delim byte) (line string, err error) {
+	line, err = sbr.br.ReadString(delim)
+	return
+}
+
+func (sbr *smtpBufferedReader) setLimit(n int64) {
+	sbr.slr.setLimit(n)
+}
+
 
 
 
