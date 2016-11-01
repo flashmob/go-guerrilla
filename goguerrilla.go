@@ -71,16 +71,19 @@ func runServer(sConfig ServerConfig) {
 	server.openLog()
 
 	// configure ssl
-	cert, err := tls.LoadX509KeyPair(sConfig.Public_key_file, sConfig.Private_key_file)
-	if err != nil {
-		server.logln(2, fmt.Sprintf("There was a problem with loading the certificate: %s", err))
+	if (sConfig.Tls_always_on || sConfig.Start_tls_on) {
+		cert, err := tls.LoadX509KeyPair(sConfig.Public_key_file, sConfig.Private_key_file)
+		if err != nil {
+			server.logln(2, fmt.Sprintf("There was a problem with loading the certificate: %s", err))
+		}
+		server.tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.VerifyClientCertIfGiven,
+			ServerName:   sConfig.Host_name,
+		}
+		server.tlsConfig.Rand = rand.Reader
 	}
-	server.tlsConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientAuth:   tls.VerifyClientCertIfGiven,
-		ServerName:   sConfig.Host_name,
-	}
-	server.tlsConfig.Rand = rand.Reader
+
 
 	// configure timeout
 	server.timeout = time.Duration(sConfig.Timeout)
@@ -106,7 +109,7 @@ func runServer(sConfig ServerConfig) {
 			conn:        conn,
 			address:     conn.RemoteAddr().String(),
 			time:        time.Now().Unix(),
-			bufin:       bufio.NewReader(conn),
+			bufin:       newSmtpBufferedReader(conn),
 			bufout:      bufio.NewWriter(conn),
 			clientId:    clientId,
 			savedNotify: make(chan int),

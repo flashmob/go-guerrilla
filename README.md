@@ -176,10 +176,18 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
             ]
     }
 
+The Json parser is very strict on syntax. If there's a parse error and it
+doesn't give much clue, then test your syntax here:
+http://jsonlint.com/#
 	
 
 Releases
 =========================================================
+
+1.5 - 1st Nov 2016
+- Fixed DoS vulnerability, now server will stop reading after a limit is reached
+- syntax error in Json goguerrilla.conf.sample
+- check database back-end connections before starting
 
 1.4 - 25th Oct 2016
 - New Feature: multiple servers!

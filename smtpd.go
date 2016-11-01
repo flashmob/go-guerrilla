@@ -20,7 +20,6 @@ type Client struct {
 	helo        string
 	mail_from   string
 	rcpt_to     string
-	read_buffer string
 	response    string
 	address     string
 	data        string
@@ -84,9 +83,10 @@ func (server *SmtpdServer) upgradeToTls(client *Client) bool {
 	err := tlsConn.Handshake() // not necessary to call here, but might as well
 	if err == nil {
 		client.conn = net.Conn(tlsConn)
-		client.bufin = bufio.NewReader(client.conn)
+		client.bufin = newSmtpBufferedReader(client.conn)
 		client.bufout = bufio.NewWriter(client.conn)
 		client.tls_on = true
+
 		return true
 	} else {
 		server.logln(1, fmt.Sprintf("Could not TLS handshake:%v", err))
@@ -251,7 +251,7 @@ func (server *SmtpdServer) handleClient(client *Client) {
 func responseAdd(client *Client, line string) {
 	client.response = line + "\r\n"
 }
-func (server SmtpdServer) closeClient(client *Client) {
+func (server *SmtpdServer) closeClient(client *Client) {
 	client.conn.Close()
 	<-server.sem // Done; enable next client to run.
 }
@@ -259,7 +259,55 @@ func killClient(client *Client) {
 	client.kill_time = time.Now().Unix()
 }
 
-func (server SmtpdServer) readSmtp(client *Client) (input string, err error) {
+type mutableLimitedReader struct {
+	R io.LimitedReader
+}
+
+func (mlr *mutableLimitedReader) setLimit(n int64) {
+	mlr.R.N = n;
+}
+
+func (mlr *mutableLimitedReader) Read(p []byte) (n int, err error) {
+	n, err = mlr.R.Read(p)
+	return
+}
+
+
+
+func newMutableLimitedReader(r io.Reader, n int64) mutableLimitedReader {
+	lr := io.LimitedReader{R:r, N:n}
+	return mutableLimitedReader{lr}
+}
+
+type smtpBufferedReader struct {
+	mlr mutableLimitedReader
+}
+
+func (sbr *smtpBufferedReader) Read(p []byte) (n int, err error) {
+	n, err = sbr.mlr.Read(p)
+	return
+}
+
+func (sbr *smtpBufferedReader) setLimit(n int64) {
+	sbr.mlr.setLimit(n);
+}
+
+func newSmtpBufferedReader(rd io.Reader) *bufio.Reader {
+	mlr := newMutableLimitedReader(rd, 20);
+	z := &smtpBufferedReader{mlr}
+	return bufio.NewReader(z)
+}
+
+/*
+func newSmtpBufferedReader(rd io.Reader) *bufio.Reader {
+	mlr := newMutableLimitedReader(rd, 1024);
+	return bufio.NewReader(mlr)
+}
+*/
+
+
+
+func (server *SmtpdServer) readSmtp(client *Client) (input string, err error) {
 	var reply string
 	// Command state terminator by default
 	suffix := "\r\n"
@@ -309,7 +357,7 @@ func scanSubject(client *Client, reply string) {
 	}
 }
 
-func (server SmtpdServer) responseWrite(client *Client) (err error) {
+func (server *SmtpdServer) responseWrite(client *Client) (err error) {
 	var size int
 	client.conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
 	size, err = client.bufout.WriteString(client.response)
