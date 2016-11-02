@@ -15,7 +15,7 @@ every hour.
 The purpose of this daemon is to grab the email, save it to the database
 and disconnect as quickly as possible.
 
-A typical user of this software would probably want to customize the saveMail function for
+A typical user of this software would probably want to customize the save_mail.go source for
 their own systems.
 
 This server does not attempt to filter HTML, check for spam or do any sender 
@@ -27,8 +27,8 @@ The software is using MIT License (MIT) - contributors welcome.
 
 ### Roadmap / Contributing & Bounties
 
-Wow, this project did not expect to get so many stars! 
-However, not that much pull requests...
+
+Pull requests / issue reporting & discussion / code reviews always welcome.
 To encourage more pull requests, we are now offering bounties funded 
 from our bitcoin donation address:
 
@@ -39,12 +39,14 @@ So far we have the following bounties:
 - Client Pooling: When a client is finished, it should be placed into a 
 pool instead of being destroyed. Looking for a idiomatic 
 Go solution with channels. (0.5 BTC for a successful merge)
+See discussion here: https://github.com/flashmob/go-guerrilla/issues/11
 
-- Modularize: Ability for the server to be used as a module. If it used
-as a module, the new program would be able to start several servers on 
-different ports, would be possible to specify a config file for 
-each server, and specify its own saveMail function (otherwise, revert to
-default). Ideas on how to best refactor this welcome too. 
+- Modularize: Ability for the server to be used as a package. If it used
+as a package, an API would be exposed, and a new program would be able 
+to start several servers on different ports, would be possible to 
+specify a config file for each server, and specify its own 
+saveMail function (otherwise, revert to default). Would be good to 
+make it GoDep friendly too - or any other dependency tool out there. 
 (0.5 BTC for a successful merge)
 
 - Analytics: A web based admin panel that displays live statistics,
@@ -54,7 +56,16 @@ Show the top senders by: IP, by domain & by HELO message.
 Using websocket via https & password protected. 
 (1 BTC for a successful merge)
 
-If you need more clarification / details, please open an issue on Github.
+- Testing: Automated test that can start the server and test end-to-end
+a few common cases, some unit tests would be good too. 
+(0.25 BTC for a successful merge)
+
+- Looking for someone to do a code review & possibly fix any tidbits,
+they find, or suggestions for doing things better.
+(0.25 BTC for a successful merge)
+
+Ready to roll up your sleeves and have a go?
+Please open an issue for more clarification / details on Github.
 Also, welcome your suggestions for adding things to this Roadmap - please open an issue.
 
 Another way to contribute is to donate to our bitcoin address to help
