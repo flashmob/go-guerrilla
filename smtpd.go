@@ -309,19 +309,22 @@ func newAdjustableLimitedReader(r io.Reader, n int64) *adjustableLimitedReader {
 
 // We need buffio to use the limited reader, and have access to the limited reader
 type smtpBufferedReader struct {
-	br  *bufio.Reader
+	*bufio.Reader
 	alr *adjustableLimitedReader
 }
 
+
+
 // delegate to the bufio.Reader & detect if input limit exceeded
-func (sbr *smtpBufferedReader) ReadString(delim byte) (line string, err error) {
-	line, err = sbr.br.ReadString(delim)
+func (sbr *smtpBufferedReader) ReadLimitedString(delim byte) (line string, err error) {
+	line, err = sbr.ReadString(delim)
 	if err == io.EOF && sbr.alr.R.N <= 0 {
 		// return our custom error since std lib returns EOF
 		err = INPUT_LIMIT_EXCEEDED
 	}
 	return
 }
+
 
 // delegate to the adjustable limited reader
 func (sbr *smtpBufferedReader) setLimit(n int64) {
@@ -347,7 +350,7 @@ func (server *SmtpdServer) readSmtp(client *Client) (input string, err error) {
 	}
 	for err == nil {
 		client.conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
-		reply, err = client.bufin.ReadString('\n')
+		reply, err = client.bufin.ReadLimitedString('\n')
 		if reply != "" {
 			input = input + reply
 			if len(input) > server.Config.Max_size {
