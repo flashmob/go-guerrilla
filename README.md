@@ -184,9 +184,10 @@ http://jsonlint.com/#
 Releases
 =========================================================
 
-1.5 - 1st Nov 2016
-- Fixed DoS vulnerability, now server will stop reading after a limit is reached
-- syntax error in Json goguerrilla.conf.sample
+1.5 - 2nd Nov 2016
+- Fixed a DoS vulnerability, stop reading after an input limit is reached
+- Fixed syntax error in Json goguerrilla.conf.sample
+- Do not load certificates if SSL is not enabled
 - check database back-end connections before starting
 
 1.4 - 25th Oct 2016

@@ -8,6 +8,7 @@ import (
 	"log"
 	"strconv"
 	"time"
+	"errors"
 )
 
 type savePayload struct {
@@ -125,4 +126,29 @@ func (c *redisClient) redisConnection() (err error) {
 		}
 	}
 	return nil
+}
+
+// test database connection settings
+func testDbConnections() (err error) {
+
+	db := autorc.New(
+		"tcp",
+		"",
+		mainConfig.Mysql_host,
+		mainConfig.Mysql_user,
+		mainConfig.Mysql_pass,
+		mainConfig.Mysql_db)
+
+	if mysql_err := db.Raw.Connect(); mysql_err != nil {
+		err = errors.New("MySql cannot connect, check your settings. " + mysql_err.Error() )
+	} else {
+		db.Raw.Close();
+	}
+
+	redisClient := &redisClient{}
+	if redis_err := redisClient.redisConnection(); redis_err != nil {
+		err = errors.New("Redis cannot connect, check your settings. " + redis_err.Error())
+	}
+
+	return
 }

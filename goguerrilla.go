@@ -1,7 +1,7 @@
 /**
 Go-Guerrilla SMTPd
 
-Version: 1.4
+Version: 1.5
 Author: Flashmob, GuerrillaMail.com
 Contact: flashmob@gmail.com
 License: MIT
@@ -121,8 +121,12 @@ func runServer(sConfig ServerConfig) {
 func main() {
 	readConfig()
 	initialise()
+	if err := testDbConnections(); err != nil {
+		fmt.Println(err)
+		os.Exit(1);
+	}
 	// start some savemail workers
-	for i := 0; i < 3; i++ {
+	for i := 0; i < mainConfig.Save_workers_size; i++ {
 		go saveMail()
 	}
 	// run our servers

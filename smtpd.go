@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const commandMaxLength = 1024
+
 type Client struct {
 	state       int
 	helo        string
@@ -77,10 +79,12 @@ func (server *SmtpdServer) openLog() {
 	}
 }
 
+// Upgrades the connection to TLS
+// Sets up buffers with the upgraded connection
 func (server *SmtpdServer) upgradeToTls(client *Client) bool {
 	var tlsConn *tls.Conn
 	tlsConn = tls.Server(client.conn, server.tlsConfig)
-	err := tlsConn.Handshake() // not necessary to call here, but might as well
+	err := tlsConn.Handshake()
 	if err == nil {
 		client.conn = net.Conn(tlsConn)
 		client.bufin = newSmtpBufferedReader(client.conn)
@@ -118,17 +122,21 @@ func (server *SmtpdServer) handleClient(client *Client) {
 			responseAdd(client, greeting)
 			client.state = 1
 		case 1:
+			client.bufin.setLimit(commandMaxLength)
 			input, err := server.readSmtp(client)
 			if err != nil {
 				if err == io.EOF {
 					// client closed the connection already
 					server.logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
-				}
-				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 					// too slow, timeout
 					server.logln(0, fmt.Sprintf("%s: %v", client.address, err))
 					return
+				} else if err == INPUT_LIMIT_EXCEEDED {
+					responseAdd(client, "500 Line too long.")
+					// kill it so that another one can connect
+					killClient(client)
 				}
 				server.logln(1, fmt.Sprintf("Read error: %v", err))
 				break
@@ -192,7 +200,7 @@ func (server *SmtpdServer) handleClient(client *Client) {
 				responseAdd(client, "221 Bye")
 				killClient(client)
 			default:
-				responseAdd(client, "500 unrecognized command")
+				responseAdd(client, "500 unrecognized command: "+cmd)
 				client.errors++
 				if client.errors > 3 {
 					responseAdd(client, "500 Too many unrecognized commands")
@@ -201,6 +209,7 @@ func (server *SmtpdServer) handleClient(client *Client) {
 			}
 		case 2:
 			var err error
+			client.bufin.setLimit(int64(server.Config.Max_size) + 1024000) // This is a hard limit.
 			client.data, err = server.readSmtp(client)
 			if err == nil {
 				if _, _, mailErr := validateEmailData(client); mailErr == nil {
@@ -208,17 +217,32 @@ func (server *SmtpdServer) handleClient(client *Client) {
 					// place on the channel so that one of the save mail workers can pick it up
 					SaveMailChan <- &savePayload{client: client, server: server}
 					// wait for the save to complete
-					status := <-client.savedNotify
-					if status == 1 {
-						responseAdd(client, "250 OK : queued as "+client.hash)
-					} else {
-						responseAdd(client, "554 Error: transaction failed, blame it on the weather")
+					// or timeout
+					select {
+					case status := <-client.savedNotify:
+						if status == 1 {
+							responseAdd(client, "250 OK : queued as "+client.hash)
+						} else {
+							responseAdd(client, "554 Error: transaction failed, blame it on the weather")
+						}
+					case <-time.After(time.Second * 30):
+						fmt.Println("timeout 1")
+						responseAdd(client, "554 Error: transaction timeout")
 					}
+
 				} else {
 					responseAdd(client, "550 Error: "+mailErr.Error())
 				}
 
 			} else {
+				if (err == INPUT_LIMIT_EXCEEDED) {
+					// hard limit reached, end to make room for other clients
+					responseAdd(client, "550 Error: DATA limit exceeded by more than a megabyte!")
+					killClient(client)
+				} else {
+					responseAdd(client, "550 Error: "+err.Error())
+				}
+
 				server.logln(1, fmt.Sprintf("DATA read error: %v", err))
 			}
 			client.state = 1
@@ -248,6 +272,7 @@ func (server *SmtpdServer) handleClient(client *Client) {
 
 }
 
+// add a response on the response buffer
 func responseAdd(client *Client, line string) {
 	client.response = line + "\r\n"
 }
@@ -259,70 +284,65 @@ func killClient(client *Client) {
 	client.kill_time = time.Now().Unix()
 }
 
-// we need to change the limit, so we extend io.LimitedReader
-type mutableLimitedReader struct {
-	R io.LimitedReader
+var INPUT_LIMIT_EXCEEDED = errors.New("Line too long") // 500 Line too long.
+
+// we need to adjust the limit, so we embed io.LimitedReader
+type adjustableLimitedReader struct {
+	R *io.LimitedReader
 }
 
-// bolt this on so we can set the limit
-func (mlr *mutableLimitedReader) setLimit(n int64) {
-	mlr.R.N = n;
+// bolt this on so we can adjust the limit
+func (alr *adjustableLimitedReader) setLimit(n int64) {
+	alr.R.N = n
 }
 
-// this just delegates to the underlying reader
-func (mlr *mutableLimitedReader) Read(p []byte) (n int, err error) {
-	n, err = mlr.R.Read(p)
+// this just delegates to the underlying reader in order to satisfy the Reader interface
+func (alr adjustableLimitedReader) Read(p []byte) (n int, err error) {
+	n, err = alr.R.Read(p)
 	return
 }
 
-func newMutableLimitedReader(r io.Reader, n int64) mutableLimitedReader {
-	lr := io.LimitedReader{R:r, N:n}
-	return mutableLimitedReader{lr}
+func newAdjustableLimitedReader(r io.Reader, n int64) *adjustableLimitedReader {
+	lr := &io.LimitedReader{R: r, N: n}
+	return &adjustableLimitedReader{lr}
 }
 
-type smtpLimitedReader struct {
-	mlr mutableLimitedReader
-}
-
-func (sbr *smtpLimitedReader) Read(p []byte) (n int, err error) {
-	n, err = sbr.mlr.Read(p)
-	return
-}
-
-func (sbr *smtpLimitedReader) setLimit(n int64) {
-	sbr.mlr.setLimit(n);
-}
-
+// We need buffio to use the limited reader, and have access to the limited reader
 type smtpBufferedReader struct {
-	br *bufio.Reader
-	slr *smtpLimitedReader
+	br  *bufio.Reader
+	alr *adjustableLimitedReader
 }
 
+// delegate to the bufio.Reader & detect if input limit exceeded
+func (sbr *smtpBufferedReader) ReadString(delim byte) (line string, err error) {
+	line, err = sbr.br.ReadString(delim)
+	if err == io.EOF && sbr.alr.R.N <= 0 {
+		// return our custom error since std lib returns EOF
+		err = INPUT_LIMIT_EXCEEDED
+	}
+	return
+}
+
+// delegate to the adjustable limited reader
+func (sbr *smtpBufferedReader) setLimit(n int64) {
+	sbr.alr.setLimit(n)
+}
+
+
+// new limited buffered reader
 func newSmtpBufferedReader(rd io.Reader) *smtpBufferedReader {
-	mlr := newMutableLimitedReader(rd, 2);
-	z := &smtpLimitedReader{mlr}
-	s := &smtpBufferedReader{bufio.NewReader(z), z}
+	alr := newAdjustableLimitedReader(rd, commandMaxLength)
+	s := &smtpBufferedReader{bufio.NewReader(alr), alr}
 	return s
 }
 
-func (sbr *smtpBufferedReader) ReadString(delim byte) (line string, err error) {
-	line, err = sbr.br.ReadString(delim)
-	return
-}
-
-func (sbr *smtpBufferedReader) setLimit(n int64) {
-	sbr.slr.setLimit(n)
-}
-
-
-
-
+// Reads from the smtpBufferedReader, can be in command state or data state.
 func (server *SmtpdServer) readSmtp(client *Client) (input string, err error) {
 	var reply string
 	// Command state terminator by default
 	suffix := "\r\n"
 	if client.state == 2 {
-		// DATA state
+		// DATA state ends with a dot on a line by itself
 		suffix = "\r\n.\r\n"
 	}
 	for err == nil {
