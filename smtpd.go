@@ -297,32 +297,28 @@ func (alr *adjustableLimitedReader) setLimit(n int64) {
 }
 
 // this just delegates to the underlying reader in order to satisfy the Reader interface
-func (alr adjustableLimitedReader) Read(p []byte) (n int, err error) {
+// Since the vanilla limited reader returns io.EOF when the limit is reached, we need a more specific
+// error so that we can distinguish when a limit is reached
+func (alr *adjustableLimitedReader) Read(p []byte) (n int, err error) {
 	n, err = alr.R.Read(p)
+	if err == io.EOF && alr.R.N <= 0 {
+		// return our custom error since std lib returns EOF
+		err = INPUT_LIMIT_EXCEEDED
+	}
 	return
 }
 
+// allocate a new adjustableLimitedReader
 func newAdjustableLimitedReader(r io.Reader, n int64) *adjustableLimitedReader {
 	lr := &io.LimitedReader{R: r, N: n}
 	return &adjustableLimitedReader{lr}
 }
 
-// We need buffio to use the limited reader, and have access to the limited reader
+// This is a bufio.Reader what will use our adjustable limit reader
+// We 'extend' buffio to have the limited reader feature
 type smtpBufferedReader struct {
 	*bufio.Reader
 	alr *adjustableLimitedReader
-}
-
-
-
-// delegate to the bufio.Reader & detect if input limit exceeded
-func (sbr *smtpBufferedReader) ReadLimitedString(delim byte) (line string, err error) {
-	line, err = sbr.ReadString(delim)
-	if err == io.EOF && sbr.alr.R.N <= 0 {
-		// return our custom error since std lib returns EOF
-		err = INPUT_LIMIT_EXCEEDED
-	}
-	return
 }
 
 
@@ -332,7 +328,7 @@ func (sbr *smtpBufferedReader) setLimit(n int64) {
 }
 
 
-// new limited buffered reader
+// allocate a new smtpBufferedReader
 func newSmtpBufferedReader(rd io.Reader) *smtpBufferedReader {
 	alr := newAdjustableLimitedReader(rd, commandMaxLength)
 	s := &smtpBufferedReader{bufio.NewReader(alr), alr}
@@ -350,7 +346,7 @@ func (server *SmtpdServer) readSmtp(client *Client) (input string, err error) {
 	}
 	for err == nil {
 		client.conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
-		reply, err = client.bufin.ReadLimitedString('\n')
+		reply, err = client.bufin.ReadString('\n')
 		if reply != "" {
 			input = input + reply
 			if len(input) > server.Config.Max_size {
