@@ -65,8 +65,13 @@ func saveMail() {
 			to = user + "@" + mainConfig.Primary_host
 		}
 		length = len(payload.client.data)
+		ts := strconv.FormatInt(time.Now().UnixNano(), 10);
 		payload.client.subject = mimeHeaderDecode(payload.client.subject)
-		payload.client.hash = md5hex(to + payload.client.mail_from + payload.client.subject + strconv.FormatInt(time.Now().UnixNano(), 10))
+		payload.client.hash = md5hex(
+			&to,
+			&payload.client.mail_from,
+			&payload.client.subject,
+			&ts)
 		// Add extra headers
 		add_head := ""
 		add_head += "Delivered-To: " + to + "\r\n"
@@ -75,7 +80,7 @@ func saveMail() {
 			payload.server.Config.Host_name + ";\r\n"
 		add_head += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		payload.client.data = compress(add_head + payload.client.data)
+		payload.client.data = compress(&add_head, &payload.client.data)
 		body = "gzencode"
 		redis_err = redisClient.redisConnection()
 		if redis_err == nil {

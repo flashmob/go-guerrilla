@@ -5,13 +5,14 @@ import (
 	"compress/zlib"
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
 	"io/ioutil"
 	"regexp"
 	"strings"
+	"io"
+	"fmt"
 )
 
 func validateEmailData(client *Client) (user string, host string, addr_err error) {
@@ -30,9 +31,10 @@ func validateEmailData(client *Client) (user string, host string, addr_err error
 	return user, host, addr_err
 }
 
+var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
+
 func extractEmail(str string) (name string, host string, err error) {
-	re, _ := regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
-	if matched := re.FindStringSubmatch(str); len(matched) > 2 {
+	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		host = validHost(matched[2])
 		name = matched[1]
 	} else {
@@ -46,12 +48,12 @@ func extractEmail(str string) (name string, host string, err error) {
 	}
 	return name, host, err
 }
-
+var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
 // Decode strings in Mime header format
 // eg. =?ISO-2022-JP?B?GyRCIVo9dztSOWJAOCVBJWMbKEI=?=
 func mimeHeaderDecode(str string) string {
-	reg, _ := regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
-	matched := reg.FindAllStringSubmatch(str, -1)
+
+	matched := mimeRegex.FindAllStringSubmatch(str, -1)
 	var charset, encoding, payload string
 	if matched != nil {
 		for i := 0; i < len(matched); i++ {
@@ -79,10 +81,10 @@ func mimeHeaderDecode(str string) string {
 	return str
 }
 
+var valihostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
 func validHost(host string) string {
 	host = strings.Trim(host, " ")
-	re, _ := regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
-	if re.MatchString(host) {
+	if valihostRegex.MatchString(host) {
 		return host
 	}
 	return ""
@@ -133,17 +135,10 @@ func fromQuotedP(data string) string {
 	return string(res)
 }
 
-func compress(s string) string {
-	var b bytes.Buffer
-	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed) // flate.BestCompression
-	w.Write([]byte(s))
-	w.Close()
-	return b.String()
-}
 
+var charsetRegex, _ = regexp.Compile(`[_:.\/\\]`)
 func fixCharset(charset string) string {
-	reg, _ := regexp.Compile(`[_:.\/\\]`)
-	fixed_charset := reg.ReplaceAllString(charset, "-")
+	fixed_charset := charsetRegex.ReplaceAllString(charset, "-")
 	// Fix charset
 	// borrowed from http://squirrelmail.svn.sourceforge.net/viewvc/squirrelmail/trunk/squirrelmail/include/languages.php?revision=13765&view=markup
 	// OE ks_c_5601_1987 > cp949
@@ -164,9 +159,27 @@ func fixCharset(charset string) string {
 	return charset
 }
 
-func md5hex(str string) string {
+// returns an md5 hash as string of hex characters
+func md5hex(stringArguments ...*string) string {
 	h := md5.New()
-	h.Write([]byte(str))
+	var r *strings.Reader
+	for i:=0; i < len(stringArguments); i++ {
+		r = strings.NewReader(*stringArguments[i])
+		io.Copy(h, r)
+	}
 	sum := h.Sum([]byte{})
-	return hex.EncodeToString(sum)
+	return fmt.Sprintf("%x", sum)
+}
+
+// concatenate & compress all strings  passed in
+func compress(stringArguments ...*string) string {
+	var b bytes.Buffer
+	var r *strings.Reader
+	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
+	for i:=0; i < len(stringArguments); i++ {
+		r = strings.NewReader(*stringArguments[i])
+		io.Copy(w, r)
+	}
+	w.Close()
+	return b.String()
 }
