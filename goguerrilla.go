@@ -64,7 +64,7 @@ func initialise() {
 	return
 }
 
-func runServer(sConfig ServerConfig) {
+func runServer(sConfig ServerConfig) (err error) {
 	server := SmtpdServer{Config: sConfig, sem: make(chan int, sConfig.Max_clients)}
 
 	// setup logging
@@ -92,6 +92,7 @@ func runServer(sConfig ServerConfig) {
 	listener, err := net.Listen("tcp", sConfig.Listen_interface)
 	if err != nil {
 		server.logln(2, fmt.Sprintf("Cannot listen on port, %v", err))
+		return err
 	} else {
 		server.logln(1, fmt.Sprintf("Listening on tcp %s", sConfig.Listen_interface))
 	}

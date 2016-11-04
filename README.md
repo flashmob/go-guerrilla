@@ -194,6 +194,8 @@ http://jsonlint.com/#
 
 Releases
 =========================================================
+1.5.1 - 4nd Nov 2016
+- Small optimizations to the way email is saved
 
 1.5 - 2nd Nov 2016
 - Fixed a DoS vulnerability, stop reading after an input limit is reached
