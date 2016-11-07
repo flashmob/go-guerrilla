@@ -1,16 +1,10 @@
 {
     "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org",
     "primary_mail_host":"sharklasers.com",
-    "verbose":false,
-    "mysql_db":"gmail_mail",
-    "mysql_host":"127.0.0.1:3306",
-    "mysql_pass":"ok",
-    "mysql_user":"gmail_mail",
-    "mail_table":"new_mail",
-    "redis_interface" : "127.0.0.1:6379",
-	"redis_expire_seconds" : 3600,
-	"save_workers_size" : 3,
-	"pid_file" : "/var/run/go-guerrilla.pid",
+    "backend_name": "dummy",
+    "backend_config": {
+        "log_received_mails": true
+    },
     "servers" : [
         {
             "is_enabled" : true,
@@ -22,8 +16,7 @@
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000,
-            "log_file":"/dev/stdout"
+            "max_clients": 1000
         },
         {
             "is_enabled" : true,
@@ -35,8 +28,7 @@
             "listen_interface":"127.0.0.1:465",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":500,
-            "log_file":"/dev/stdout"
+            "max_clients":500
         }
     ]
 }
