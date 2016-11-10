@@ -28,7 +28,7 @@ var (
 	}
 
 	mainConfig    = guerrilla.Config{}
-	signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUB
+	signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUP
 )
 
 func init() {

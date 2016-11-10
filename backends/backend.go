@@ -8,7 +8,7 @@ import (
 
 var backends = map[string]guerrilla.Backend{}
 
-// New retrive a backend specified by the backendName, and initialize it using
+// New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
 func New(backendName string, backendConfig guerrilla.BackendConfig) (guerrilla.Backend, error) {
 	backend, found := backends[backendName]

@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-// Backend accepts the recieved messages, and store/deliver/process them
+// Backend accepts the relieved messages, and store/deliver/process them
 type Backend interface {
 	Initialize(BackendConfig) error
 	Process(client *Client, user, host string) string
