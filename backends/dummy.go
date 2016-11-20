@@ -20,12 +20,20 @@ type dummyConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
 }
 
-func (b *DummyBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+func (b *DummyBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
 	var converted bool
 	b.config.LogReceivedMails, converted = backendConfig["log_received_mails"].(bool)
 	if !converted {
 		return fmt.Errorf("failed to load backend config (%v)", backendConfig)
 	}
+	return nil
+}
+
+func (b *DummyBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+	return b.loadConfig(backendConfig)
+}
+
+func (b *DummyBackend) Finalize() error {
 	return nil
 }
 

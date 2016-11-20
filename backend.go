@@ -11,6 +11,7 @@ import (
 type Backend interface {
 	Initialize(BackendConfig) error
 	Process(client *Client, user, host string) string
+	Finalize() error
 }
 
 const CommandMaxLength = 1024
