@@ -34,8 +34,40 @@ type guerrillaDBAndRedisConfig struct {
 	PrimaryHost        string `json:"primary_mail_host"`
 }
 
+func convertError(name string) error {
+	return fmt.Errorf("failed to load backend config field (%s)", name)
+}
+
 func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
-	// TODO: load config
+	var converted bool
+
+	if g.config.NumberOfWorkers, converted = backendConfig["save_workers_size"].(int); !converted {
+		return convertError("save_workers_size")
+	}
+	if g.config.MysqlTable, converted = backendConfig["mail_table"].(string); !converted {
+		return convertError("mail_table")
+	}
+	if g.config.MysqlDB, converted = backendConfig["mysql_db"].(string); !converted {
+		return convertError("mysql_db")
+	}
+	if g.config.MysqlHost, converted = backendConfig["mysql_host"].(string); !converted {
+		return convertError("mysql_host")
+	}
+	if g.config.MysqlPass, converted = backendConfig["mysql_pass"].(string); !converted {
+		return convertError("mysql_pass")
+	}
+	if g.config.MysqlUser, converted = backendConfig["mysql_user"].(string); !converted {
+		return convertError("mysql_user")
+	}
+	if g.config.RedisExpireSeconds, converted = backendConfig["redis_expire_seconds"].(int); !converted {
+		return convertError("redis_expire_seconds")
+	}
+	if g.config.RedisInterface, converted = backendConfig["redis_interface"].(string); !converted {
+		return convertError("redis_interface")
+	}
+	if g.config.PrimaryHost, converted = backendConfig["primary_mail_host"].(string); !converted {
+		return convertError("primary_mail_host")
+	}
 
 	if err := g.testDbConnections(); err != nil {
 		return err
