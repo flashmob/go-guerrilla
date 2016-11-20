@@ -102,10 +102,15 @@ func (g *GuerrillaDBAndRedisBackend) Finalize() error {
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, user, host string) string {
+func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, from *guerrilla.EmailParts, to []*guerrilla.EmailParts) string {
+	if len(to) == 0 {
+		return "554 Error: no recipient"
+	}
+
 	// to do: timeout when adding to SaveMailChan
 	// place on the channel so that one of the save mail workers can pick it up
-	g.saveMailChan <- &savePayload{client: client, user: user, host: host}
+	// TODO: support multiple recipients
+	g.saveMailChan <- &savePayload{client: client, from: from, recipient: to[0]}
 	// wait for the save to complete
 	// or timeout
 	select {
@@ -121,9 +126,9 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, user, hos
 }
 
 type savePayload struct {
-	client *guerrilla.Client
-	user   string
-	host   string
+	client    *guerrilla.Client
+	from      *guerrilla.EmailParts
+	recipient *guerrilla.EmailParts
 }
 
 type redisClient struct {
@@ -168,9 +173,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			g.wg.Done()
 			return
 		}
-
-		recipient = payload.user + "@" + payload.host
-		to = payload.user + "@" + g.config.PrimaryHost
+		to = payload.recipient.User + "@" + g.config.PrimaryHost
 		length = len(payload.client.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
 		payload.client.Subject = util.MimeHeaderDecode(payload.client.Subject)
@@ -183,7 +186,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
 		addHead += "Received: from " + payload.client.Helo + " (" + payload.client.Helo + "  [" + payload.client.Address + "])\r\n"
-		addHead += "	by " + payload.host + " with SMTP id " + payload.client.Hash + "@" + payload.host + ";\r\n"
+		addHead += "	by " + payload.recipient.Host + " with SMTP id " + payload.client.Hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
 		payload.client.Data = util.Compress(&addHead, &payload.client.Data)

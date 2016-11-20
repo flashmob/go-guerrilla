@@ -12,47 +12,29 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
 
-	"github.com/sloonz/go-qprintable"
+	guerrilla "github.com/flashmob/go-guerrilla"
 )
-
-type EmailParts struct {
-	User string
-	Host string
-}
-
-func ValidateEmailData(mailFrom, rcptTo string) (*EmailParts, *EmailParts, error) {
-	var user, host string
-	var addrErr error
-
-	if user, host, addrErr = extractEmail(mailFrom); addrErr != nil {
-		return nil, nil, addrErr
-	}
-	from := &EmailParts{User: user, Host: host}
-	if user, host, addrErr = extractEmail(rcptTo); addrErr != nil {
-		return nil, nil, addrErr
-	}
-	to := &EmailParts{User: user, Host: host}
-	return from, to, nil
-}
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (name string, host string, err error) {
+func ExtractEmail(str string) (email *guerrilla.EmailParts, err error) {
+	email = &guerrilla.EmailParts{}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
-		host = validHost(matched[2])
-		name = matched[1]
+		email.User = matched[1]
+		email.Host = validHost(matched[2])
 	} else {
 		if res := strings.Split(str, "@"); len(res) > 1 {
-			name = res[0]
-			host = validHost(res[1])
+			email.User = res[0]
+			email.Host = validHost(res[1])
 		}
 	}
-	if host == "" || name == "" {
-		err = errors.New("Invalid address, [" + name + "@" + host + "] address:" + str)
+	if email.User == "" || email.Host == "" {
+		err = errors.New("Invalid address, [" + email.User + "@" + email.Host + "] address:" + str)
 	}
-	return name, host, err
+	return
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
@@ -115,6 +97,7 @@ func MailTransportDecode(str string, encodingType string, charset string) string
 
 	if charset != "UTF-8" {
 		charset = fixCharset(charset)
+		// TODO: remove dependency to os-dependent iconv library
 		if cd, err := iconv.Open("UTF-8", charset); err == nil {
 			defer func() {
 				cd.Close()

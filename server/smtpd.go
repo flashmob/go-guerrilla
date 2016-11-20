@@ -155,17 +155,25 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 			client.Bufin.SetLimit(int64(server.config.MaxSize) + 1024000) // This is a hard limit.
 			client.Data, err = server.readSmtp(client)
 			if err == nil {
-				if from, to, mailErr := util.ValidateEmailData(client.MailFrom, client.RcptTo); mailErr == nil {
-					client.MailFrom = fmt.Sprintf("%s@%s", from.User, from.Host)
-					client.RcptTo = fmt.Sprintf("%s@%s", to.User, to.Host)
-					if !server.mainConfig.IsAllowed(to.Host) {
-						responseAdd(client, "550 Error: not allowed")
-					} else {
-						resp := backend.Process(client, to.User, to.Host)
-						responseAdd(client, resp)
-					}
+				from, mailErr := util.ExtractEmail(client.MailFrom)
+				if mailErr != nil {
+					responseAdd(client, fmt.Sprintf("550 Error: invalid from: ", mailErr.Error()))
 				} else {
-					responseAdd(client, "550 Error: "+mailErr.Error())
+					// TODO: support multiple RcptTo
+					to, mailErr := util.ExtractEmail(client.RcptTo)
+					if mailErr != nil {
+						responseAdd(client, fmt.Sprintf("550 Error: invalid from: ", mailErr.Error()))
+					} else {
+						client.MailFrom = from.String()
+						client.RcptTo = to.String()
+						if !server.mainConfig.IsAllowed(to.Host) {
+							responseAdd(client, "550 Error: not allowed")
+						} else {
+							toArray := []*guerrilla.EmailParts{to}
+							resp := backend.Process(client, from, toArray)
+							responseAdd(client, resp)
+						}
+					}
 				}
 
 			} else {

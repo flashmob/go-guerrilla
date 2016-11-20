@@ -37,9 +37,9 @@ func (b *DummyBackend) Finalize() error {
 	return nil
 }
 
-func (b *DummyBackend) Process(client *guerrilla.Client, user, host string) string {
+func (b *DummyBackend) Process(client *guerrilla.Client, from *guerrilla.EmailParts, to []*guerrilla.EmailParts) string {
 	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s@%s", user, host)
+		log.Infof("Mail from: %s / to: %v", from, to)
 	}
 	return fmt.Sprintf("250 OK : queued as %s", client.Hash)
 }
