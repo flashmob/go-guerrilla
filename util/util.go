@@ -15,41 +15,26 @@ import (
 	"gopkg.in/iconv.v1"
 
 	"github.com/sloonz/go-qprintable"
-
-	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
-var allowedHosts map[string]bool
-
-// map the allow hosts for easy lookup
-func prepareAllowedHosts(allowedHostsStr string) {
-	allowedHosts = make(map[string]bool, 15)
-	if arr := strings.Split(allowedHostsStr, ","); len(arr) > 0 {
-		for i := 0; i < len(arr); i++ {
-			allowedHosts[arr[i]] = true
-		}
-	}
+type EmailParts struct {
+	User string
+	Host string
 }
 
-// TODO: cleanup
-func ValidateEmailData(client *guerrilla.Client, allowedHostsStr string) (user string, host string, addr_err error) {
-	if allowedHosts == nil {
-		prepareAllowedHosts(allowedHostsStr)
-	}
+func ValidateEmailData(mailFrom, rcptTo string) (*EmailParts, *EmailParts, error) {
+	var user, host string
+	var addrErr error
 
-	if user, host, addr_err = extractEmail(client.MailFrom); addr_err != nil {
-		return user, host, addr_err
+	if user, host, addrErr = extractEmail(mailFrom); addrErr != nil {
+		return nil, nil, addrErr
 	}
-	client.MailFrom = user + "@" + host
-	if user, host, addr_err = extractEmail(client.RcptTo); addr_err != nil {
-		return user, host, addr_err
+	from := &EmailParts{User: user, Host: host}
+	if user, host, addrErr = extractEmail(rcptTo); addrErr != nil {
+		return nil, nil, addrErr
 	}
-	client.RcptTo = user + "@" + host
-	// check if on allowed hosts
-	if allowed := allowedHosts[strings.ToLower(host)]; !allowed {
-		return user, host, errors.New("invalid host:" + host)
-	}
-	return user, host, addr_err
+	to := &EmailParts{User: user, Host: host}
+	return from, to, nil
 }
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!

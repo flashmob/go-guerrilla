@@ -16,12 +16,12 @@ import (
 )
 
 type SmtpdServer struct {
-	tlsConfig       *tls.Config
-	maxSize         int // max email DATA size
-	timeout         time.Duration
-	sem             chan int // currently active client list
-	Config          guerrilla.ServerConfig
-	allowedHostsStr string
+	mainConfig guerrilla.Config
+	config     guerrilla.ServerConfig
+	tlsConfig  *tls.Config
+	maxSize    int // max email DATA size
+	timeout    time.Duration
+	sem        chan int // currently active client list
 }
 
 // Upgrades the connection to TLS
@@ -46,16 +46,16 @@ func (server *SmtpdServer) upgradeToTls(client *guerrilla.Client) bool {
 func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerrilla.Backend) {
 	defer server.closeClient(client)
 	advertiseTLS := "250-STARTTLS\r\n"
-	if server.Config.TLSAlwaysOn {
+	if server.config.TLSAlwaysOn {
 		if server.upgradeToTls(client) {
 			advertiseTLS = ""
 		}
 	}
 	greeting := fmt.Sprintf("220 %s SMTP guerrillad(%s) #%d (%d) %s",
-		server.Config.Hostname, guerrilla.Version, client.ClientID,
+		server.config.Hostname, guerrilla.Version, client.ClientID,
 		len(server.sem), time.Now().Format(time.RFC1123Z))
 
-	if !server.Config.StartTLS {
+	if !server.config.StartTLS {
 		// STARTTLS turned off
 		advertiseTLS = ""
 	}
@@ -93,7 +93,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				if len(input) > 5 {
 					client.Helo = input[5:]
 				}
-				responseAdd(client, "250 "+server.Config.Hostname+" Hello ")
+				responseAdd(client, "250 "+server.config.Hostname+" Hello ")
 			case strings.Index(cmd, "EHLO") == 0:
 				if len(input) > 5 {
 					client.Helo = input[5:]
@@ -103,8 +103,8 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 250-SIZE %d\r
 250-PIPELINING \r
 %s250 HELP`,
-					server.Config.Hostname, client.Helo, client.Address,
-					server.Config.MaxSize, advertiseTLS))
+					server.config.Hostname, client.Helo, client.Address,
+					server.config.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
 				responseAdd(client, "250 Help! I need somebody...")
 			case strings.Index(cmd, "MAIL FROM:") == 0:
@@ -135,7 +135,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				client.State = 2
 			case (strings.Index(cmd, "STARTTLS") == 0) &&
 				!client.TLS &&
-				server.Config.StartTLS:
+				server.config.StartTLS:
 				responseAdd(client, "220 Ready to start TLS")
 				// go to start TLS state
 				client.State = 3
@@ -152,12 +152,18 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 			}
 		case 2:
 			var err error
-			client.Bufin.SetLimit(int64(server.Config.MaxSize) + 1024000) // This is a hard limit.
+			client.Bufin.SetLimit(int64(server.config.MaxSize) + 1024000) // This is a hard limit.
 			client.Data, err = server.readSmtp(client)
 			if err == nil {
-				if user, host, mailErr := util.ValidateEmailData(client, server.allowedHostsStr); mailErr == nil {
-					resp := backend.Process(client, user, host)
-					responseAdd(client, resp)
+				if from, to, mailErr := util.ValidateEmailData(client.MailFrom, client.RcptTo); mailErr == nil {
+					client.MailFrom = fmt.Sprintf("%s@%s", from.User, from.Host)
+					client.RcptTo = fmt.Sprintf("%s@%s", to.User, to.Host)
+					if !server.mainConfig.IsAllowed(to.Host) {
+						responseAdd(client, "550 Error: not allowed")
+					} else {
+						resp := backend.Process(client, to.User, to.Host)
+						responseAdd(client, resp)
+					}
 				} else {
 					responseAdd(client, "550 Error: "+mailErr.Error())
 				}
@@ -226,8 +232,8 @@ func (server *SmtpdServer) readSmtp(client *guerrilla.Client) (input string, err
 		reply, err = client.Bufin.ReadString('\n')
 		if reply != "" {
 			input = input + reply
-			if len(input) > server.Config.MaxSize {
-				err = fmt.Errorf("Maximum DATA size exceeded (%d)", server.Config.MaxSize)
+			if len(input) > server.config.MaxSize {
+				err = fmt.Errorf("Maximum DATA size exceeded (%d)", server.config.MaxSize)
 				return input, err
 			}
 			if client.State == 2 {
