@@ -13,6 +13,8 @@ import (
 
 	guerrilla "github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/util"
+	"reflect"
+	"strings"
 )
 
 func init() {
@@ -22,7 +24,7 @@ func init() {
 type GuerrillaDBAndRedisBackend struct {
 	config       guerrillaDBAndRedisConfig
 	saveMailChan chan *savePayload
-	wg           *sync.WaitGroup
+	wg           sync.WaitGroup
 }
 
 type guerrillaDBAndRedisConfig struct {
@@ -38,38 +40,45 @@ type guerrillaDBAndRedisConfig struct {
 }
 
 func convertError(name string) error {
-	return fmt.Errorf("failed to load backend config field (%s)", name)
+	return fmt.Errorf("failed to load backend config (%s)", name)
 }
 
+// Load the backend config for the backend. It has already been unmarshalled
+// from the main config file 'backend' config "backend_config"
+// Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
-	var converted bool
+	// Use reflection so that we can provide a nice error message
+	g.config = guerrillaDBAndRedisConfig{}
+	s := reflect.ValueOf(&g.config).Elem(); // so that we can set the values
+	typeOfT := s.Type()
+	tags := reflect.TypeOf(g.config) // read the tags of the config struct
+	for i := 0; i < s.NumField(); i++ {
+		f := s.Field(i)
+		field_name := tags.Field(i).Tag.Get("json")
+		if len(field_name) > 0 {
+			// get the field name from struct tag
+			split := strings.Split(field_name, ",")
+			field_name = split[0]
+		} else {
+			// could have no tag
+			// so use the reflected field name
+			field_name = typeOfT.Field(i).Name
+		}
 
-	if g.config.NumberOfWorkers, converted = backendConfig["save_workers_size"].(int); !converted {
-		return convertError("save_workers_size")
-	}
-	if g.config.MysqlTable, converted = backendConfig["mail_table"].(string); !converted {
-		return convertError("mail_table")
-	}
-	if g.config.MysqlDB, converted = backendConfig["mysql_db"].(string); !converted {
-		return convertError("mysql_db")
-	}
-	if g.config.MysqlHost, converted = backendConfig["mysql_host"].(string); !converted {
-		return convertError("mysql_host")
-	}
-	if g.config.MysqlPass, converted = backendConfig["mysql_pass"].(string); !converted {
-		return convertError("mysql_pass")
-	}
-	if g.config.MysqlUser, converted = backendConfig["mysql_user"].(string); !converted {
-		return convertError("mysql_user")
-	}
-	if g.config.RedisExpireSeconds, converted = backendConfig["redis_expire_seconds"].(int); !converted {
-		return convertError("redis_expire_seconds")
-	}
-	if g.config.RedisInterface, converted = backendConfig["redis_interface"].(string); !converted {
-		return convertError("redis_interface")
-	}
-	if g.config.PrimaryHost, converted = backendConfig["primary_mail_host"].(string); !converted {
-		return convertError("primary_mail_host")
+		if f.Type().Name() == "int" {
+			if intVal, converted := backendConfig[field_name].(float64); converted {
+				s.Field(i).SetInt(int64(intVal))
+			} else {
+				return convertError("property missing/invalid: '"+field_name +"' of expected type: "+f.Type().Name())
+			}
+		}
+		if f.Type().Name() == "string" {
+			if stringVal, converted := backendConfig[field_name].(string); converted {
+				s.Field(i).SetString(stringVal)
+			} else {
+				return convertError("missing/invalid: '"+field_name +"' of type: "+f.Type().Name())
+			}
+		}
 	}
 
 	return nil

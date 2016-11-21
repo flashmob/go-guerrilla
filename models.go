@@ -17,7 +17,7 @@ func (ep *EmailParts) String() string {
 	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
 }
 
-// Backend accepts the recieved messages, and store/deliver/process them
+// Backend accepts the received messages, and store/deliver/process them
 type Backend interface {
 	Initialize(BackendConfig) error
 	Process(client *Client, from *EmailParts, to []*EmailParts) string
