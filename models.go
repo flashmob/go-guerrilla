@@ -3,14 +3,25 @@ package guerrilla
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 )
 
-// Backend accepts the relieved messages, and store/deliver/process them
+type EmailParts struct {
+	User string
+	Host string
+}
+
+func (ep *EmailParts) String() string {
+	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
+}
+
+// Backend accepts the recieved messages, and store/deliver/process them
 type Backend interface {
 	Initialize(BackendConfig) error
-	Process(client *Client, user, host string) string
+	Process(client *Client, from *EmailParts, to []*EmailParts) string
+	Finalize() error
 }
 
 const CommandMaxLength = 1024

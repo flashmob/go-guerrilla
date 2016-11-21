@@ -20,7 +20,7 @@ type dummyConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
 }
 
-func (b *DummyBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+func (b *DummyBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
 	var converted bool
 	b.config.LogReceivedMails, converted = backendConfig["log_received_mails"].(bool)
 	if !converted {
@@ -29,9 +29,17 @@ func (b *DummyBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
 	return nil
 }
 
-func (b *DummyBackend) Process(client *guerrilla.Client, user, host string) string {
+func (b *DummyBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+	return b.loadConfig(backendConfig)
+}
+
+func (b *DummyBackend) Finalize() error {
+	return nil
+}
+
+func (b *DummyBackend) Process(client *guerrilla.Client, from *guerrilla.EmailParts, to []*guerrilla.EmailParts) string {
 	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s@%s", user, host)
+		log.Infof("Mail from: %s / to: %v", from, to)
 	}
 	return fmt.Sprintf("250 OK : queued as %s", client.Hash)
 }

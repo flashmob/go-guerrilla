@@ -27,11 +27,11 @@ import (
 	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
-func RunServer(sConfig guerrilla.ServerConfig, backend guerrilla.Backend, allowedHostsStr string) (err error) {
+func RunServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, backend guerrilla.Backend) (err error) {
 	server := SmtpdServer{
-		Config:          sConfig,
-		sem:             make(chan int, sConfig.MaxClients),
-		allowedHostsStr: allowedHostsStr,
+		mainConfig: mainConfig,
+		config:     sConfig,
+		sem:        make(chan int, sConfig.MaxClients),
 	}
 
 	// configure ssl

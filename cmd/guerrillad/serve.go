@@ -94,7 +94,7 @@ func serve(cmd *cobra.Command, args []string) {
 		if serverConfig.IsEnabled {
 			log.Infof("Starting server on %s", serverConfig.ListenInterface)
 			go func(sConfig guerrilla.ServerConfig) {
-				err := server.RunServer(sConfig, backend, mainConfig.AllowedHosts)
+				err := server.RunServer(mainConfig, sConfig, backend)
 				if err != nil {
 					log.WithError(err).Fatalf("Error while starting server on %s", serverConfig.ListenInterface)
 				}
