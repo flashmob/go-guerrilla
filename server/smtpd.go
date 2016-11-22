@@ -99,10 +99,10 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 					client.Helo = input[5:]
 				}
 				responseAdd(client, fmt.Sprintf(
-					`250-%s Hello %s[%s]\r
-250-SIZE %d\r
-250-PIPELINING \r
-%s250 HELP`,
+					"250-%s Hello %s[%s]\r\n"+
+					"250-SIZE %d\r\n" +
+					"250-PIPELINING\r\n" +
+					"%s250 HELP",
 					server.config.Hostname, client.Helo, client.Address,
 					server.config.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
