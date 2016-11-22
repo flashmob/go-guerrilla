@@ -94,9 +94,9 @@ Getting started
 
 To build, just run
 
-$ go build
+$ make guerrillad
 
-Rename goguerrilla.conf.sample to goguerrilla.conf
+Then rename goguerrilla.conf.sample to goguerrilla.conf
 
 By default, the saveMail() function saves the meta-data of an email
 into MySQL while the body is saved in Redis.
@@ -316,9 +316,23 @@ Use openssl:
     $ openssl s_client -starttls smtp -crlf -connect 127.0.0.1:2526
 
 
+Reload Config without restarting
+================================
+
+To reload the server config without restarting, send a SIG_HUP signal
+with the kill command:
+
+    sudo kill -HUP `cat /var/run/go-guerrilla.pid`
+
+The above example assumes that you have configured the server to store 
+its own pid in /var/run/go-guerrilla.pid
+
+The new configuration will go in effect for all new connections.
+
 Benchmarking:
 ==========================================================
 
 http://www.jrh.org/smtp/index.html
 Test 500 clients:
-$ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183
+
+    $ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183

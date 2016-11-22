@@ -13,60 +13,79 @@ import (
 
 	guerrilla "github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/util"
+	"sync/atomic"
 )
 
 type SmtpdServer struct {
-	mainConfig guerrilla.Config
-	config     guerrilla.ServerConfig
-	tlsConfig  *tls.Config
-	maxSize    int // max email DATA size
-	timeout    time.Duration
-	sem        chan int // currently active client list
+	//mainConfig      guerrilla.Config
+	//config          guerrilla.ServerConfig
+	mainConfigStore atomic.Value
+	configStore     atomic.Value
+	tlsConfig       *tls.Config
+	tlsConfigStore	atomic.Value
+	maxSize         int // max email DATA size
+	timeout         time.Duration
+	sem             chan int // currently active client list
 }
+
+func newSmtpdServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig) *SmtpdServer {
+	server := SmtpdServer{
+		sem:        make(chan int, sConfig.MaxClients),
+	}
+	server.mainConfigStore.Store(mainConfig)
+	server.configStore.Store(sConfig)
+	return &server
+}
+
+
 
 // Upgrades the connection to TLS
 // Sets up buffers with the upgraded connection
 func (server *SmtpdServer) upgradeToTls(client *guerrilla.Client) bool {
 	var tlsConn *tls.Conn
-	tlsConn = tls.Server(client.Conn, server.tlsConfig)
+	// load the config thread-safely
+	tlsConfig := server.tlsConfigStore.Load().(*tls.Config)
+	tlsConn = tls.Server(client.Conn, tlsConfig)
 	err := tlsConn.Handshake()
 	if err == nil {
 		client.Conn = net.Conn(tlsConn)
 		client.Bufin = guerrilla.NewSMTPBufferedReader(client.Conn)
 		client.Bufout = bufio.NewWriter(client.Conn)
 		client.TLS = true
-
 		return true
 	}
-
 	log.WithError(err).Warn("Failed to TLS handshake")
 	return false
 }
 
 func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerrilla.Backend) {
 	defer server.closeClient(client)
+	// safely init the server config and main config
+	sConfig := server.configStore.Load().(guerrilla.ServerConfig)
+	mainConfig := server.mainConfigStore.Load().(guerrilla.Config)
+	server.configureTimeout(sConfig.Timeout)
 	advertiseTLS := "250-STARTTLS\r\n"
-	if server.config.TLSAlwaysOn {
+	if sConfig.TLSAlwaysOn {
 		if server.upgradeToTls(client) {
 			advertiseTLS = ""
 		}
 	}
 	greeting := fmt.Sprintf("220 %s SMTP guerrillad(%s) #%d (%d) %s",
-		server.config.Hostname, guerrilla.Version, client.ClientID,
+		sConfig.Hostname, guerrilla.Version, client.ClientID,
 		len(server.sem), time.Now().Format(time.RFC1123Z))
 
-	if !server.config.StartTLS {
+	if !sConfig.StartTLS {
 		// STARTTLS turned off
 		advertiseTLS = ""
 	}
-	for i := 0; i < 100; i++ {
+	for ;; {
 		switch client.State {
 		case 0:
 			responseAdd(client, greeting)
 			client.State = 1
 		case 1:
 			client.Bufin.SetLimit(guerrilla.CommandMaxLength)
-			input, err := server.readSmtp(client)
+			input, err := server.readSmtp(client, sConfig.MaxSize)
 			if err != nil {
 				if err == io.EOF {
 					log.WithError(err).Debugf("Client closed the connection already: %s", client.Address)
@@ -93,7 +112,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				if len(input) > 5 {
 					client.Helo = input[5:]
 				}
-				responseAdd(client, "250 "+server.config.Hostname+" Hello ")
+				responseAdd(client, "250 "+sConfig.Hostname+" Hello ")
 			case strings.Index(cmd, "EHLO") == 0:
 				if len(input) > 5 {
 					client.Helo = input[5:]
@@ -103,8 +122,8 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 250-SIZE %d\r
 250-PIPELINING \r
 %s250 HELP`,
-					server.config.Hostname, client.Helo, client.Address,
-					server.config.MaxSize, advertiseTLS))
+					sConfig.Hostname, client.Helo, client.Address,
+					sConfig.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
 				responseAdd(client, "250 Help! I need somebody...")
 			case strings.Index(cmd, "MAIL FROM:") == 0:
@@ -135,7 +154,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				client.State = 2
 			case (strings.Index(cmd, "STARTTLS") == 0) &&
 				!client.TLS &&
-				server.config.StartTLS:
+				sConfig.StartTLS:
 				responseAdd(client, "220 Ready to start TLS")
 				// go to start TLS state
 				client.State = 3
@@ -152,8 +171,8 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 			}
 		case 2:
 			var err error
-			client.Bufin.SetLimit(int64(server.config.MaxSize) + 1024000) // This is a hard limit.
-			client.Data, err = server.readSmtp(client)
+			client.Bufin.SetLimit(int64(sConfig.MaxSize) + 1024000) // This is a hard limit.
+			client.Data, err = server.readSmtp(client, sConfig.MaxSize)
 			if err == nil {
 				from, mailErr := util.ExtractEmail(client.MailFrom)
 				if mailErr != nil {
@@ -166,8 +185,8 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 					} else {
 						client.MailFrom = from.String()
 						client.RcptTo = to.String()
-						if !server.mainConfig.IsAllowed(to.Host) {
-							responseAdd(client, "550 Error: not allowed")
+						if !mainConfig.IsHostAllowed(to.Host) {
+							responseAdd(client, "550 Error: Rcpt-to host is not allowed")
 						} else {
 							toArray := []*guerrilla.EmailParts{to}
 							resp := backend.Process(client, from, toArray)
@@ -227,7 +246,7 @@ func killClient(client *guerrilla.Client) {
 }
 
 // Reads from the smtpBufferedReader, can be in command state or data state.
-func (server *SmtpdServer) readSmtp(client *guerrilla.Client) (input string, err error) {
+func (server *SmtpdServer) readSmtp(client *guerrilla.Client, maxSize int) (input string, err error) {
 	var reply string
 	// Command state terminator by default
 	suffix := "\r\n"
@@ -240,8 +259,8 @@ func (server *SmtpdServer) readSmtp(client *guerrilla.Client) (input string, err
 		reply, err = client.Bufin.ReadString('\n')
 		if reply != "" {
 			input = input + reply
-			if len(input) > server.config.MaxSize {
-				err = fmt.Errorf("Maximum DATA size exceeded (%d)", server.config.MaxSize)
+			if len(input) > maxSize {
+				err = fmt.Errorf("Maximum DATA size exceeded (%d)", maxSize)
 				return input, err
 			}
 			if client.State == 2 {

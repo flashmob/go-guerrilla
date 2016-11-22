@@ -1,8 +1,8 @@
 /**
 Go-Guerrilla SMTPd
 
-Version: 1.5
-Author: Flashmob, GuerrillaMail.com
+Project Lead: Flashmob, GuerrillaMail.com
+Contributors: Reza Mohammadi reza@teeleh.ir
 Contact: flashmob@gmail.com
 License: MIT
 Repository: https://github.com/flashmob/Go-Guerrilla-SMTPd
@@ -22,34 +22,72 @@ import (
 	"runtime"
 	"time"
 
+	evbus "github.com/asaskevich/EventBus"
+
 	log "github.com/Sirupsen/logrus"
 
 	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
-func RunServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, backend guerrilla.Backend) (err error) {
-	server := SmtpdServer{
-		mainConfig: mainConfig,
-		config:     sConfig,
-		sem:        make(chan int, sConfig.MaxClients),
-	}
-
-	// configure ssl
+// configure SSL using the values from guerrilla.ServerConfig
+func (s *SmtpdServer) configureSSL() error {
+	sConfig := s.configStore.Load().(guerrilla.ServerConfig)
 	if sConfig.TLSAlwaysOn || sConfig.StartTLS {
 		cert, err := tls.LoadX509KeyPair(sConfig.PublicKeyFile, sConfig.PrivateKeyFile)
 		if err != nil {
 			return fmt.Errorf("error while loading the certificate: %s", err)
 		}
-		server.tlsConfig = &tls.Config{
+		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.VerifyClientCertIfGiven,
 			ServerName:   sConfig.Hostname,
 		}
-		server.tlsConfig.Rand = rand.Reader
+		tlsConfig.Rand = rand.Reader
+		s.tlsConfigStore.Store(tlsConfig)
+	}
+	return nil
+}
+
+
+func (server *SmtpdServer) configureTimeout(t int) {
+	server.timeout = time.Duration(int64(t))
+}
+
+func RunServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, backend guerrilla.Backend, bus *evbus.EventBus) (err error) {
+
+	server := newSmtpdServer(mainConfig, sConfig);
+	if err := server.configureSSL(); err != nil {
+		return err
 	}
 
-	// configure timeout
-	server.timeout = time.Duration(sConfig.Timeout)
+	bus.Subscribe("config_change:"+sConfig.ListenInterface+":tls_config", func(changedValues guerrilla.ServerConfig) error {
+		// TODO store the new changes
+		//
+		// reload changes for subsequent connections
+		if err := server.configureSSL(); err != nil {
+			return err
+		}
+		return nil
+	})
+
+
+	bus.Subscribe("config_change:allowed_hosts", func(mainConfig guerrilla.Config) {
+		mainConfig.ResetAllowedHosts()
+		server.mainConfigStore.Store(mainConfig)
+		log.Infof("Allowed hosts config reloaded")
+	})
+
+	bus.Subscribe("config_change:"+sConfig.ListenInterface+":server_config", func(changedValues guerrilla.ServerConfig) {
+		// change timeout
+
+		// max size
+
+		// start tls
+
+		// max clients - resize server.sem
+	})
+
+
 
 	// Start listening for SMTP connections
 	listener, err := net.Listen("tcp", sConfig.ListenInterface)

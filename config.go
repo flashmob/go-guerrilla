@@ -1,21 +1,26 @@
 package guerrilla
 
-import "strings"
+import (
+	"strings"
+)
 
 type BackendConfig map[string]interface{}
 
 // Config is the holder of the configuration of the app
 type Config struct {
-	BackendName   string         `json:"backend_name"`
-	BackendConfig BackendConfig  `json:"backend_config,omitempty"`
-	Servers       []ServerConfig `json:"servers"`
-	AllowedHosts  string         `json:"allowed_hosts"`
+	BackendName        string         `json:"backend_name"`
+	BackendConfig      BackendConfig  `json:"backend_config,omitempty"`
+	Servers            []ServerConfig `json:"servers"`
+	AllowedHosts       string         `json:"allowed_hosts"`
+	PidFile		   string         `json:"pid_file,omitempty"`
 
 	_allowedHosts map[string]bool
 }
 
-func (c *Config) IsAllowed(host string) bool {
+// do we accept this 'rcpt to' host?
+func (c *Config) IsHostAllowed(host string) bool {
 	if c._allowedHosts == nil {
+		// unpack from the config
 		arr := strings.Split(c.AllowedHosts, ",")
 		c._allowedHosts = make(map[string]bool, len(arr))
 		for _, h := range arr {
@@ -23,6 +28,10 @@ func (c *Config) IsAllowed(host string) bool {
 		}
 	}
 	return c._allowedHosts[strings.ToLower(host)]
+}
+
+func (c *Config) ResetAllowedHosts() {
+	c._allowedHosts = nil
 }
 
 // ServerConfig is the holder of the configuration of a server
