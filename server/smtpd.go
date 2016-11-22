@@ -122,8 +122,8 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 					"250-SIZE %d\r\n" +
 					"250-PIPELINING\r\n" +
 					"%s250 HELP",
-					server.config.Hostname, client.Helo, client.Address,
-					server.config.MaxSize, advertiseTLS))
+					sConfig.Hostname, client.Helo, client.Address,
+					sConfig.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
 				responseAdd(client, "250 Help! I need somebody...")
 			case strings.Index(cmd, "MAIL FROM:") == 0:
