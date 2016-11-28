@@ -5,7 +5,7 @@ Version: 1.5
 Author: Flashmob, GuerrillaMail.com
 Contact: flashmob@gmail.com
 License: MIT
-Repository: https://github.com/flashmob/Go-Guerrilla-SMTPd
+Repository: https://-SMTPd
 Site: http://www.guerrillamail.com/
 
 See README for more details
@@ -19,12 +19,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"runtime"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 
-	guerrilla "github.com/flashmob/go-guerrilla"
+	guerrilla "github.com/jordanschalm/go-guerrilla"
 )
 
 func RunServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, backend guerrilla.Backend) (err error) {
@@ -64,20 +63,20 @@ func RunServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, back
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.WithError(err).Infof("Accept error")
+			log.WithError(err).Infof("Error accepting client")
 			continue
 		}
-		log.Debugf("Number of serving goroutines: %d", runtime.NumGoroutine())
-		server.sem <- 1 // Wait for active queue to drain.
-		go server.handleClient(&guerrilla.Client{
+
+		client := &guerrilla.Client{
 			Conn:        conn,
 			Address:     conn.RemoteAddr().String(),
-			Time:        time.Now().Unix(),
+			ConnectedAt: time.Now(),
 			Bufin:       guerrilla.NewSMTPBufferedReader(conn),
 			Bufout:      bufio.NewWriter(conn),
-			ClientID:    clientID,
-			SavedNotify: make(chan int),
-		}, backend)
+			ID:          clientID,
+		}
+		server.sem <- 1 // Wait for active queue to drain.
+		go server.handleClient(client, backend)
 		clientID++
 	}
 }

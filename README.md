@@ -4,7 +4,7 @@ Go-Guerrilla SMTPd
 
 An minimalist SMTP server written in Go, made for receiving large volumes of mail.
 
-![Go Guerrilla](https://raw.github.com/flashmob/go-guerrilla/master/GoGuerrilla.png)
+![Go Guerrilla](https://raw./master/GoGuerrilla.png)
 
 ### What is Go Guerrilla SMTPd?
 
@@ -39,7 +39,7 @@ So far we have the following bounties:
 - Client Pooling: When a client is finished, it should be placed into a 
 pool instead of being destroyed. Looking for a idiomatic 
 Go solution with channels. (0.5 BTC for a successful merge)
-See discussion here: https://github.com/flashmob/go-guerrilla/issues/11
+See discussion here: https:///issues/11
 
 - Modularize: Ability for the server to be used as a package. If it used
 as a package, an API would be exposed, and a new program would be able 

@@ -1,27 +1,48 @@
-package util
+package guerrilla
 
 import (
 	"bytes"
 	"compress/zlib"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
-
-	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
-var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
+var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`)
 
-func ExtractEmail(str string) (email *guerrilla.EmailParts, err error) {
-	email = &guerrilla.EmailParts{}
+// ReadConfig which should be called at startup, or when a SIG_HUP is caught
+func ReadConfig(path string, verbose bool, config *AppConfig) error {
+	// load in the config.
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("Could not read config file: %s", err.Error())
+	}
+
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	}
+
+	if len(config.AllowedHosts) == 0 {
+		return errors.New("Empty `allowed_hosts` is not allowed")
+	}
+
+	ConfigLoadTime = time.Now()
+	return nil
+}
+
+func ExtractEmail(str string) (email *EmailParts, err error) {
+	email = &EmailParts{}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
 		email.Host = validHost(matched[2])

@@ -5,7 +5,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	guerrilla "github.com/flashmob/go-guerrilla"
+	guerrilla "github.com/jordanschalm/go-guerrilla"
 )
 
 func init() {

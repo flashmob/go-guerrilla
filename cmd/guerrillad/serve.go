@@ -10,10 +10,10 @@ import (
 
 	"fmt"
 
-	guerrilla "github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/config"
-	"github.com/flashmob/go-guerrilla/server"
+	guerrilla "github.com/jordanschalm/go-guerrilla"
+	"github.com/jordanschalm/go-guerrilla/backends"
+	"github.com/jordanschalm/go-guerrilla/server"
+	"github.com/jordanschalm/go-guerrilla/util"
 )
 
 var (
@@ -48,7 +48,7 @@ func sigHandler() {
 
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
-			err := config.ReadConfig(configFile, iface, verbose, &mainConfig)
+			err := util.ReadConfig(configFile, iface, verbose, &mainConfig)
 			if err != nil {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
@@ -64,7 +64,7 @@ func sigHandler() {
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 
-	err := config.ReadConfig(configFile, iface, verbose, &mainConfig)
+	err := util.ReadConfig(configFile, iface, verbose, &mainConfig)
 	if err != nil {
 		log.WithError(err).Fatal("Error while ReadConfig")
 	}

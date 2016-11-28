@@ -11,8 +11,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	guerrilla "github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/util"
+	guerrilla "github.com/jordanschalm/go-guerrilla"
+	"github.com/jordanschalm/go-guerrilla/util"
 )
 
 type SmtpdServer struct {
@@ -100,9 +100,9 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				}
 				responseAdd(client, fmt.Sprintf(
 					"250-%s Hello %s[%s]\r\n"+
-					"250-SIZE %d\r\n" +
-					"250-PIPELINING\r\n" +
-					"%s250 HELP",
+						"250-SIZE %d\r\n"+
+						"250-PIPELINING\r\n"+
+						"%s250 HELP",
 					server.config.Hostname, client.Helo, client.Address,
 					server.config.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
@@ -196,6 +196,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 			}
 		}
 		// Send a response back to the client
+		log.Infoln(client.Data)
 		err := server.responseWrite(client)
 		if err != nil {
 			if err == io.EOF {
