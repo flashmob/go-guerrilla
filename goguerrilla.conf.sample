@@ -5,16 +5,30 @@
     "backend_config": {
         "log_received_mails": true
     },
-    "servers" : [{
-        "is_enabled" : true,
-        "host_name":"mail.test.com",
-        "max_size": 1000000,
-        "private_key_file":"/path/to/pem/file/test.com.key",
-        "public_key_file":"/path/to/pem/file/test.com.crt",
-        "timeout":180,
-        "listen_interface":"127.0.0.1:25",
-        "start_tls_on":true,
-        "tls_always_on":false,
-        "max_clients": 1000
-    }]
+    "servers" : [
+        {
+            "is_enabled" : true,
+            "host_name":"mail.test.com",
+            "max_size": 1000000,
+            "private_key_file":"/path/to/pem/file/test.com.key",
+            "public_key_file":"/path/to/pem/file/test.com.crt",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:25",
+            "start_tls_on":true,
+            "tls_always_on":false,
+            "max_clients": 1000
+        },
+        {
+            "is_enabled" : true,
+            "host_name":"mail.test.com",
+            "max_size":1000000,
+            "private_key_file":"/path/to/pem/file/test.com.key",
+            "public_key_file":"/path/to/pem/file/test.com.crt",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:465",
+            "start_tls_on":false,
+            "tls_always_on":true,
+            "max_clients":500
+        }
+    ]
 }

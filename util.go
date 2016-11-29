@@ -41,7 +41,7 @@ func ReadConfig(path string, verbose bool, config *AppConfig) error {
 	return nil
 }
 
-func ExtractEmail(str string) (email *EmailParts, err error) {
+func extractEmail(str string) (email *EmailParts, err error) {
 	email = &EmailParts{}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
@@ -92,11 +92,11 @@ func MimeHeaderDecode(str string) string {
 	return str
 }
 
-var valihostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
+var validhostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
 
 func validHost(host string) string {
 	host = strings.Trim(host, " ")
-	if valihostRegex.MatchString(host) {
+	if validhostRegex.MatchString(host) {
 		return host
 	}
 	return ""

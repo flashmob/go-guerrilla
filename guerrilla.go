@@ -14,12 +14,12 @@ import (
 func Run(ac *AppConfig) {
 	for _, sc := range ac.Servers {
 		sc.AllowedHosts = ac.AllowedHosts
-		go RunServer(ac, &sc)
+		go runServer(ac, &sc)
 	}
 }
 
-func RunServer(ac *AppConfig, sc *ServerConfig) error {
-	server := SMTPServer{
+func runServer(ac *AppConfig, sc *ServerConfig) error {
+	server := Server{
 		config: sc,
 		sem:    make(chan int, sc.MaxClients),
 	}
@@ -38,7 +38,7 @@ func RunServer(ac *AppConfig, sc *ServerConfig) error {
 		}
 	}
 
-	server.timeout = time.Duration(server.config.Timeout)
+	server.timeout = time.Duration(server.config.Timeout) * time.Second
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
 	if err != nil {
 		return fmt.Errorf("Cannot listen on port: %s", err.Error())
@@ -48,6 +48,7 @@ func RunServer(ac *AppConfig, sc *ServerConfig) error {
 	var clientID int64
 	clientID = 1
 	for {
+		log.Debugf("Waiting for a new client. Client ID: %d", clientID)
 		conn, err := listener.Accept()
 		if err != nil {
 			log.WithError(err).Info("Error accepting client")

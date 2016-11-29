@@ -4,7 +4,7 @@ Go-Guerrilla SMTPd
 
 An minimalist SMTP server written in Go, made for receiving large volumes of mail.
 
-![Go Guerrilla](https://raw./master/GoGuerrilla.png)
+![Go Guerrilla](/guerrilla.png)
 
 ### What is Go Guerrilla SMTPd?
 
@@ -18,7 +18,7 @@ and disconnect as quickly as possible.
 A typical user of this software would probably want to customize the save_mail.go source for
 their own systems.
 
-This server does not attempt to filter HTML, check for spam or do any sender 
+This server does not attempt to filter HTML, check for spam or do any sender
 verification. These steps should be performed by other programs.
 The server does NOT send any email including bounces. This should
 be performed by a separate program.
@@ -29,35 +29,35 @@ The software is using MIT License (MIT) - contributors welcome.
 
 
 Pull requests / issue reporting & discussion / code reviews always welcome.
-To encourage more pull requests, we are now offering bounties funded 
+To encourage more pull requests, we are now offering bounties funded
 from our bitcoin donation address:
 
 `1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
 So far we have the following bounties:
 
-- Client Pooling: When a client is finished, it should be placed into a 
-pool instead of being destroyed. Looking for a idiomatic 
+- Client Pooling: When a client is finished, it should be placed into a
+pool instead of being destroyed. Looking for a idiomatic
 Go solution with channels. (0.5 BTC for a successful merge)
 See discussion here: https:///issues/11
 
 - Modularize: Ability for the server to be used as a package. If it used
-as a package, an API would be exposed, and a new program would be able 
-to start several servers on different ports, would be possible to 
-specify a config file for each server, and specify its own 
-saveMail function (otherwise, revert to default). Would be good to 
-make it GoDep friendly too - or any other dependency tool out there. 
+as a package, an API would be exposed, and a new program would be able
+to start several servers on different ports, would be possible to
+specify a config file for each server, and specify its own
+saveMail function (otherwise, revert to default). Would be good to
+make it GoDep friendly too - or any other dependency tool out there.
 (0.5 BTC for a successful merge)
 
 - Analytics: A web based admin panel that displays live statistics,
 including the number of clients, memory usage, graph the number of
-connections/bytes/memory used for the last 24h. 
-Show the top senders by: IP, by domain & by HELO message. 
-Using websocket via https & password protected. 
+connections/bytes/memory used for the last 24h.
+Show the top senders by: IP, by domain & by HELO message.
+Using websocket via https & password protected.
 (1 BTC for a successful merge)
 
 - Testing: Automated test that can start the server and test end-to-end
-a few common cases, some unit tests would be good too. 
+a few common cases, some unit tests would be good too.
 (0.25 BTC for a successful merge)
 
 - Looking for someone to do a code review & possibly fix any tidbits,
@@ -74,20 +74,20 @@ us fund more bounties!
 
 ### Brief History and purpose
 
-Go-Guerrilla is used as the primary server for receiving email at 
-Guerrilla Mail. As of 2016, it's handling all connections without any 
+Go-Guerrilla is used as the primary server for receiving email at
+Guerrilla Mail. As of 2016, it's handling all connections without any
 proxy (Nginx).
 
-Originally, Guerrilla Mail ran Exim which piped email to a php script (2009). 
+Originally, Guerrilla Mail ran Exim which piped email to a php script (2009).
 As as the site got popular and more email came through, this approach
 eventually swamped the server.
 
-The next solution was to decrease the heavy setup into something more 
+The next solution was to decrease the heavy setup into something more
 lightweight. A small script was written to implement a basic SMTP server (2010).
 Eventually that script also got swamped, so it was re-written to use
 event driven I/O (2012). A year later, the latest script also became inadequate
  so it was ported to Go and has served us well since.
- 
+
 
 Getting started
 ===========================
@@ -129,7 +129,7 @@ in MySQL:
 	) ENGINE=InnoDB  DEFAULT CHARSET=utf8
 
 The above table does not store the body of the email which makes it quick
-to query and join, while the body of the email is fetched from Redis 
+to query and join, while the body of the email is fetched from Redis
 if needed.
 
 You can implement your own saveMail function to use whatever storage /
@@ -143,7 +143,7 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 
 
     {
-        "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept 
+        "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept
         "primary_mail_host":"sharklasers.com", // main domain
         "verbose":false, // report all events to log
         "mysql_db":"gmail_mail", // name of mysql database
@@ -190,7 +190,7 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 The Json parser is very strict on syntax. If there's a parse error and it
 doesn't give much clue, then test your syntax here:
 http://jsonlint.com/#
-	
+
 
 Releases
 =========================================================
@@ -213,7 +213,7 @@ sample (goguerrilla.conf.sample)
 
 
 1.3 14th July 2016
-- Number of saveMail workers added to config (GM_SAVE_WORKERS) 
+- Number of saveMail workers added to config (GM_SAVE_WORKERS)
 - convenience function for reading int values form config
 - advertise PIPELINING
 - added HELP command
@@ -249,7 +249,7 @@ Why proxy SMTP with Nginx?
 	                smtp_auth none;
 	                timeout 30000;
 	                smtp_capabilities "SIZE 15728640";
-	
+
 	                # ssl default off. Leave off if starttls is on
 	                #ssl                  on;
 	                ssl_certificate      /etc/ssl/certs/ssl-cert-snakeoil.pem;
@@ -264,14 +264,14 @@ Why proxy SMTP with Nginx?
 	                proxy on;
 	        }
 		}
-		
+
 		http {
-		
+
 		    # Add somewhere inside your http block..
 		    # make sure that you have added smtpauth.local to /etc/hosts
 		    # What this block does is tell the above stmp server to connect
 		    # to our golang server configured to run on 127.0.0.1:2525
-		    
+
 		    server {
                     listen 15.29.8.163:80;
                     server_name 15.29.8.163 smtpauth.local;
@@ -283,7 +283,7 @@ Why proxy SMTP with Nginx?
                         add_header Auth-Server 127.0.0.1;
                         add_header Auth-Port 2525;
                     }
-                   
+
                 }
 
 		}

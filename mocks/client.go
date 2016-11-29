@@ -9,26 +9,31 @@ const (
 	URL = "127.0.0.1:2500"
 )
 
+func lastWords(message string, err error) {
+	fmt.Println(message, err.Error())
+	panic(err)
+}
+
 func main() {
 	c, err := smtp.Dial(URL)
 	if err != nil {
-		fmt.Println("Dial ", err.Error())
+		lastWords("Dial ", err)
 	}
 
 	from := "jordan.schalm@gmail.com"
 	to := "somebody.else@gmail.com"
 
 	if err = c.Mail(from); err != nil {
-		fmt.Println("Mail ", err.Error())
+		lastWords("Mail ", err)
 	}
 
 	if err = c.Rcpt(to); err != nil {
-		fmt.Println("Rcpt ", err.Error())
+		lastWords("Rcpt ", err)
 	}
 
 	wr, err := c.Data()
 	if err != nil {
-		fmt.Println("Data ", err.Error())
+		lastWords("Data ", err)
 	}
 	defer wr.Close()
 
@@ -40,11 +45,11 @@ func main() {
 
 	_, err = fmt.Fprint(wr, msg)
 	if err != nil {
-		fmt.Println("Send ", err.Error())
+		lastWords("Send ", err)
 	}
 
 	err = c.Quit()
 	if err != nil {
-		fmt.Println("Quit ", err.Error())
+		lastWords("Quit ", err)
 	}
 }
