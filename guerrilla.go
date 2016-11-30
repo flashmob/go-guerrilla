@@ -1,73 +1,16 @@
 package guerrilla
 
-import (
-	"bufio"
-	"crypto/rand"
-	"crypto/tls"
-	"fmt"
-	"net"
-	"time"
+import log "github.com/Sirupsen/logrus"
 
-	log "github.com/Sirupsen/logrus"
-)
-
-var backends []Backend
-
+// Entry point for the application.
 func Run(ac *AppConfig) {
 	for _, sc := range ac.Servers {
+		// Add app-wide allowed hosts to each server
 		sc.AllowedHosts = ac.AllowedHosts
-		go runServer(ac, &sc)
-	}
-}
-
-// TODO: Change this to be a method on guerrilla.Server
-func runServer(ac *AppConfig, sc *ServerConfig) error {
-	server := Server{
-		config: sc,
-		sem:    make(chan int, sc.MaxClients),
-	}
-
-	if server.config.RequireTLS || server.config.AdvertiseTLS {
-		cert, err := tls.LoadX509KeyPair(server.config.PublicKeyFile, server.config.PrivateKeyFile)
+		server, err := NewServer(sc)
 		if err != nil {
-			return fmt.Errorf("Error loading TLS certificate: %s", err.Error())
+			log.WithError(err).Error("Failed to create server")
 		}
-
-		server.tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			ClientAuth:   tls.VerifyClientCertIfGiven,
-			ServerName:   server.config.Hostname,
-			Rand:         rand.Reader,
-		}
-	}
-
-	server.timeout = time.Duration(server.config.Timeout) * time.Second
-	listener, err := net.Listen("tcp", server.config.ListenInterface)
-	if err != nil {
-		return fmt.Errorf("Cannot listen on port: %s", err.Error())
-	}
-
-	log.Infof("Listening on TCP %s", server.config.ListenInterface)
-	var clientID int64
-	clientID = 1
-	for {
-		log.Debugf("Waiting for a new client. Client ID: %d", clientID)
-		conn, err := listener.Accept()
-		if err != nil {
-			log.WithError(err).Info("Error accepting client")
-			continue
-		}
-
-		client := &Client{
-			conn:        conn,
-			address:     conn.RemoteAddr().String(),
-			connectedAt: time.Now(),
-			bufin:       NewSMTPBufferedReader(conn),
-			bufout:      bufio.NewWriter(conn),
-			id:          clientID,
-		}
-		server.sem <- 1
-		go server.handleClient(client)
-		clientID++
+		go server.run()
 	}
 }

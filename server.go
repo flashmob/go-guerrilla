@@ -2,6 +2,7 @@ package guerrilla
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -26,6 +27,62 @@ type Server struct {
 	maxMailSize int64
 	timeout     time.Duration
 	sem         chan int
+}
+
+func NewServer(sc *ServerConfig) (*Server, error) {
+	server := &Server{
+		config: sc,
+		sem:    make(chan int, sc.MaxClients),
+	}
+
+	if server.config.RequireTLS || server.config.AdvertiseTLS {
+		cert, err := tls.LoadX509KeyPair(server.config.PublicKeyFile, server.config.PrivateKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("Error loading TLS certificate: %s", err.Error())
+		}
+
+		server.tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.VerifyClientCertIfGiven,
+			ServerName:   server.config.Hostname,
+			Rand:         rand.Reader,
+		}
+	}
+
+	server.timeout = time.Duration(server.config.Timeout) * time.Second
+
+	return server, nil
+}
+
+func (server *Server) run() error {
+	listener, err := net.Listen("tcp", server.config.ListenInterface)
+	if err != nil {
+		return fmt.Errorf("Cannot listen on port: %s", err.Error())
+	}
+
+	log.Infof("Listening on TCP %s", server.config.ListenInterface)
+	var clientID int64
+	clientID = 1
+	for {
+		log.Debugf("Waiting for a new client. Client ID: %d", clientID)
+		conn, err := listener.Accept()
+		if err != nil {
+			log.WithError(err).Info("Error accepting client")
+			continue
+		}
+
+		client := &Client{
+			conn:        conn,
+			address:     conn.RemoteAddr().String(),
+			connectedAt: time.Now(),
+			bufin:       NewSMTPBufferedReader(conn),
+			bufout:      bufio.NewWriter(conn),
+			id:          clientID,
+		}
+		server.sem <- 1
+		go server.handleClient(client)
+		clientID++
+	}
 }
 
 // Verifies that the host is a valid recipient.

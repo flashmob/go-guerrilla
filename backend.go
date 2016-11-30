@@ -5,15 +5,7 @@ package guerrilla
 // guerrilla public API, you simply pass a backend object
 var backends map[string]Backend
 
-func init() {
-	RegisterBackend(backends.DummyBackend, "dummy")
-}
-
 type Backend interface {
 	Initialize(*BackendConfig) error
 	Process(*Client)
-}
-
-func RegisterBackend(b Backend, name string) {
-	backends[name] = b
 }
