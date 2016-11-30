@@ -42,7 +42,7 @@ func ReadConfig(path string, verbose bool, config *AppConfig) error {
 }
 
 func extractEmail(str string) (*EmailParts, error) {
-	var email *EmailParts
+	email := &EmailParts{}
 	var err error
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
