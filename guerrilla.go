@@ -11,6 +11,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
+var backends []Backend
+
 func Run(ac *AppConfig) {
 	for _, sc := range ac.Servers {
 		sc.AllowedHosts = ac.AllowedHosts
@@ -18,6 +20,7 @@ func Run(ac *AppConfig) {
 	}
 }
 
+// TODO: Change this to be a method on guerrilla.Server
 func runServer(ac *AppConfig, sc *ServerConfig) error {
 	server := Server{
 		config: sc,

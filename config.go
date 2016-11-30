@@ -2,13 +2,13 @@ package guerrilla
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	// BackendName   string         `json:"backend_name"`
-	// BackendConfig BackendConfig  `json:"backend_config,omitempty"`
-	Servers      []ServerConfig `json:"servers"`
-	AllowedHosts []string       `json:"allowed_hosts"`
+	BackendName   string         `json:"backend_name"`
+	BackendConfig BackendConfig  `json:"backend_config,omitempty"`
+	Servers       []ServerConfig `json:"servers"`
+	AllowedHosts  []string       `json:"allowed_hosts"`
 }
 
-// ServerConfig is the holder of the configuration of a server
+// ServerConfig specifies config options for a single server
 type ServerConfig struct {
 	IsEnabled       bool     `json:"is_enabled"`
 	Hostname        string   `json:"host_name"`
@@ -21,4 +21,8 @@ type ServerConfig struct {
 	AdvertiseTLS    bool     `json:"advertise_tls,omitempty"`
 	RequireTLS      bool     `json:"require_tls,omitempty"`
 	MaxClients      int      `json:"max_clients"`
+}
+
+type BackendConfig struct {
+	LogReceivedMail bool
 }

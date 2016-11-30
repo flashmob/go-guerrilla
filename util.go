@@ -41,21 +41,20 @@ func ReadConfig(path string, verbose bool, config *AppConfig) error {
 	return nil
 }
 
-func extractEmail(str string) (email *EmailParts, err error) {
-	email = &EmailParts{}
+func extractEmail(str string) (*EmailParts, error) {
+	var email *EmailParts
+	var err error
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
 		email.Host = validHost(matched[2])
-	} else {
-		if res := strings.Split(str, "@"); len(res) > 1 {
-			email.User = res[0]
-			email.Host = validHost(res[1])
-		}
+	} else if res := strings.Split(str, "@"); len(res) > 1 {
+		email.User = res[0]
+		email.Host = validHost(res[1])
 	}
 	if email.User == "" || email.Host == "" {
 		err = errors.New("Invalid address, [" + email.User + "@" + email.Host + "] address:" + str)
 	}
-	return
+	return email, err
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)

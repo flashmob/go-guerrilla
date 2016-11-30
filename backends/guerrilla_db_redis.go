@@ -6,6 +6,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/util"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/ziutek/mymysql/autorc"
@@ -14,8 +15,7 @@ import (
 	"reflect"
 	"strings"
 
-	guerrilla "github.com/jordanschalm/go-guerrilla"
-	"github.com/jordanschalm/go-guerrilla/util"
+	guerrilla "github.com/jordanschalm/guerrilla"
 )
 
 func init() {
