@@ -20,7 +20,7 @@ const (
 	MaxUnrecognizedCommands = 5
 )
 
-// A Server implements an SMTP server listening on a single port.
+// Server listens for SMTP clients on the port specified in its config
 type Server struct {
 	config      *ServerConfig
 	tlsConfig   *tls.Config
@@ -29,6 +29,7 @@ type Server struct {
 	sem         chan int
 }
 
+// Creates and returns a new ready-to-run Server from a configuration
 func NewServer(sc *ServerConfig) (*Server, error) {
 	server := &Server{
 		config: sc,
@@ -54,6 +55,7 @@ func NewServer(sc *ServerConfig) (*Server, error) {
 	return server, nil
 }
 
+// Begin accepting SMTP clients
 func (server *Server) run() error {
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
 	if err != nil {
