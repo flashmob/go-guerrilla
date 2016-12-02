@@ -18,7 +18,7 @@ import (
 	"gopkg.in/iconv.v1"
 )
 
-var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`)
+var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
 func ReadConfig(path string, verbose bool, config *AppConfig) error {

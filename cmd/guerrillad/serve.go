@@ -77,6 +77,7 @@ func serve(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	go guerrilla.Run(&appConfig)
+	app := guerrilla.New(&appConfig)
+	go app.Start()
 	sigHandler()
 }

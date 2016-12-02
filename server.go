@@ -56,7 +56,7 @@ func NewServer(sc *ServerConfig) (*Server, error) {
 }
 
 // Begin accepting SMTP clients
-func (server *Server) run() error {
+func (server *Server) Start() error {
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
 	if err != nil {
 		return fmt.Errorf("Cannot listen on port: %s", err.Error())
