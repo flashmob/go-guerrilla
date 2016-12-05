@@ -309,12 +309,15 @@ This will place goguerrilla in the background and continue running
 You may also put another process to watch your goguerrilla process and re-start it
 if something goes wrong.
 
-Testing STARTTLS
-
-Use openssl:
+Testing STARTTLS, Use openssl:
+(On port 2526, tls_always_on:false, start_tls_on:true)
 
     $ openssl s_client -starttls smtp -crlf -connect 127.0.0.1:2526
 
+Testing SSL only server:
+(On port 2526, tls_always_on:false, start_tls_on:false)
+
+    $ openssl s_client -crlf -connect 127.0.0.1:2526 -state
 
 Reload Config without restarting
 ================================
@@ -332,7 +335,7 @@ The new configuration will go in effect for all new connections.
 Benchmarking:
 ==========================================================
 
-http://www.jrh.org/smtp/index.html
+https://web.archive.org/web/20110725141905/http://www.jrh.org/smtp/index.html
 Test 500 clients:
 
     $ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183

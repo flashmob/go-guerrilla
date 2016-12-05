@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -9,39 +8,44 @@ import (
 	"strings"
 	"time"
 
+	evbus "github.com/asaskevich/EventBus"
+
 	log "github.com/Sirupsen/logrus"
 
 	guerrilla "github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/util"
 	"sync/atomic"
+	"sync"
 )
 
 type SmtpdServer struct {
-	//mainConfig      guerrilla.Config
-	//config          guerrilla.ServerConfig
-	mainConfigStore atomic.Value
-	configStore     atomic.Value
-	tlsConfig       *tls.Config
-	tlsConfigStore	atomic.Value
-	maxSize         int // max email DATA size
-	timeout         time.Duration
-	sem             chan int // currently active client list
+	mainConfigStore  atomic.Value // stores guerrilla.Config
+	configStore      atomic.Value // stores guerrilla.ServerConfig
+	tlsConfig        *tls.Config
+	tlsConfigStore   atomic.Value
+	maxSize          int // max email DATA size
+	timeout          atomic.Value
+	wg               sync.WaitGroup // for waiting to shutdown
+	shuttingDownFlag atomic.Value
+	bus              *evbus.EventBus
+	clientPool       *Pool
 }
 
-func newSmtpdServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig) *SmtpdServer {
+func newSmtpdServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, bus *evbus.EventBus) *SmtpdServer {
 	server := SmtpdServer{
-		sem:        make(chan int, sConfig.MaxClients),
+		bus:           bus,
+		clientPool:    NewPool(sConfig.MaxClients),
 	}
 	server.mainConfigStore.Store(mainConfig)
 	server.configStore.Store(sConfig)
+	server.setTimeout(sConfig.Timeout)
 	return &server
 }
 
 
-
 // Upgrades the connection to TLS
 // Sets up buffers with the upgraded connection
-func (server *SmtpdServer) upgradeToTls(client *guerrilla.Client) bool {
+func (server *SmtpdServer) upgradeToTls(client *guerrilla.Client) error {
 	var tlsConn *tls.Conn
 	// load the config thread-safely
 	tlsConfig := server.tlsConfigStore.Load().(*tls.Config)
@@ -49,30 +53,57 @@ func (server *SmtpdServer) upgradeToTls(client *guerrilla.Client) bool {
 	err := tlsConn.Handshake()
 	if err == nil {
 		client.Conn = net.Conn(tlsConn)
-		client.Bufin = guerrilla.NewSMTPBufferedReader(client.Conn)
-		client.Bufout = bufio.NewWriter(client.Conn)
+		client.Bufout.Reset(client.Conn)
+		client.Bufin.Reset(client.Conn)
 		client.TLS = true
-		return true
+		return err
 	}
 	log.WithError(err).Warn("Failed to TLS handshake")
+	return err
+}
+
+func (server *SmtpdServer) Shutdown() {
+	server.shuttingDownFlag.Store(true)
+	cfg := server.configStore.Load().(guerrilla.ServerConfig)
+	log.Infof("shutting down pool [%s]", cfg.ListenInterface)
+	server.clientPool.Shutdown()
+	log.Infof("Waiting for all [%s] clients to close", cfg.ListenInterface)
+	server.waitAllClientsToClose()
+}
+
+func (server *SmtpdServer) isShuttingDown() bool {
+	if is, really := server.shuttingDownFlag.Load().(bool); is && really {
+		return true;
+	}
 	return false
+}
+
+// wait for all active clients to finish
+func (server *SmtpdServer) waitAllClientsToClose() {
+	server.wg.Wait()
+}
+
+func (server *SmtpdServer) GetActiveClientsCount() int {
+	return server.clientPool.GetActiveClientsCount()
 }
 
 func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerrilla.Backend) {
 	defer server.closeClient(client)
+	server.wg.Add(1)
 	// safely init the server config and main config
 	sConfig := server.configStore.Load().(guerrilla.ServerConfig)
 	mainConfig := server.mainConfigStore.Load().(guerrilla.Config)
-	server.configureTimeout(sConfig.Timeout)
 	advertiseTLS := "250-STARTTLS\r\n"
 	if sConfig.TLSAlwaysOn {
-		if server.upgradeToTls(client) {
+		if tlsErr := server.upgradeToTls(client); tlsErr == nil {
 			advertiseTLS = ""
+		} else {
+			return
 		}
 	}
 	greeting := fmt.Sprintf("220 %s SMTP guerrillad(%s) #%d (%d) %s",
 		sConfig.Hostname, guerrilla.Version, client.ClientID,
-		len(server.sem), time.Now().Format(time.RFC1123Z))
+		server.GetActiveClientsCount(), time.Now().Format(time.RFC1123Z))
 
 	if !sConfig.StartTLS {
 		// STARTTLS turned off
@@ -90,16 +121,22 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				if err == io.EOF {
 					log.WithError(err).Debugf("Client closed the connection already: %s", client.Address)
 					return
-				} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				}
+				if (server.isShuttingDown()) {
+					break // do not accept anymore commands
+				}
+				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 					log.WithError(err).Debugf("Timeout: %s", client.Address)
-					return
+					responseAdd(client, "421 Error: timeout exceeded")
+					killClient(client)
+					break // do not accept anymore commands
 				} else if err == guerrilla.InputLimitExceeded {
 					responseAdd(client, "500 Line too long.")
 					// kill it so that another one can connect
 					killClient(client)
 				}
 				log.WithError(err).Warnf("Read error: %s", client.Address)
-				break
+				break // do not accept anymore commands
 			}
 			input = strings.Trim(input, " \n\r")
 			bound := len(input)
@@ -196,38 +233,66 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				}
 
 			} else {
+				if err == io.EOF {
+					log.WithError(err).Debugf("Client closed the connection already: %s", client.Address)
+					return
+				}
+				if (server.isShuttingDown()) {
+					// When shutting down in DATA state, the server will let the client
+					// finish the email, unless a timeout is detected.
+					break
+				}
 				if err == guerrilla.InputLimitExceeded {
 					// hard limit reached, end to make room for other clients
 					responseAdd(client, "550 Error: DATA limit exceeded by more than a megabyte!")
 					killClient(client)
+				} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+					log.WithError(err).Debugf("Timeout: %s", client.Address)
+					responseAdd(client, "421 Error: timeout exceeded")
+					killClient(client)
 				} else {
 					responseAdd(client, "550 Error: "+err.Error())
+					killClient(client)
 				}
 
 				log.WithError(err).Warn("DATA read error")
 			}
 			client.State = 1
+
 		case 3:
 			// upgrade to TLS
-			if server.upgradeToTls(client) {
+			if tlsErr :=server.upgradeToTls(client); tlsErr == nil {
 				advertiseTLS = ""
 				client.State = 1
+			} else {
+				return
 			}
+		case 4:
+			// shutdown state
+			responseAdd(client, "421 Server is shutting down. Please try again later. Sayonara!")
 		}
+
 		// Send a response back to the client
 		err := server.responseWrite(client)
 		if err != nil {
 			if err == io.EOF {
-				// client closed the connection already
+				// client already closed the connection
+				log.WithError(err).Debugf("Connection reset by peer: %s", client.Address)
 				return
 			}
 			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 				// too slow, timeout
+				log.WithError(err).Debugf("Timeout: %s", client.Address)
 				return
 			}
 		}
 		if client.KillTime > 1 {
-			return
+			if (server.isShuttingDown() && client.State != 4) {
+				client.State = 4
+			} else {
+				return
+			}
+
 		}
 	}
 
@@ -238,8 +303,8 @@ func responseAdd(client *guerrilla.Client, line string) {
 	client.Response = line + "\r\n"
 }
 func (server *SmtpdServer) closeClient(client *guerrilla.Client) {
+	server.wg.Done()
 	client.Conn.Close()
-	<-server.sem // Done; enable next client to run.
 }
 func killClient(client *guerrilla.Client) {
 	client.KillTime = time.Now().Unix()
@@ -255,7 +320,7 @@ func (server *SmtpdServer) readSmtp(client *guerrilla.Client, maxSize int) (inpu
 		suffix = "\r\n.\r\n"
 	}
 	for err == nil {
-		client.Conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
+		client.SetTimeout(server.timeout.Load().(time.Duration))
 		reply, err = client.Bufin.ReadString('\n')
 		if reply != "" {
 			input = input + reply
@@ -298,9 +363,11 @@ func scanSubject(client *guerrilla.Client, reply string) {
 
 func (server *SmtpdServer) responseWrite(client *guerrilla.Client) (err error) {
 	var size int
-	client.Conn.SetDeadline(time.Now().Add(server.timeout * time.Second))
-	size, err = client.Bufout.WriteString(client.Response)
-	client.Bufout.Flush()
-	client.Response = client.Response[size:]
+	client.SetTimeout(server.timeout.Load().(time.Duration))
+	if len(client.Response) > 0 {
+		size, err = client.Bufout.WriteString(client.Response)
+		client.Bufout.Flush()
+		client.Response = client.Response[size:]
+	}
 	return err
 }
