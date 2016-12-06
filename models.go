@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
+	"sync"
 )
 
 type EmailParts struct {
@@ -44,8 +46,41 @@ type Client struct {
 	Bufout      *bufio.Writer
 	KillTime    int64
 	Errors      int
-	ClientID    int64
+	ClientID    uint64
 	SavedNotify chan int
+	mu       sync.Mutex
+}
+
+func NewClient(conn net.Conn, clientID uint64) *Client {
+	return &Client{
+		Conn:        conn,
+		Address:     conn.RemoteAddr().String(),
+		Time:        time.Now().Unix(),
+		Bufin:       NewSMTPBufferedReader(conn),
+		Bufout:      bufio.NewWriter(conn),
+		ClientID:    clientID,
+		SavedNotify: make(chan int),
+	}
+}
+
+func (c *Client) Reset(conn net.Conn, clientID uint64) {
+	c.Conn = conn
+	// reset our reader & writer
+	c.Bufout.Reset(conn)
+	c.Bufin.Reset(conn)
+
+	c.State = 0
+	c.KillTime = 0
+	c.Time = time.Now().Unix()
+	c.ClientID = clientID
+	c.TLS = false
+	c.Errors = 0
+}
+
+func (c *Client) SetTimeout(t time.Duration) {
+	defer c.mu.Unlock()
+	c.mu.Lock()
+	c.Conn.SetDeadline(time.Now().Add(t * time.Second))
 }
 
 var InputLimitExceeded = errors.New("Line too long") // 500 Line too long.
@@ -88,6 +123,12 @@ type SMTPBufferedReader struct {
 // delegate to the adjustable limited reader
 func (sbr *SMTPBufferedReader) SetLimit(n int64) {
 	sbr.alr.setLimit(n)
+}
+
+// Set a new reader & use it to reset the underlying reader
+func (sbr *SMTPBufferedReader) Reset(r io.Reader) {
+	sbr.alr = newAdjustableLimitedReader(r, CommandMaxLength)
+	sbr.Reader.Reset(sbr.alr)
 }
 
 // allocate a new smtpBufferedReader

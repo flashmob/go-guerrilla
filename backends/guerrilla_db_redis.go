@@ -51,11 +51,13 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 	g.config = guerrillaDBAndRedisConfig{}
 	s := reflect.ValueOf(&g.config).Elem(); // so that we can set the values
 	typeOfT := s.Type()
-	tags := reflect.TypeOf(g.config) // read the tags of the config struct
+	types := reflect.TypeOf(g.config)
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
-		field_name := tags.Field(i).Tag.Get("json")
+		// read the tags of the config struct
+		field_name := types.Field(i).Tag.Get("json")
 		if len(field_name) > 0 {
+			// parse the tag to
 			// get the field name from struct tag
 			split := strings.Split(field_name, ",")
 			field_name = split[0]
@@ -64,7 +66,6 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 			// so use the reflected field name
 			field_name = typeOfT.Field(i).Name
 		}
-
 		if f.Type().Name() == "int" {
 			if intVal, converted := backendConfig[field_name].(float64); converted {
 				s.Field(i).SetInt(int64(intVal))
@@ -80,7 +81,6 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 			}
 		}
 	}
-
 	return nil
 }
 
