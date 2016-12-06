@@ -22,18 +22,21 @@ const (
 
 // Server listens for SMTP clients on the port specified in its config
 type Server struct {
-	config      *ServerConfig
-	tlsConfig   *tls.Config
-	maxMailSize int64
-	timeout     time.Duration
-	sem         chan int
+	config    *ServerConfig
+	backend   Backend
+	tlsConfig *tls.Config
+	maxSize   int64
+	timeout   time.Duration
+	sem       chan int
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func NewServer(sc *ServerConfig) (*Server, error) {
+func NewServer(sc *ServerConfig, b Backend) (*Server, error) {
 	server := &Server{
-		config: sc,
-		sem:    make(chan int, sc.MaxClients),
+		config:  sc,
+		backend: b,
+		maxSize: sc.MaxSize,
+		sem:     make(chan int, sc.MaxClients),
 	}
 
 	if server.config.RequireTLS || server.config.AdvertiseTLS {
@@ -75,11 +78,11 @@ func (server *Server) Start() error {
 
 		client := &Client{
 			conn:        conn,
-			address:     conn.RemoteAddr().String(),
-			connectedAt: time.Now(),
+			Address:     conn.RemoteAddr().String(),
+			ConnectedAt: time.Now(),
 			bufin:       NewSMTPBufferedReader(conn),
 			bufout:      bufio.NewWriter(conn),
-			id:          clientID,
+			ID:          clientID,
 		}
 		server.sem <- 1
 		go server.handleClient(client)
@@ -107,7 +110,7 @@ func (server *Server) upgradeToTLS(client *Client) bool {
 	client.conn = net.Conn(tlsConn)
 	client.bufin = NewSMTPBufferedReader(client.conn)
 	client.bufout = bufio.NewWriter(client.conn)
-	client.tls = true
+	client.TLS = true
 
 	return true
 }
@@ -166,11 +169,11 @@ func (server *Server) writeResponse(client *Client) error {
 // Handles an entire client SMTP exchange
 func (server *Server) handleClient(client *Client) {
 	defer server.closeConn(client)
-	log.Info("Handling client: ", client.id)
+	log.Info("Handling client: ", client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
-		server.config.Hostname, Version, client.id,
+		server.config.Hostname, Version, client.ID,
 		server.config.MaxClients, time.Now().Format(time.RFC3339))
 
 	helo := fmt.Sprintf("250 %s Hello", server.config.Hostname)
@@ -190,7 +193,7 @@ func (server *Server) handleClient(client *Client) {
 		advertiseTLS = ""
 	}
 
-	for {
+	for client.isAlive() {
 		switch client.state {
 		case ClientHandshake:
 			client.responseAdd(greeting)
@@ -201,16 +204,16 @@ func (server *Server) handleClient(client *Client) {
 			input, err := server.read(client)
 			log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				log.WithError(err).Warnf("Client closed the connection: %s", client.address)
+				log.WithError(err).Warnf("Client closed the connection: %s", client.Address)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.WithError(err).Warnf("Timeout: %s", client.address)
+				log.WithError(err).Warnf("Timeout: %s", client.Address)
 				return
-			} else if err == InputLimitExceeded {
+			} else if err == LineLimitExceeded {
 				client.responseAdd("500 Line too long.")
 				client.kill()
 			} else if err != nil {
-				log.WithError(err).Warnf("Read error: %s", client.address)
+				log.WithError(err).Warnf("Read error: %s", client.Address)
 			}
 
 			input = strings.Trim(input, " \r\n")
@@ -222,11 +225,11 @@ func (server *Server) handleClient(client *Client) {
 
 			switch {
 			case strings.Index(cmd, "HELO") == 0:
-				client.helo = strings.Trim(input[4:], " ")
+				client.Helo = strings.Trim(input[4:], " ")
 				client.responseAdd(helo)
 
 			case strings.Index(cmd, "EHLO") == 0:
-				client.helo = strings.Trim(input[4:], " ")
+				client.Helo = strings.Trim(input[4:], " ")
 				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + help)
 
 			case strings.Index(cmd, "HELP") == 0:
@@ -238,7 +241,7 @@ func (server *Server) handleClient(client *Client) {
 				if err != nil {
 					client.responseAdd("550 Error: Invalid Sender")
 				} else {
-					client.mailFrom = from
+					client.MailFrom = from
 					client.responseAdd("250 OK")
 				}
 
@@ -247,7 +250,7 @@ func (server *Server) handleClient(client *Client) {
 				if err != nil {
 					client.responseAdd("550 Error: Invalid Recipient")
 				} else {
-					client.rcptTo = append(client.rcptTo, to)
+					client.RcptTo = append(client.RcptTo, to)
 					client.responseAdd("250 OK")
 				}
 
@@ -275,8 +278,8 @@ func (server *Server) handleClient(client *Client) {
 
 			default:
 				client.responseAdd("500 Unrecognized command: " + cmd)
-				client.errors++
-				if client.errors > MaxUnrecognizedCommands {
+				client.Errors++
+				if client.Errors > MaxUnrecognizedCommands {
 					client.responseAdd("554 Too many unrecognized commands")
 					client.kill()
 				}
@@ -286,10 +289,13 @@ func (server *Server) handleClient(client *Client) {
 			var err error
 
 			client.bufin.setLimit(server.config.MaxSize)
-			client.data, err = server.read(client)
+			client.Data, err = server.read(client)
 			if err != nil {
-				if err == InputLimitExceeded {
-					client.responseAdd("550 Error: DATA limit exceeded")
+				if err == LineLimitExceeded {
+					client.responseAdd("550 Error: " + LineLimitExceeded.Error())
+					client.kill()
+				} else if err == MessageSizeExceeded {
+					client.responseAdd("550 Error: " + MessageSizeExceeded.Error())
 					client.kill()
 				} else {
 					client.responseAdd("451 Error: " + err.Error())
@@ -298,28 +304,29 @@ func (server *Server) handleClient(client *Client) {
 				continue
 			}
 
-			if client.mailFrom.isEmpty() {
+			if client.MailFrom.isEmpty() {
 				client.responseAdd("550 Error: No sender")
 				continue
 			}
-			if len(client.rcptTo) == 0 {
+			if len(client.RcptTo) == 0 {
 				client.responseAdd("550 Error: No recipients")
 				continue
 			}
+			client.parseHeaders()
 
-			for _, rcpt := range client.rcptTo {
+			for _, rcpt := range client.RcptTo {
 				if !server.allowsHost(rcpt.Host) {
 					client.responseAdd("550 Error: Host not allowed: " + rcpt.Host)
 					continue
 				}
 			}
 
-			// TODO Process email and send success message
+			res := server.backend.Process(client)
+			client.responseAdd(res)
 			client.state = ClientCmd
-			log.Debugf("Received data successfully: \n%s", client.data)
 
 		case ClientStartTLS:
-			if !client.tls && server.config.AdvertiseTLS {
+			if !client.TLS && server.config.AdvertiseTLS {
 				if server.upgradeToTLS(client) {
 					advertiseTLS = ""
 					client.responseAdd("250 OK")
@@ -340,9 +347,6 @@ func (server *Server) handleClient(client *Client) {
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				return
 			}
-		}
-		if !client.killedAt.IsZero() {
-			return
 		}
 	}
 }

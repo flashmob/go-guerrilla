@@ -5,41 +5,18 @@ import (
 	"compress/zlib"
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
-
-// ReadConfig which should be called at startup, or when a SIG_HUP is caught
-func ReadConfig(path string, verbose bool, config *AppConfig) error {
-	// load in the config.
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("Could not read config file: %s", err.Error())
-	}
-
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return fmt.Errorf("Could not parse config file: %s", err.Error())
-	}
-
-	if len(config.AllowedHosts) == 0 {
-		return errors.New("Empty `allowed_hosts` is not allowed")
-	}
-
-	ConfigLoadTime = time.Now()
-	return nil
-}
 
 func extractEmail(str string) (*EmailParts, error) {
 	email := &EmailParts{}
@@ -172,11 +149,11 @@ func fixCharset(charset string) string {
 }
 
 // returns an md5 hash as string of hex characters
-func MD5Hex(stringArguments ...*string) string {
+func MD5Hex(stringArguments ...string) string {
 	h := md5.New()
 	var r *strings.Reader
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(h, r)
 	}
 	sum := h.Sum([]byte{})
@@ -184,12 +161,12 @@ func MD5Hex(stringArguments ...*string) string {
 }
 
 // concatenate & compress all strings  passed in
-func Compress(stringArguments ...*string) string {
+func Compress(stringArguments ...string) string {
 	var b bytes.Buffer
 	var r *strings.Reader
 	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(w, r)
 	}
 	w.Close()

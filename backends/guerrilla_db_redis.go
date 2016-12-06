@@ -2,25 +2,19 @@ package backends
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/util"
-
 	"github.com/garyburd/redigo/redis"
+	"github.com/jordanschalm/guerrilla"
+
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
-
-	"reflect"
-	"strings"
-
-	guerrilla "github.com/jordanschalm/guerrilla"
 )
-
-func init() {
-	backends["guerrilla-db-redis"] = &GuerrillaDBAndRedisBackend{}
-}
 
 type GuerrillaDBAndRedisBackend struct {
 	config       guerrillaDBAndRedisConfig
@@ -47,7 +41,7 @@ func convertError(name string) error {
 // Load the backend config for the backend. It has already been unmarshalled
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
+func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig map[string]interface{}) error {
 	// Use reflection so that we can provide a nice error message
 	g.config = guerrillaDBAndRedisConfig{}
 	s := reflect.ValueOf(&g.config).Elem() // so that we can set the values
@@ -85,7 +79,7 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interface{}) error {
 	err := g.loadConfig(backendConfig)
 	if err != nil {
 		return err
@@ -120,11 +114,12 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, from *gue
 	// to do: timeout when adding to SaveMailChan
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
-	g.saveMailChan <- &savePayload{client: client, from: from, recipient: to[0]}
+	savedNotify := make(chan int)
+	g.saveMailChan <- &savePayload{client, from, to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
-	case status := <-client.SavedNotify:
+	case status := <-savedNotify:
 		if status == 1 {
 			return fmt.Sprintf("250 OK : queued as %s", client.Hash)
 		}
@@ -136,9 +131,10 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, from *gue
 }
 
 type savePayload struct {
-	client    *guerrilla.Client
-	from      *guerrilla.EmailParts
-	recipient *guerrilla.EmailParts
+	client      *guerrilla.Client
+	from        *guerrilla.EmailParts
+	recipient   *guerrilla.EmailParts
+	savedNotify chan int
 }
 
 type redisClient struct {
@@ -186,12 +182,12 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
 		length = len(payload.client.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Subject = util.MimeHeaderDecode(payload.client.Subject)
-		payload.client.Hash = util.MD5Hex(
-			&to,
-			&payload.client.MailFrom,
-			&payload.client.Subject,
-			&ts)
+		payload.client.Headers["Subject"] = guerrilla.MimeHeaderDecode(payload.client.Headers["Subject"])
+		payload.client.Hash = guerrilla.MD5Hex(
+			to,
+			payload.client.MailFrom.String(),
+			payload.client.Headers["Subject"],
+			ts)
 		// Add extra headers
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
@@ -215,7 +211,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		ins.Bind(
 			to,
 			payload.client.MailFrom,
-			payload.client.Subject,
+			payload.client.Headers["Subject"],
 			body,
 			payload.client.Data,
 			payload.client.Hash,
@@ -228,14 +224,14 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		_, _, err = ins.Exec()
 		if err != nil {
 			log.WithError(err).Warn("Database error while inster")
-			payload.client.SavedNotify <- -1
+			payload.savedNotify <- -1
 		} else {
 			log.Debugf("Email saved %s (len=%d)", payload.client.Hash, length)
 			_, _, err = incr.Exec()
 			if err != nil {
 				log.WithError(err).Warn("Database error while incr count")
 			}
-			payload.client.SavedNotify <- 1
+			payload.savedNotify <- 1
 		}
 	}
 }

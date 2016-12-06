@@ -3,6 +3,9 @@ package guerrilla
 import (
 	"bufio"
 	"net"
+	"net/http"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -20,25 +23,27 @@ const (
 )
 
 type Client struct {
-	state ClientState
+	ID int64
 	// Message sent in HELO command
-	helo string
+	Helo string
 	// Sender
-	mailFrom *EmailParts
+	MailFrom *EmailParts
 	// Recipients
-	rcptTo []*EmailParts
-	// Response from the server to be written to the client
-	response    string
-	address     string
-	data        string
-	connectedAt time.Time
-	tls         bool
-	conn        net.Conn
-	bufin       *SMTPBufferedReader
-	bufout      *bufio.Writer
-	killedAt    time.Time
-	errors      int
-	id          int64
+	RcptTo      []*EmailParts
+	Address     string
+	Data        string
+	Headers     map[string]string
+	Hash        string
+	ConnectedAt time.Time
+	KilledAt    time.Time
+	TLS         bool
+	Errors      int
+	state       ClientState
+	// Response to be written to the client
+	response string
+	conn     net.Conn
+	bufin    *SMTPBufferedReader
+	bufout   *bufio.Writer
 }
 
 func (c *Client) responseAdd(r string) {
@@ -46,10 +51,37 @@ func (c *Client) responseAdd(r string) {
 }
 
 func (c *Client) reset() {
-	c.mailFrom = &EmailParts{}
-	c.rcptTo = []*EmailParts{}
+	c.MailFrom = &EmailParts{}
+	c.RcptTo = []*EmailParts{}
 }
 
 func (c *Client) kill() {
-	c.killedAt = time.Now()
+	c.KilledAt = time.Now()
+}
+
+func (c *Client) isAlive() bool {
+	return c.KilledAt.IsZero()
+}
+
+// First capturing group is header name, second is header value.
+// Accounts for folding headers.
+var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
+
+func (c *Client) parseHeaders() {
+	var headerSectionEnds int
+	for i, char := range c.Data[:len(c.Data)-4] {
+		if char == '\r' {
+			if c.Data[i+1] == '\n' && c.Data[i+2] == '\r' && c.Data[i+3] == '\n' {
+				headerSectionEnds = i + 2
+			}
+		}
+	}
+
+	// TODO header comments
+	matches := headerRegex.FindAllStringSubmatch(c.Data[:headerSectionEnds], -1)
+	for _, h := range matches {
+		name := http.CanonicalHeaderKey(strings.TrimSpace(strings.Replace(h[1], "\r\n", "", -1)))
+		val := strings.TrimSpace(strings.Replace(h[2], "\r\n", "", -1))
+		c.Headers[name] = val
+	}
 }

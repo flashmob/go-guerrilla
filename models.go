@@ -7,9 +7,16 @@ import (
 	"io"
 )
 
+var (
+	LineLimitExceeded   = errors.New("Maximum line length exceeded")
+	MessageSizeExceeded = errors.New("Maximum message size exceeded")
+)
+
+// Backends process received mail. Depending on the implementation, that can
+// be storing in a database, retransmitting to another server, etc.
+// Must return an SMTP message to send back to the client.
 type Backend interface {
-	Initialize(*BackendConfig) error
-	Process(*Client)
+	Process(*Client) string
 }
 
 // EmailParts encodes an email address of the form `<user@host>`
@@ -25,8 +32,6 @@ func (ep *EmailParts) String() string {
 func (ep *EmailParts) isEmpty() bool {
 	return ep.User == "" && ep.Host == ""
 }
-
-var InputLimitExceeded = errors.New("Line too long")
 
 // we need to adjust the limit, so we embed io.LimitedReader
 type adjustableLimitedReader struct {
@@ -44,7 +49,7 @@ func (alr *adjustableLimitedReader) Read(p []byte) (n int, err error) {
 	n, err = alr.R.Read(p)
 	if err == io.EOF && alr.R.N <= 0 {
 		// return our custom error since io.Reader returns EOF
-		err = InputLimitExceeded
+		err = LineLimitExceeded
 	}
 	return
 }

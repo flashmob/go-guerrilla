@@ -13,9 +13,13 @@ func New(ac *AppConfig) *Guerrilla {
 
 	// Instantiate servers
 	for _, sc := range ac.Servers {
-		// Add app-wide allowed hosts to each server
+		if !sc.IsEnabled {
+			continue
+		}
+
+		// Add relevant app-wide config options to each server
 		sc.AllowedHosts = ac.AllowedHosts
-		server, err := NewServer(sc)
+		server, err := NewServer(sc, ac.Backend)
 		if err != nil {
 			log.WithError(err).Error("Failed to create server")
 		}
