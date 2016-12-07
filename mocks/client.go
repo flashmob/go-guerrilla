@@ -14,13 +14,14 @@ func lastWords(message string, err error) {
 	panic(err)
 }
 
+// Sends a single SMTP message, for testing.
 func main() {
 	c, err := smtp.Dial(URL)
 	if err != nil {
 		lastWords("Dial ", err)
 	}
 
-	from := "jordan.schalm@gmail.com"
+	from := "somebody@gmail.com"
 	to := "somebody.else@gmail.com"
 
 	if err = c.Mail(from); err != nil {

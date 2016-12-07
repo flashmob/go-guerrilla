@@ -54,11 +54,14 @@ func (alr *adjustableLimitedReader) Read(p []byte) (n int, err error) {
 	return
 }
 
+// allocate a new adjustableLimitedReader
 func newAdjustableLimitedReader(r io.Reader, n int64) *adjustableLimitedReader {
 	lr := &io.LimitedReader{R: r, N: n}
 	return &adjustableLimitedReader{lr}
 }
 
+// This is a bufio.Reader what will use our adjustable limit reader
+// We 'extend' buffio to have the limited reader feature
 type SMTPBufferedReader struct {
 	*bufio.Reader
 	alr *adjustableLimitedReader
