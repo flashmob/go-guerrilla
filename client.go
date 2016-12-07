@@ -29,16 +29,17 @@ type Client struct {
 	// Sender
 	MailFrom *EmailParts
 	// Recipients
-	RcptTo      []*EmailParts
-	Address     string
-	Data        string
-	Headers     map[string]string
-	Hash        string
-	ConnectedAt time.Time
-	KilledAt    time.Time
-	TLS         bool
-	Errors      int
-	state       ClientState
+	RcptTo       []*EmailParts
+	Address      string
+	Data         string
+	Headers      map[string]string
+	Hash         string
+	ConnectedAt  time.Time
+	KilledAt     time.Time
+	TLS          bool
+	Errors       int
+	state        ClientState
+	messagesSent int
 	// Response to be written to the client
 	response string
 	conn     net.Conn

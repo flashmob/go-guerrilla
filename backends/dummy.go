@@ -16,9 +16,9 @@ type dummyConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
 }
 
-func (b *DummyBackend) Process(client *guerrilla.Client) string {
+func (b *DummyBackend) Process(client *guerrilla.Client) (string, bool) {
 	if b.config.LogReceivedMails {
 		log.Infof("Mail from: %s / to: %v", client.MailFrom.String(), client.RcptTo)
 	}
-	return fmt.Sprintf("250 OK : queued as %s", client.ID)
+	return fmt.Sprintf("250 OK : queued as %s", client.ID), true
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jordanschalm/guerrilla"
+	"github.com/jordanschalm/guerrilla/backends"
 )
 
 var (
@@ -79,6 +80,13 @@ func serve(cmd *cobra.Command, args []string) {
 		} else {
 			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
 		}
+	}
+
+	switch cmdConfig.BackendName {
+	case "dummy":
+		cmdConfig.Backend = &backends.DummyBackend{}
+	case "guerrilla-db-redis":
+		cmdConfig.Backend = &backends.GuerrillaDBAndRedisBackend{}
 	}
 
 	app := guerrilla.New(&cmdConfig.AppConfig)

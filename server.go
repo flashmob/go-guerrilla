@@ -321,7 +321,10 @@ func (server *Server) handleClient(client *Client) {
 				}
 			}
 
-			res := server.backend.Process(client)
+			res, ok := server.backend.Process(client)
+			if ok {
+				client.messagesSent++
+			}
 			client.responseAdd(res)
 			client.state = ClientCmd
 

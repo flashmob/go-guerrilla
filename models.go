@@ -16,7 +16,7 @@ var (
 // be storing in a database, retransmitting to another server, etc.
 // Must return an SMTP message to send back to the client.
 type Backend interface {
-	Process(*Client) string
+	Process(*Client) (string, bool)
 }
 
 // EmailParts encodes an email address of the form `<user@host>`
