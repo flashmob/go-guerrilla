@@ -94,7 +94,9 @@ Getting started
 
 To build, just run
 
-$ go build
+```
+$ make guerrillad
+```
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
 
