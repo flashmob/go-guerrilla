@@ -105,6 +105,7 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64) (*guerrilla.Client, error)
 func (p *Pool) Return(c *guerrilla.Client) {
 	select {
 	case p.pool <- c:
+		c.ClearEmailData()
 	default:
 		// hasta la vista, baby...
 		p.clients.mu.Lock()

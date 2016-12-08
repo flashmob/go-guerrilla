@@ -48,7 +48,7 @@ type Client struct {
 	Errors      int
 	ClientID    uint64
 	SavedNotify chan int
-	mu       sync.Mutex
+	mu          sync.Mutex
 }
 
 func NewClient(conn net.Conn, clientID uint64) *Client {
@@ -68,13 +68,25 @@ func (c *Client) Reset(conn net.Conn, clientID uint64) {
 	// reset our reader & writer
 	c.Bufout.Reset(conn)
 	c.Bufin.Reset(conn)
-
+	// reset session data
 	c.State = 0
 	c.KillTime = 0
 	c.Time = time.Now().Unix()
 	c.ClientID = clientID
 	c.TLS = false
 	c.Errors = 0
+	c.Response = ""
+	c.Helo = ""
+}
+
+func (c *Client) ClearEmailData() {
+	// todo - maybe these could be implemented as buffers? then reset the buffers here
+	c.Data = ""
+	c.Hash = ""
+	c.Address = ""
+	c.Subject = ""
+	c.RcptTo = ""
+	c.MailFrom = ""
 }
 
 func (c *Client) SetTimeout(t time.Duration) {
