@@ -16,8 +16,8 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/config"
 	"github.com/flashmob/go-guerrilla/server"
-	"strings"
 	"reflect"
+	"strings"
 )
 
 var (
@@ -57,7 +57,7 @@ func sigHandler() {
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
 			// save old config & load in new one
-			oldConfig := mainConfig;
+			oldConfig := mainConfig
 			newConfig := guerrilla.Config{}
 			err := config.ReadConfig(configFile, iface, pidFile, &newConfig)
 			if err != nil {
@@ -87,7 +87,7 @@ func emitConfigChangeEvents(oldConfig guerrilla.Config, newConfig guerrilla.Conf
 	}
 
 	// has backend changed?
-	if !reflect.DeepEqual(oldConfig.BackendConfig, newConfig.BackendConfig)  {
+	if !reflect.DeepEqual(oldConfig.BackendConfig, newConfig.BackendConfig) {
 		bus.Publish("config_change:backend_config", newConfig)
 	}
 
@@ -104,10 +104,10 @@ func emitConfigChangeEvents(oldConfig guerrilla.Config, newConfig guerrilla.Conf
 			delete(oldServers, iface)
 			// enable or disable?
 			if _, ok := changes["IsEnabled"]; ok {
-				if (newServer.IsEnabled) {
+				if newServer.IsEnabled {
 					bus.Publish("config_change:start_server", newServer)
 				} else {
-					bus.Publish("config_change:"+iface+":stop_server")
+					bus.Publish("config_change:" + iface + ":stop_server")
 				}
 				// do not emit any more events when IsEnabled changed
 				continue
@@ -124,7 +124,7 @@ func emitConfigChangeEvents(oldConfig guerrilla.Config, newConfig guerrilla.Conf
 				bus.Publish("config_change:"+iface+":timeout", newServer)
 			}
 			// tls changed
-			if  ok := func() bool {
+			if ok := func() bool {
 				if _, ok := changes["PrivateKeyFile"]; ok {
 					return true
 				}
@@ -139,7 +139,7 @@ func emitConfigChangeEvents(oldConfig guerrilla.Config, newConfig guerrilla.Conf
 				}
 
 				return false
-			}(); ok  {
+			}(); ok {
 				bus.Publish("config_change:"+iface+":tls_config", *newServer)
 			}
 
@@ -152,7 +152,7 @@ func emitConfigChangeEvents(oldConfig guerrilla.Config, newConfig guerrilla.Conf
 	// stop any servers that don't exist anymore
 	for iface := range oldServers {
 		log.Infof("Server [%s] removed from config, stopping", iface)
-		bus.Publish("config_change:"+iface+":stop_server")
+		bus.Publish("config_change:" + iface + ":stop_server")
 	}
 
 }
@@ -214,7 +214,7 @@ func serve(cmd *cobra.Command, args []string) {
 		}
 	}
 	// start a new server when added to config
-	bus.Subscribe("config_change:start_server", func (sConfig *guerrilla.ServerConfig) {
+	bus.Subscribe("config_change:start_server", func(sConfig *guerrilla.ServerConfig) {
 		go start(*sConfig)
 	})
 	// trap & handle signals

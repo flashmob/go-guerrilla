@@ -49,7 +49,7 @@ func convertError(name string) error {
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
 	// Use reflection so that we can provide a nice error message
 	g.config = guerrillaDBAndRedisConfig{}
-	s := reflect.ValueOf(&g.config).Elem(); // so that we can set the values
+	s := reflect.ValueOf(&g.config).Elem() // so that we can set the values
 	typeOfT := s.Type()
 	types := reflect.TypeOf(g.config)
 	for i := 0; i < s.NumField(); i++ {
@@ -70,14 +70,14 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 			if intVal, converted := backendConfig[field_name].(float64); converted {
 				s.Field(i).SetInt(int64(intVal))
 			} else {
-				return convertError("property missing/invalid: '"+field_name +"' of expected type: "+f.Type().Name())
+				return convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "string" {
 			if stringVal, converted := backendConfig[field_name].(string); converted {
 				s.Field(i).SetString(stringVal)
 			} else {
-				return convertError("missing/invalid: '"+field_name +"' of type: "+f.Type().Name())
+				return convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
 			}
 		}
 	}

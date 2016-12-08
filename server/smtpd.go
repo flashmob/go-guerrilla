@@ -14,8 +14,8 @@ import (
 
 	guerrilla "github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/util"
-	"sync/atomic"
 	"sync"
+	"sync/atomic"
 )
 
 type SmtpdServer struct {
@@ -33,15 +33,14 @@ type SmtpdServer struct {
 
 func newSmtpdServer(mainConfig guerrilla.Config, sConfig guerrilla.ServerConfig, bus *evbus.EventBus) *SmtpdServer {
 	server := SmtpdServer{
-		bus:           bus,
-		clientPool:    NewPool(sConfig.MaxClients),
+		bus:        bus,
+		clientPool: NewPool(sConfig.MaxClients),
 	}
 	server.mainConfigStore.Store(mainConfig)
 	server.configStore.Store(sConfig)
 	server.setTimeout(sConfig.Timeout)
 	return &server
 }
-
 
 // Upgrades the connection to TLS
 // Sets up buffers with the upgraded connection
@@ -73,7 +72,7 @@ func (server *SmtpdServer) Shutdown() {
 
 func (server *SmtpdServer) isShuttingDown() bool {
 	if is, really := server.shuttingDownFlag.Load().(bool); is && really {
-		return true;
+		return true
 	}
 	return false
 }
@@ -109,7 +108,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 		// STARTTLS turned off
 		advertiseTLS = ""
 	}
-	for ;; {
+	for {
 		switch client.State {
 		case 0:
 			responseAdd(client, greeting)
@@ -122,7 +121,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 					log.WithError(err).Debugf("Client closed the connection already: %s", client.Address)
 					return
 				}
-				if (server.isShuttingDown()) {
+				if server.isShuttingDown() {
 					break // do not accept anymore commands
 				}
 				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
@@ -156,9 +155,9 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 				}
 				responseAdd(client, fmt.Sprintf(
 					"250-%s Hello %s[%s]\r\n"+
-					"250-SIZE %d\r\n" +
-					"250-PIPELINING\r\n" +
-					"%s250 HELP",
+						"250-SIZE %d\r\n"+
+						"250-PIPELINING\r\n"+
+						"%s250 HELP",
 					sConfig.Hostname, client.Helo, client.Address,
 					sConfig.MaxSize, advertiseTLS))
 			case strings.Index(cmd, "HELP") == 0:
@@ -237,7 +236,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 					log.WithError(err).Debugf("Client closed the connection already: %s", client.Address)
 					return
 				}
-				if (server.isShuttingDown()) {
+				if server.isShuttingDown() {
 					// When shutting down in DATA state, the server will let the client
 					// finish the email, unless a timeout is detected.
 					break
@@ -261,7 +260,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 
 		case 3:
 			// upgrade to TLS
-			if tlsErr :=server.upgradeToTls(client); tlsErr == nil {
+			if tlsErr := server.upgradeToTls(client); tlsErr == nil {
 				advertiseTLS = ""
 				client.State = 1
 			} else {
@@ -287,7 +286,7 @@ func (server *SmtpdServer) handleClient(client *guerrilla.Client, backend guerri
 			}
 		}
 		if client.KillTime > 1 {
-			if (server.isShuttingDown() && client.State != 4) {
+			if server.isShuttingDown() && client.State != 4 {
 				client.State = 4
 			} else {
 				return

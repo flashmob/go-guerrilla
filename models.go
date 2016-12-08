@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 	"sync"
+	"time"
 )
 
 type EmailParts struct {

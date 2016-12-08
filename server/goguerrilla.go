@@ -54,7 +54,6 @@ func (server *SmtpdServer) setTimeout(seconds int) {
 	server.timeout.Store(duration)
 }
 
-
 func RunServer(mainConfig guerrilla.Config,
 	sConfig guerrilla.ServerConfig,
 	backend guerrilla.Backend,
@@ -117,7 +116,7 @@ func RunServer(mainConfig guerrilla.Config,
 		if err := bus.Unsubscribe("config_change:"+sConfig.ListenInterface+":stop_server", handlerStopServer); err != nil {
 			log.WithError(err).Debug("bus unsub error")
 		}
-		if err := bus.Unsubscribe("config_change:"+sConfig.ListenInterface+":tls_config", handlerTLS);err != nil {
+		if err := bus.Unsubscribe("config_change:"+sConfig.ListenInterface+":tls_config", handlerTLS); err != nil {
 			log.WithError(err).Debug("bus unsub error")
 		}
 		if err := bus.Unsubscribe("config_change:"+sConfig.ListenInterface+":timeout", handlerTimeout); err != nil {
@@ -130,8 +129,8 @@ func RunServer(mainConfig guerrilla.Config,
 
 	var (
 		clientID uint64
-		client *guerrilla.Client
-		poolErr error
+		client   *guerrilla.Client
+		poolErr  error
 	)
 	clientID = 1
 	for {
@@ -148,11 +147,11 @@ func RunServer(mainConfig guerrilla.Config,
 			continue
 		}
 		// grab a client form the pool, will block if full
-		client, poolErr = server.clientPool.Borrow(conn, clientID);
+		client, poolErr = server.clientPool.Borrow(conn, clientID)
 		if poolErr == ErrPoolShuttingDown {
 			continue
 		}
-		go func () {
+		go func() {
 			server.handleClient(client, backend)
 			server.clientPool.Return(client)
 		}()

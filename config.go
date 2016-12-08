@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"strings"
 
-	"io/ioutil"
-	"fmt"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"os"
 )
 
@@ -24,6 +24,7 @@ type Config struct {
 	_allowedHosts map[string]bool
 	_servers      map[string]*ServerConfig
 }
+
 // load in the config.
 func (c *Config) Load(filename string) error {
 	b, err := ioutil.ReadFile(filename)
@@ -38,7 +39,7 @@ func (c *Config) Load(filename string) error {
 		return errors.New("empty AllowedHosts is not allowed")
 	}
 	// read the timestamps for the ssl keys, to determine if they need to be reloaded
-	for i:=0; i < len(c.Servers); i++ {
+	for i := 0; i < len(c.Servers); i++ {
 		if info, err := os.Stat(c.Servers[i].PrivateKeyFile); err == nil {
 			c.Servers[i]._privateKeyFile_mtime = info.ModTime().Second()
 		}
@@ -105,18 +106,18 @@ func (sc *ServerConfig) GetTlsKeyTimestamps() (int, int) {
 // assuming obj1 and obj2 are of the same struct type
 func GetChanges(obj1 interface{}, obj2 interface{}) map[string]interface{} {
 	ret := make(map[string]interface{}, 5)
-	compareWith := structtomap(obj2);
-	for key, val :=range structtomap(obj1) {
+	compareWith := structtomap(obj2)
+	for key, val := range structtomap(obj1) {
 		if val != compareWith[key] {
 			ret[key] = compareWith[key]
 		}
 	}
 	// detect tls changes (have the key files been modified?)
 	if oldServer, ok := obj1.(ServerConfig); ok {
-		t1, t2 := oldServer.GetTlsKeyTimestamps();
+		t1, t2 := oldServer.GetTlsKeyTimestamps()
 		if newServer, ok := obj2.(ServerConfig); ok {
-			t3, t4 := newServer.GetTlsKeyTimestamps();
-			if   t1 != t3 {
+			t3, t4 := newServer.GetTlsKeyTimestamps()
+			if t1 != t3 {
 				ret["PrivateKeyFile"] = newServer.PrivateKeyFile
 			}
 			if t2 != t4 {
@@ -126,7 +127,6 @@ func GetChanges(obj1 interface{}, obj2 interface{}) map[string]interface{} {
 	}
 	return ret
 }
-
 
 // only able to convert int, bool and string; not recursive
 func structtomap(obj interface{}) map[string]interface{} {

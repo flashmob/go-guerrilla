@@ -1,12 +1,13 @@
 package server
 
 import (
+	"errors"
 	"github.com/flashmob/go-guerrilla"
 	"net"
-	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
-	"sync")
+)
 
 var (
 	ErrPoolShuttingDown = errors.New("server pool: shutting down")
@@ -22,17 +23,16 @@ type Pool struct {
 }
 
 type allClients struct {
-	m    map[uint64]*guerrilla.Client
-	mu   sync.Mutex // guards access to this struct
+	m  map[uint64]*guerrilla.Client
+	mu sync.Mutex // guards access to this struct
 }
-
 
 // NewPool creates a new pool of Clients.
 func NewPool(poolSize int) *Pool {
 	return &Pool{
-		pool:   make(chan *guerrilla.Client, poolSize),
+		pool:          make(chan *guerrilla.Client, poolSize),
 		activeClients: make(chan *guerrilla.Client, poolSize),
-		clients: allClients{m:make(map[uint64]*guerrilla.Client, poolSize)},
+		clients:       allClients{m: make(map[uint64]*guerrilla.Client, poolSize)},
 	}
 }
 
@@ -45,16 +45,16 @@ func (p *Pool) Shutdown() {
 	p.isShuttingDownFlg.Store(true)
 	var client *guerrilla.Client
 	// remove active clients
-	for ; ; {
+	for {
 		if len(p.activeClients) == 0 {
 			// nothing to remove
 			goto Done
 		}
-		client = <- p.activeClients
+		client = <-p.activeClients
 		client.SetTimeout(time.Duration(int64(aVeryLowTimeout)))
 		killClient(client)
 	}
-	Done:
+Done:
 	close(p.activeClients)
 }
 
