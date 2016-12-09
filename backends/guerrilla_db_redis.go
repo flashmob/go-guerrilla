@@ -8,7 +8,6 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/flashmob/go-guerrilla/util"
 	"github.com/garyburd/redigo/redis"
 	"github.com/jordanschalm/guerrilla"
 
@@ -197,7 +196,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		addHead += "	by " + payload.recipient.Host + " with SMTP id " + payload.client.Hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		payload.client.Data = util.Compress(&addHead, &payload.client.Data)
+		payload.client.Data = guerrilla.Compress(addHead, payload.client.Data)
 		body = "gzencode"
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {

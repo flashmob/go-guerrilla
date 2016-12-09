@@ -84,9 +84,13 @@ func serve(cmd *cobra.Command, args []string) {
 
 	switch cmdConfig.BackendName {
 	case "dummy":
-		cmdConfig.Backend = &backends.DummyBackend{}
+		b := &backends.DummyBackend{}
+		b.Initialize(cmdConfig.BackendConfig)
+		cmdConfig.Backend = b
 	case "guerrilla-db-redis":
-		cmdConfig.Backend = &backends.GuerrillaDBAndRedisBackend{}
+		b := &backends.GuerrillaDBAndRedisBackend{}
+		b.Initialize(cmdConfig.BackendConfig)
+		cmdConfig.Backend = b
 	}
 
 	app := guerrilla.New(&cmdConfig.AppConfig)
