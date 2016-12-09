@@ -253,6 +253,8 @@ func (server *SmtpdServer) readSmtp(client *guerrilla.Client) (input string, err
 			break
 		}
 		if strings.HasSuffix(input, suffix) {
+			// discard the suffix and stop reading
+			input = input[0:len(input)-len(suffix)]
 			break
 		}
 	}
