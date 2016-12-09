@@ -1,6 +1,12 @@
 {
-    "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org",
-    "primary_mail_host":"sharklasers.com",
+    "allowed_hosts": [
+      "guerrillamail.com",
+      "guerrillamailblock.com"
+      "sharklasers.com",
+      "guerrillamail.net",
+      "guerrillamail.org"
+    ],
+    "primary_mail_host": "sharklasers.com",
     "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": true

@@ -39,7 +39,7 @@ func newServer(sc *ServerConfig, b Backend) (*server, error) {
 		sem:     make(chan int, sc.MaxClients),
 	}
 
-	if server.config.RequireTLS || server.config.AdvertiseTLS {
+	if server.config.TLSAlwaysOn || server.config.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(server.config.PublicKeyFile, server.config.PrivateKeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error loading TLS certificate: %s", err.Error())
@@ -185,7 +185,7 @@ func (server *server) handleClient(client *Client) {
 	advertiseTLS := "250-STARTTLS\r\n"
 	help := "250 HELP"
 
-	if server.config.RequireTLS {
+	if server.config.TLSAlwaysOn {
 		success := server.upgradeToTLS(client)
 		if !success {
 			client.kill()
@@ -329,7 +329,7 @@ func (server *server) handleClient(client *Client) {
 			client.state = ClientCmd
 
 		case ClientStartTLS:
-			if !client.TLS && server.config.AdvertiseTLS {
+			if !client.TLS && server.config.StartTLSOn {
 				if server.upgradeToTLS(client) {
 					advertiseTLS = ""
 					client.responseAdd("250 OK")

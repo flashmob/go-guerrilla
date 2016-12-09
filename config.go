@@ -17,7 +17,7 @@ type ServerConfig struct {
 	PublicKeyFile   string   `json:"public_key_file"`
 	Timeout         int      `json:"timeout"`
 	ListenInterface string   `json:"listen_interface"`
-	AdvertiseTLS    bool     `json:"advertise_tls,omitempty"`
-	RequireTLS      bool     `json:"require_tls,omitempty"`
+	StartTLSOn      bool     `json:"start_tls_on,omitempty"`
+	TLSAlwaysOn     bool     `json:"tls_always_on,omitempty"`
 	MaxClients      int      `json:"max_clients"`
 }
