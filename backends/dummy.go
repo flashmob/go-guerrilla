@@ -19,7 +19,9 @@ type dummyConfig struct {
 func (b *DummyBackend) loadConfig(config map[string]interface{}) {
 	willLog, ok := config["log_received_mails"].(bool)
 	if !ok {
-		b.config = dummyConfig{willLog && ok}
+		b.config = dummyConfig{false}
+	} else {
+		b.config = dummyConfig{willLog}
 	}
 }
 
