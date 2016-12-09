@@ -21,7 +21,7 @@ const (
 )
 
 // Server listens for SMTP clients on the port specified in its config
-type Server struct {
+type server struct {
 	config    *ServerConfig
 	backend   Backend
 	tlsConfig *tls.Config
@@ -31,8 +31,8 @@ type Server struct {
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func NewServer(sc *ServerConfig, b Backend) (*Server, error) {
-	server := &Server{
+func newServer(sc *ServerConfig, b Backend) (*server, error) {
+	server := &server{
 		config:  sc,
 		backend: b,
 		maxSize: sc.MaxSize,
@@ -59,7 +59,7 @@ func NewServer(sc *ServerConfig, b Backend) (*Server, error) {
 }
 
 // Begin accepting SMTP clients
-func (server *Server) Start() error {
+func (server *server) Start() error {
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
 	if err != nil {
 		return fmt.Errorf("Cannot listen on port: %s", err.Error())
@@ -91,7 +91,7 @@ func (server *Server) Start() error {
 }
 
 // Verifies that the host is a valid recipient.
-func (server *Server) allowsHost(host string) bool {
+func (server *server) allowsHost(host string) bool {
 	for _, allowed := range server.config.AllowedHosts {
 		if host == allowed {
 			return true
@@ -101,7 +101,7 @@ func (server *Server) allowsHost(host string) bool {
 }
 
 // Upgrades a client connection to TLS
-func (server *Server) upgradeToTLS(client *Client) bool {
+func (server *server) upgradeToTLS(client *Client) bool {
 	tlsConn := tls.Server(client.conn, server.tlsConfig)
 	err := tlsConn.Handshake()
 	if err != nil {
@@ -116,14 +116,14 @@ func (server *Server) upgradeToTLS(client *Client) bool {
 }
 
 // Closes a client connection
-func (server *Server) closeConn(client *Client) {
+func (server *server) closeConn(client *Client) {
 	client.conn.Close()
 	<-server.sem
 }
 
 // Reads from the client until a terminating sequence is encountered,
 // or until a timeout occurs.
-func (server *Server) read(client *Client) (string, error) {
+func (server *server) read(client *Client) (string, error) {
 	var input, reply string
 	var err error
 
@@ -152,7 +152,7 @@ func (server *Server) read(client *Client) (string, error) {
 }
 
 // Writes a response to the client.
-func (server *Server) writeResponse(client *Client) error {
+func (server *server) writeResponse(client *Client) error {
 	client.conn.SetDeadline(time.Now().Add(server.timeout))
 	size, err := client.bufout.WriteString(client.response)
 	if err != nil {
@@ -167,7 +167,7 @@ func (server *Server) writeResponse(client *Client) error {
 }
 
 // Handles an entire client SMTP exchange
-func (server *Server) handleClient(client *Client) {
+func (server *server) handleClient(client *Client) {
 	defer server.closeConn(client)
 	log.Info("Handling client: ", client.ID)
 

@@ -4,12 +4,12 @@ import log "github.com/Sirupsen/logrus"
 
 type Guerrilla struct {
 	Config  *AppConfig
-	servers []*Server
+	servers []*server
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
 func New(ac *AppConfig) *Guerrilla {
-	g := &Guerrilla{ac, []*Server{}}
+	g := &Guerrilla{ac, []*server{}}
 
 	// Instantiate servers
 	for _, sc := range ac.Servers {
@@ -19,7 +19,7 @@ func New(ac *AppConfig) *Guerrilla {
 
 		// Add relevant app-wide config options to each server
 		sc.AllowedHosts = ac.AllowedHosts
-		server, err := NewServer(sc, ac.Backend)
+		server, err := newServer(sc, ac.Backend)
 		if err != nil {
 			log.WithError(err).Error("Failed to create server")
 		}
