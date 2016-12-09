@@ -39,7 +39,7 @@ func (b *DummyBackend) Finalize() error {
 
 func (b *DummyBackend) Process(client *guerrilla.Client, from *guerrilla.EmailParts, to []*guerrilla.EmailParts) string {
 	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s / to: %v", from, to)
+		log.Infof("Mail from: %s / to: %v data:[%s]", from, to, client.Data)
 	}
 	return fmt.Sprintf("250 OK : queued as %s", client.Hash)
 }
