@@ -332,7 +332,6 @@ func (server *server) handleClient(client *Client) {
 			if !client.TLS && server.config.StartTLSOn {
 				if server.upgradeToTLS(client) {
 					advertiseTLS = ""
-					client.responseAdd("250 OK")
 					client.reset()
 				} else {
 					client.responseAdd("454 Error: Upgrade to TLS failed")
