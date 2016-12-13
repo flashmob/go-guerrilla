@@ -211,14 +211,14 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		// bind data to cursor
 		ins.Bind(
 			to,
-			payload.client.MailFrom,
+			payload.client.MailFrom.String(),
 			payload.client.Headers["Subject"],
 			body,
 			payload.client.Data,
 			payload.client.Hash,
 			recipient,
 			payload.client.Address,
-			payload.client.MailFrom,
+			payload.client.MailFrom.String(),
 			payload.client.TLS,
 		)
 		// save, discard result
