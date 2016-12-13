@@ -334,11 +334,13 @@ func (server *server) handleClient(client *Client) {
 					advertiseTLS = ""
 					client.responseAdd("250 OK")
 					client.reset()
-					client.state = ClientCmd
 				} else {
 					client.responseAdd("454 Error: Upgrade to TLS failed")
 				}
 			}
+			// change to command state,
+			// otherwise it would cause an infinite loop if client closes connection
+			client.state = ClientCmd
 		}
 
 		log.Debugf("Writing response to client: \n%s", client.response)

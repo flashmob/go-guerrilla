@@ -1,4 +1,4 @@
-package: github.com/jordanschalm/guerrilla
+package: github.com/flashmob/guerrilla
 import:
 - package: github.com/Sirupsen/logrus
   version: a437dfd2463eaedbec3dfe443e477d3b0a810b3f
