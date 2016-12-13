@@ -49,13 +49,15 @@ func convertError(name string) error {
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
 	// Use reflection so that we can provide a nice error message
 	g.config = guerrillaDBAndRedisConfig{}
-	s := reflect.ValueOf(&g.config).Elem(); // so that we can set the values
+	s := reflect.ValueOf(&g.config).Elem() // so that we can set the values
 	typeOfT := s.Type()
-	tags := reflect.TypeOf(g.config) // read the tags of the config struct
+	types := reflect.TypeOf(g.config)
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
-		field_name := tags.Field(i).Tag.Get("json")
+		// read the tags of the config struct
+		field_name := types.Field(i).Tag.Get("json")
 		if len(field_name) > 0 {
+			// parse the tag to
 			// get the field name from struct tag
 			split := strings.Split(field_name, ",")
 			field_name = split[0]
@@ -64,23 +66,21 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendC
 			// so use the reflected field name
 			field_name = typeOfT.Field(i).Name
 		}
-
 		if f.Type().Name() == "int" {
 			if intVal, converted := backendConfig[field_name].(float64); converted {
 				s.Field(i).SetInt(int64(intVal))
 			} else {
-				return convertError("property missing/invalid: '"+field_name +"' of expected type: "+f.Type().Name())
+				return convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "string" {
 			if stringVal, converted := backendConfig[field_name].(string); converted {
 				s.Field(i).SetString(stringVal)
 			} else {
-				return convertError("missing/invalid: '"+field_name +"' of type: "+f.Type().Name())
+				return convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -147,7 +147,7 @@ type redisClient struct {
 }
 
 func (g *GuerrillaDBAndRedisBackend) saveMail() {
-	var to, recipient, body string
+	var to,  body string
 	var err error
 
 	var redisErr error
@@ -218,7 +218,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			body,
 			payload.client.Data,
 			payload.client.Hash,
-			recipient,
+			to,
 			payload.client.Address,
 			payload.client.MailFrom,
 			payload.client.TLS,
