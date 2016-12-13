@@ -76,16 +76,15 @@ func (server *server) Start() error {
 			continue
 		}
 
-		client := &Client{
+		server.sem <- 1
+		go server.handleClient(&Client{
 			conn:        conn,
 			Address:     conn.RemoteAddr().String(),
 			ConnectedAt: time.Now(),
 			bufin:       NewSMTPBufferedReader(conn),
 			bufout:      bufio.NewWriter(conn),
 			ID:          clientID,
-		}
-		server.sem <- 1
-		go server.handleClient(client)
+		})
 		clientID++
 	}
 }
@@ -118,6 +117,7 @@ func (server *server) upgradeToTLS(client *Client) bool {
 // Closes a client connection
 func (server *server) closeConn(client *Client) {
 	client.conn.Close()
+	client.conn = nil
 	<-server.sem
 }
 
@@ -212,8 +212,11 @@ func (server *server) handleClient(client *Client) {
 			} else if err == LineLimitExceeded {
 				client.responseAdd("500 Line too long.")
 				client.kill()
+				break
 			} else if err != nil {
 				log.WithError(err).Warnf("Read error: %s", client.Address)
+				client.kill()
+				break
 			}
 
 			input = strings.Trim(input, " \r\n")
@@ -298,7 +301,9 @@ func (server *server) handleClient(client *Client) {
 					client.responseAdd("550 Error: " + MessageSizeExceeded.Error())
 					client.kill()
 				} else {
+					client.kill()
 					client.responseAdd("451 Error: " + err.Error())
+					log.Infof("is alice %v", client.isAlive())
 				}
 				log.WithError(err).Warn("Error reading data")
 				continue
@@ -322,6 +327,7 @@ func (server *server) handleClient(client *Client) {
 			}
 
 			res, ok := server.backend.Process(client)
+			client.reset()
 			if ok {
 				client.messagesSent++
 			}
@@ -345,11 +351,7 @@ func (server *server) handleClient(client *Client) {
 		err := server.writeResponse(client)
 		if err != nil {
 			log.WithError(err).Debug("Error writing response")
-			if err == io.EOF {
-				return
-			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				return
-			}
+			return
 		}
 	}
 }

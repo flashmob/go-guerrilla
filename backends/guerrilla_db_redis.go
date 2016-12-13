@@ -224,7 +224,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {
-			log.WithError(err).Warn("Database error while inster")
+			log.WithError(err).Warn("Database error while inserting")
 			payload.savedNotify <- -1
 		} else {
 			log.Debugf("Email saved %s (len=%d)", payload.client.Hash, length)
