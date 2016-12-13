@@ -77,7 +77,7 @@ func (c *Client) parseHeaders() {
 			}
 		}
 	}
-
+	c.Headers = make(map[string]string, 5)
 	// TODO header comments
 	matches := headerRegex.FindAllStringSubmatch(c.Data[:headerSectionEnds], -1)
 	for _, h := range matches {

@@ -337,8 +337,7 @@ func (server *server) handleClient(client *Client) {
 					client.responseAdd("454 Error: Upgrade to TLS failed")
 				}
 			}
-			// change to command state,
-			// otherwise it would cause an infinite loop if client closes connection
+			// change to command state
 			client.state = ClientCmd
 		}
 
