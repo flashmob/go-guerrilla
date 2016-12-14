@@ -1,4 +1,4 @@
-package util
+package guerrilla
 
 import (
 	"bytes"
@@ -14,27 +14,24 @@ import (
 
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
-
-	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func ExtractEmail(str string) (email *guerrilla.EmailParts, err error) {
-	email = &guerrilla.EmailParts{}
+func extractEmail(str string) (*EmailParts, error) {
+	email := &EmailParts{}
+	var err error
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
 		email.Host = validHost(matched[2])
-	} else {
-		if res := strings.Split(str, "@"); len(res) > 1 {
-			email.User = res[0]
-			email.Host = validHost(res[1])
-		}
+	} else if res := strings.Split(str, "@"); len(res) > 1 {
+		email.User = res[0]
+		email.Host = validHost(res[1])
 	}
 	if email.User == "" || email.Host == "" {
 		err = errors.New("Invalid address, [" + email.User + "@" + email.Host + "] address:" + str)
 	}
-	return
+	return email, err
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
@@ -71,11 +68,11 @@ func MimeHeaderDecode(str string) string {
 	return str
 }
 
-var valihostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
+var validhostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
 
 func validHost(host string) string {
 	host = strings.Trim(host, " ")
-	if valihostRegex.MatchString(host) {
+	if validhostRegex.MatchString(host) {
 		return host
 	}
 	return ""
@@ -152,11 +149,11 @@ func fixCharset(charset string) string {
 }
 
 // returns an md5 hash as string of hex characters
-func MD5Hex(stringArguments ...*string) string {
+func MD5Hex(stringArguments ...string) string {
 	h := md5.New()
 	var r *strings.Reader
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(h, r)
 	}
 	sum := h.Sum([]byte{})
@@ -164,12 +161,12 @@ func MD5Hex(stringArguments ...*string) string {
 }
 
 // concatenate & compress all strings  passed in
-func Compress(stringArguments ...*string) string {
+func Compress(stringArguments ...string) string {
 	var b bytes.Buffer
 	var r *strings.Reader
 	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(w, r)
 	}
 	w.Close()
