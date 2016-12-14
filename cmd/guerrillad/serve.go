@@ -89,7 +89,10 @@ func serve(cmd *cobra.Command, args []string) {
 		cmdConfig.Backend = b
 	case "guerrilla-db-redis":
 		b := &backends.GuerrillaDBAndRedisBackend{}
-		b.Initialize(cmdConfig.BackendConfig)
+		err = b.Initialize(cmdConfig.BackendConfig)
+		if err != nil {
+			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
+		}
 		cmdConfig.Backend = b
 	}
 

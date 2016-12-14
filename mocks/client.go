@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/smtp"
+	"time"
 )
 
 const (
@@ -11,15 +12,25 @@ const (
 
 func lastWords(message string, err error) {
 	fmt.Println(message, err.Error())
-	panic(err)
+	return
+	// panic(err)
 }
 
 // Sends a single SMTP message, for testing.
 func main() {
+	for i := 0; i < 100; i++ {
+		go sendMail(i)
+	}
+	time.Sleep(time.Minute / 10)
+}
+
+func sendMail(i int) {
+	fmt.Printf("Sending %d mail\n", i)
 	c, err := smtp.Dial(URL)
 	if err != nil {
 		lastWords("Dial ", err)
 	}
+	defer c.Close()
 
 	from := "somebody@gmail.com"
 	to := "somebody.else@gmail.com"
@@ -49,8 +60,10 @@ func main() {
 		lastWords("Send ", err)
 	}
 
+	fmt.Printf("About to quit %d\n", i)
 	err = c.Quit()
 	if err != nil {
 		lastWords("Quit ", err)
 	}
+	fmt.Printf("Finished sending %d mail\n", i)
 }

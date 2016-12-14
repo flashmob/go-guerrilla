@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"errors"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -318,7 +319,7 @@ func (server *server) handleClient(client *Client) {
 				client.responseAdd("550 Error: No recipients")
 				continue
 			}
-			// todo move to backend
+			// TODO move to backend
 			client.parseHeaders()
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
@@ -351,8 +352,6 @@ func (server *server) handleClient(client *Client) {
 			return
 		}
 	}
-
-
 }
 
 func (s *server) checkRcpt(RcptTo []*EmailParts) error {
