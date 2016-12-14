@@ -159,11 +159,11 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
 		length = len(payload.client.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Headers["Subject"] = guerrilla.MimeHeaderDecode(payload.client.Headers["Subject"])
+		payload.client.Subject = guerrilla.MimeHeaderDecode(payload.client.Subject)
 		payload.client.Hash = guerrilla.MD5Hex(
 			to,
 			payload.client.MailFrom.String(),
-			payload.client.Headers["Subject"],
+			payload.client.Subject,
 			ts)
 		// Add extra headers
 		var addHead string
@@ -188,7 +188,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		ins.Bind(
 			to,
 			payload.client.MailFrom.String(),
-			payload.client.Headers["Subject"],
+			payload.client.Subject,
 			body,
 			payload.client.Data,
 			payload.client.Hash,

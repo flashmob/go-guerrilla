@@ -3,8 +3,6 @@ package guerrilla
 import (
 	"bufio"
 	"net"
-	"net/http"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -32,7 +30,7 @@ type Client struct {
 	RcptTo       []*EmailParts
 	Address      string
 	Data         string
-	Headers      map[string]string
+	Subject      string
 	Hash         string
 	ConnectedAt  time.Time
 	KilledAt     time.Time
@@ -64,25 +62,19 @@ func (c *Client) isAlive() bool {
 	return c.KilledAt.IsZero()
 }
 
-// First capturing group is header name, second is header value.
-// Accounts for folding headers.
-var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
-
-func (c *Client) parseHeaders() {
-	var headerSectionEnds int
-	for i, char := range c.Data[:len(c.Data)-4] {
-		if char == '\r' {
-			if c.Data[i+1] == '\n' && c.Data[i+2] == '\r' && c.Data[i+3] == '\n' {
-				headerSectionEnds = i + 2
-			}
+func (c *Client) scanSubject(reply string) {
+	if c.Subject == "" && (len(reply) > 8) {
+		test := strings.ToUpper(reply[0:9])
+		if i := strings.Index(test, "SUBJECT: "); i == 0 {
+			// first line with \r\n
+			c.Subject = reply[9:]
 		}
-	}
-	c.Headers = make(map[string]string, 5)
-	// TODO header comments
-	matches := headerRegex.FindAllStringSubmatch(c.Data[:headerSectionEnds], -1)
-	for _, h := range matches {
-		name := http.CanonicalHeaderKey(strings.TrimSpace(strings.Replace(h[1], "\r\n", "", -1)))
-		val := strings.TrimSpace(strings.Replace(h[2], "\r\n", "", -1))
-		c.Headers[name] = val
+	} else if strings.HasSuffix(c.Subject, "\r\n") {
+		// chop off the \r\n
+		c.Subject = c.Subject[0 : len(c.Subject)-2]
+		if (strings.HasPrefix(reply, " ")) || (strings.HasPrefix(reply, "\t")) {
+			// subject is multi-line
+			c.Subject = c.Subject + reply[1:]
+		}
 	}
 }

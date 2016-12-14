@@ -140,6 +140,10 @@ func (server *server) read(client *Client) (string, error) {
 		client.conn.SetDeadline(time.Now().Add(server.timeout))
 		reply, err = client.bufin.ReadString('\n')
 		input = input + reply
+		if client.state == ClientData && reply != "" {
+			// Extract the subject while we're at it
+			client.scanSubject(reply)
+		}
 		if int64(len(input)) > server.config.MaxSize {
 			return input, fmt.Errorf("Maximum DATA size exceeded (%d)", server.config.MaxSize)
 		}
@@ -319,8 +323,6 @@ func (server *server) handleClient(client *Client) {
 				client.responseAdd("550 Error: No recipients")
 				continue
 			}
-			// TODO move to backend
-			client.parseHeaders()
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
 				res, ok := server.backend.Process(client)
