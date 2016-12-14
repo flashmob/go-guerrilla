@@ -11,6 +11,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"errors"
 )
 
 const (
@@ -303,11 +304,11 @@ func (server *server) handleClient(client *Client) {
 				} else {
 					client.kill()
 					client.responseAdd("451 Error: " + err.Error())
-					log.Infof("is alice %v", client.isAlive())
 				}
 				log.WithError(err).Warn("Error reading data")
 				continue
 			}
+			client.state = ClientCmd
 
 			if client.MailFrom.isEmpty() {
 				client.responseAdd("550 Error: No sender")
@@ -317,22 +318,18 @@ func (server *server) handleClient(client *Client) {
 				client.responseAdd("550 Error: No recipients")
 				continue
 			}
+			// todo move to backend
 			client.parseHeaders()
 
-			for _, rcpt := range client.RcptTo {
-				if !server.allowsHost(rcpt.Host) {
-					client.responseAdd("550 Error: Host not allowed: " + rcpt.Host)
-					continue
+			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
+				res, ok := server.backend.Process(client)
+				if ok {
+					client.messagesSent++
 				}
+				client.responseAdd(res)
+			} else {
+				client.responseAdd("550 Error: " + rcptErr.Error())
 			}
-
-			res, ok := server.backend.Process(client)
-			client.reset()
-			if ok {
-				client.messagesSent++
-			}
-			client.responseAdd(res)
-			client.state = ClientCmd
 
 		case ClientStartTLS:
 			if !client.TLS && server.config.StartTLSOn {
@@ -354,4 +351,15 @@ func (server *server) handleClient(client *Client) {
 			return
 		}
 	}
+
+
+}
+
+func (s *server) checkRcpt(RcptTo []*EmailParts) error {
+	for _, rcpt := range RcptTo {
+		if !s.allowsHost(rcpt.Host) {
+			return errors.New("550 Error: Host not allowed: " + rcpt.Host)
+		}
+	}
+	return nil
 }
