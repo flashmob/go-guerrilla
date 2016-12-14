@@ -91,6 +91,8 @@ func serve(cmd *cobra.Command, args []string) {
 		b := &backends.GuerrillaDBAndRedisBackend{}
 		b.Initialize(cmdConfig.BackendConfig)
 		cmdConfig.Backend = b
+	default:
+		log.Fatalf("Unknown backend: %s" , cmdConfig.BackendName)
 	}
 
 	app := guerrilla.New(&cmdConfig.AppConfig)
