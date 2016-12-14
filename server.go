@@ -175,7 +175,7 @@ func (server *server) handleClient(client *Client) {
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
 		server.config.Hostname, Version, client.ID,
-		server.config.MaxClients, time.Now().Format(time.RFC3339))
+		len(server.sem), time.Now().Format(time.RFC3339))
 
 	helo := fmt.Sprintf("250 %s Hello", server.config.Hostname)
 	ehlo := fmt.Sprintf("250-%s Hello", server.config.Hostname)
