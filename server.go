@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	log "github.com/Sirupsen/logrus"
+	"runtime"
 )
 
 const (
@@ -178,9 +179,9 @@ func (server *server) handleClient(client *Client) {
 	log.Info("Handling client: ", client.ID)
 
 	// Initial greeting
-	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
+	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
 		server.config.Hostname, Version, client.ID,
-		len(server.sem), time.Now().Format(time.RFC3339))
+		len(server.sem), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
 
 	helo := fmt.Sprintf("250 %s Hello", server.config.Hostname)
 	ehlo := fmt.Sprintf("250-%s Hello", server.config.Hostname)
@@ -345,12 +346,15 @@ func (server *server) handleClient(client *Client) {
 			client.state = ClientCmd
 		}
 
-		log.Debugf("Writing response to client: \n%s", client.response)
-		err := server.writeResponse(client)
-		if err != nil {
-			log.WithError(err).Debug("Error writing response")
-			return
+		if len(client.response) > 0 {
+			log.Debugf("Writing response to client: \n%s", client.response)
+			err := server.writeResponse(client)
+			if err != nil {
+				log.WithError(err).Debug("Error writing response")
+				return
+			}
 		}
+
 	}
 }
 

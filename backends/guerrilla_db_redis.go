@@ -121,7 +121,7 @@ type redisClient struct {
 }
 
 func (g *GuerrillaDBAndRedisBackend) saveMail() {
-	var to, recipient, body string
+	var to, body string
 	var err error
 
 	var redisErr error
@@ -192,7 +192,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			body,
 			payload.client.Data,
 			payload.client.Hash,
-			recipient,
+			to,
 			payload.client.Address,
 			payload.client.MailFrom.String(),
 			payload.client.TLS,
