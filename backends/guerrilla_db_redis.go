@@ -1,15 +1,15 @@
 package backends
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	"reflect"
-	"strings"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/garyburd/redigo/redis"
 	"github.com/flashmob/go-guerrilla"
+	"github.com/garyburd/redigo/redis"
 
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
@@ -41,41 +41,17 @@ func convertError(name string) error {
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig map[string]interface{}) error {
-	// Use reflection so that we can provide a nice error message
-	g.config = guerrillaDBAndRedisConfig{}
-	s := reflect.ValueOf(&g.config).Elem() // so that we can set the values
-	typeOfT := s.Type()
-	tags := reflect.TypeOf(g.config) // read the tags of the config struct
-	for i := 0; i < s.NumField(); i++ {
-		f := s.Field(i)
-		field_name := tags.Field(i).Tag.Get("json")
-		if len(field_name) > 0 {
-			// get the field name from struct tag
-			split := strings.Split(field_name, ",")
-			field_name = split[0]
-		} else {
-			// could have no tag
-			// so use the reflected field name
-			field_name = typeOfT.Field(i).Name
-		}
-
-		if f.Type().Name() == "int" {
-			if intVal, converted := backendConfig[field_name].(float64); converted {
-				s.Field(i).SetInt(int64(intVal))
-			} else {
-				return convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
-			}
-		}
-		if f.Type().Name() == "string" {
-			if stringVal, converted := backendConfig[field_name].(string); converted {
-				s.Field(i).SetString(stringVal)
-			} else {
-				return convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
-			}
-		}
+	data, err := json.Marshal(backendConfig)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	err = json.Unmarshal(data, &g.config)
+	if g.config.NumberOfWorkers < 1 {
+		return errors.New("Must have more than 1 worker")
+	}
+
+	return err
 }
 
 func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interface{}) error {
@@ -183,11 +159,11 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
 		length = len(payload.client.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Headers["Subject"] = guerrilla.MimeHeaderDecode(payload.client.Headers["Subject"])
+		payload.client.Subject = guerrilla.MimeHeaderDecode(payload.client.Subject)
 		payload.client.Hash = guerrilla.MD5Hex(
 			to,
 			payload.client.MailFrom.String(),
-			payload.client.Headers["Subject"],
+			payload.client.Subject,
 			ts)
 		// Add extra headers
 		var addHead string
@@ -212,7 +188,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		ins.Bind(
 			to,
 			payload.client.MailFrom.String(),
-			payload.client.Headers["Subject"],
+			payload.client.Subject,
 			body,
 			payload.client.Data,
 			payload.client.Hash,

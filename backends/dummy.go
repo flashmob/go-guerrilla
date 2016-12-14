@@ -33,5 +33,5 @@ func (b *DummyBackend) Process(client *guerrilla.Client) (string, bool) {
 	if b.config.LogReceivedMails {
 		log.Infof("Mail from: %s / to: %v", client.MailFrom.String(), client.RcptTo)
 	}
-	return fmt.Sprintf("250 OK : queued as %s", client.ID), true
+	return fmt.Sprintf("250 OK : queued as %d", client.ID), true
 }

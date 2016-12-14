@@ -1,26 +1,17 @@
-package: github.com/flashmob/guerrilla
+package: github.com/flashmob/go-guerrilla
 import:
 - package: github.com/Sirupsen/logrus
-  version: a437dfd2463eaedbec3dfe443e477d3b0a810b3f
-- package: github.com/sloonz/go-qprintable
-  version: 775b3a4592d5bfc47b0ba398ec0d4dba018e5926
-- package: golang.org/x/sys
-  version: 478fcf54317e52ab69f40bb4c7a1520288d7f7ea
-  subpackages:
-  - unix
-- package: gopkg.in/iconv.v1
-  version: ~1.1.1
-- package: github.com/flashmob/go-guerrilla
-  version: ~1.5.1
-  subpackages:
-  - util
+  version: ~0.11.0
 - package: github.com/garyburd/redigo
   version: ~1.0.0
   subpackages:
   - redis
+- package: github.com/sloonz/go-qprintable
 - package: github.com/spf13/cobra
 - package: github.com/ziutek/mymysql
   version: ~1.5.4
   subpackages:
   - autorc
   - godrv
+- package: gopkg.in/iconv.v1
+  version: ~1.1.1

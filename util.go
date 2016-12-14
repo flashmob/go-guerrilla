@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/textproto"
 	"regexp"
 	"strings"
 
@@ -32,6 +33,30 @@ func extractEmail(str string) (*EmailParts, error) {
 		err = errors.New("Invalid address, [" + email.User + "@" + email.Host + "] address:" + str)
 	}
 	return email, err
+}
+
+// First capturing group is header name, second is header value.
+// Accounts for folding headers.
+var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
+
+func parseHeaders(mailData string) map[string]string {
+	var headerSectionEnds int
+	for i, char := range mailData[:len(mailData)-4] {
+		if char == '\r' {
+			if mailData[i+1] == '\n' && mailData[i+2] == '\r' && mailData[i+3] == '\n' {
+				headerSectionEnds = i + 2
+			}
+		}
+	}
+	headers := make(map[string]string)
+	// TODO header comments and textproto Reader instead of regex
+	matches := headerRegex.FindAllStringSubmatch(mailData[:headerSectionEnds], -1)
+	for _, h := range matches {
+		name := textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(strings.Replace(h[1], "\r\n", "", -1)))
+		val := strings.TrimSpace(strings.Replace(h[2], "\r\n", "", -1))
+		headers[name] = val
+	}
+	return headers
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
