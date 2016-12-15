@@ -94,6 +94,8 @@ func serve(cmd *cobra.Command, args []string) {
 			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
 		}
 		cmdConfig.Backend = b
+	default:
+		log.Fatalf("Unknown backend: %s" , cmdConfig.BackendName)
 	}
 
 	app := guerrilla.New(&cmdConfig.AppConfig)

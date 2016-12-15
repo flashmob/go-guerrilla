@@ -77,7 +77,6 @@ func (server *server) Start() error {
 			log.WithError(err).Info("Error accepting client")
 			continue
 		}
-
 		server.sem <- 1
 		go server.handleClient(&Client{
 			conn:        conn,
@@ -106,6 +105,7 @@ func (server *server) upgradeToTLS(client *Client) bool {
 	tlsConn := tls.Server(client.conn, server.tlsConfig)
 	err := tlsConn.Handshake()
 	if err != nil {
+		log.WithError(err).Warn("[%s] Failed TLS handshake", client.Address)
 		return false
 	}
 	client.conn = net.Conn(tlsConn)
@@ -339,8 +339,6 @@ func (server *server) handleClient(client *Client) {
 				if server.upgradeToTLS(client) {
 					advertiseTLS = ""
 					client.reset()
-				} else {
-					client.responseAdd("454 Error: Upgrade to TLS failed")
 				}
 			}
 			// change to command state
