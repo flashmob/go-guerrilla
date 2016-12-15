@@ -83,7 +83,7 @@ func (server *server) Start() error {
 			conn:        conn,
 			Address:     conn.RemoteAddr().String(),
 			ConnectedAt: time.Now(),
-			bufin:       NewSMTPBufferedReader(conn),
+			bufin:       newSMTPBufferedReader(conn),
 			bufout:      bufio.NewWriter(conn),
 			ID:          clientID,
 		})
@@ -109,7 +109,7 @@ func (server *server) upgradeToTLS(client *Client) bool {
 		return false
 	}
 	client.conn = net.Conn(tlsConn)
-	client.bufin = NewSMTPBufferedReader(client.conn)
+	client.bufin = newSMTPBufferedReader(client.conn)
 	client.bufout = bufio.NewWriter(client.conn)
 	client.TLS = true
 

@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// ClientState indicates which part of the SMTP transaction a given client is in.
 type ClientState int
 
 const (
@@ -41,7 +42,7 @@ type Client struct {
 	// Response to be written to the client
 	response string
 	conn     net.Conn
-	bufin    *SMTPBufferedReader
+	bufin    *smtpBufferedReader
 	bufout   *bufio.Writer
 }
 

@@ -159,8 +159,8 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
 		length = len(payload.client.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Subject = guerrilla.MimeHeaderDecode(payload.client.Subject)
-		payload.client.Hash = guerrilla.MD5Hex(
+		payload.client.Subject = MimeHeaderDecode(payload.client.Subject)
+		payload.client.Hash = MD5Hex(
 			to,
 			payload.client.MailFrom.String(),
 			payload.client.Subject,
@@ -172,7 +172,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		addHead += "	by " + payload.recipient.Host + " with SMTP id " + payload.client.Hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		payload.client.Data = guerrilla.Compress(addHead, payload.client.Data)
+		payload.client.Data = Compress(addHead, payload.client.Data)
 		body = "gzencode"
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {

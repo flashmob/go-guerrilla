@@ -14,7 +14,8 @@ var (
 
 // Backends process received mail. Depending on the implementation, that can
 // be storing in a database, retransmitting to another server, etc.
-// Must return an SMTP message to send back to the client.
+// Must return an SMTP message (i.e. "250 OK") and a boolean indicating
+// whether the message was processed successfully.
 type Backend interface {
 	Process(*Client) (string, bool)
 }
@@ -62,19 +63,19 @@ func newAdjustableLimitedReader(r io.Reader, n int64) *adjustableLimitedReader {
 
 // This is a bufio.Reader what will use our adjustable limit reader
 // We 'extend' buffio to have the limited reader feature
-type SMTPBufferedReader struct {
+type smtpBufferedReader struct {
 	*bufio.Reader
 	alr *adjustableLimitedReader
 }
 
 // Delegate to the adjustable limited reader
-func (sbr *SMTPBufferedReader) setLimit(n int64) {
+func (sbr *smtpBufferedReader) setLimit(n int64) {
 	sbr.alr.setLimit(n)
 }
 
 // Allocate a new SMTPBufferedReader
-func NewSMTPBufferedReader(rd io.Reader) *SMTPBufferedReader {
+func newSMTPBufferedReader(rd io.Reader) *smtpBufferedReader {
 	alr := newAdjustableLimitedReader(rd, CommandLineMaxLength)
-	s := &SMTPBufferedReader{bufio.NewReader(alr), alr}
+	s := &smtpBufferedReader{bufio.NewReader(alr), alr}
 	return s
 }
