@@ -138,6 +138,48 @@ You can implement your own saveMail function to use whatever storage /
 backend fits for you.
 
 
+Use as a package
+============================
+Guerrilla SMTPd can also be imported and used as a package in your project.
+
+## Import Guerrilla.
+```go
+import "github.com/flashmob/go-guerrilla"
+```
+
+## Implement the `Backend` interface
+Or use one of the implementations in the `backends` sub-package). This is how
+your application processes emails received by the Guerrilla app.
+```go
+type CustomBackend struct {...}
+
+func (cb *CustomBackend) Process(c *guerrilla.Client) (string, bool) {
+  err := saveSomewhere(c.Data)
+  if err != nil {
+    return fmt.Sprintf("554 Error: %s", err.Error()), false
+  }
+  return "250 OK", true
+}
+```
+
+## Create an app instance.
+See Configuration section below for setting configuration options.
+```go
+config := &guerrilla.AppConfig{
+  Backend: &CustomBackend{...},
+  Servers: []*guerrilla.ServerConfig{...},
+  AllowedHosts: []string{...}
+}
+app := guerrilla.New(config)
+```
+
+## Start the app.
+`Start` is non-blocking, so make sure the main goroutine is kept busy
+```go
+app.Start()
+```
+
+
 Configuration
 ============================================
 The configuration is in strict JSON format. Here is an annotated configuration.

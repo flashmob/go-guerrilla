@@ -2,14 +2,18 @@ package guerrilla
 
 import log "github.com/Sirupsen/logrus"
 
-type Guerrilla struct {
+type Guerrilla interface {
+	Start()
+}
+
+type guerrilla struct {
 	Config  *AppConfig
 	servers []*server
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig) *Guerrilla {
-	g := &Guerrilla{ac, []*server{}}
+func New(ac *AppConfig) Guerrilla {
+	g := &guerrilla{ac, []*server{}}
 
 	// Instantiate servers
 	for _, sc := range ac.Servers {
@@ -29,7 +33,7 @@ func New(ac *AppConfig) *Guerrilla {
 }
 
 // Entry point for the application. Starts all servers.
-func (g *Guerrilla) Start() {
+func (g *guerrilla) Start() {
 	for _, s := range g.servers {
 		go s.Start()
 	}
