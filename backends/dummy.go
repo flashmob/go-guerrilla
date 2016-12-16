@@ -29,9 +29,9 @@ func (b *DummyBackend) Initialize(config map[string]interface{}) {
 	b.loadConfig(config)
 }
 
-func (b *DummyBackend) Process(client *guerrilla.Client) (string, bool) {
+func (b *DummyBackend) Process(client *guerrilla.Client) guerrilla.BackendResult {
 	if b.config.LogReceivedMails {
 		log.Infof("Mail from: %s / to: %v", client.MailFrom.String(), client.RcptTo)
 	}
-	return fmt.Sprintf("250 OK : queued as %d", client.ID), true
+	return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %d", client.ID))
 }

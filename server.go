@@ -325,11 +325,11 @@ func (server *server) handleClient(client *Client) {
 			}
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
-				res, ok := server.backend.Process(client)
-				if ok {
+				res := server.backend.Process(client)
+				if res.Code() < 300 {
 					client.messagesSent++
 				}
-				client.responseAdd(res)
+				client.responseAdd(res.String())
 			} else {
 				client.responseAdd("550 Error: " + rcptErr.Error())
 			}

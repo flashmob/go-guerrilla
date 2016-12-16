@@ -81,11 +81,11 @@ func (g *GuerrillaDBAndRedisBackend) Finalize() error {
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) (string, bool) {
+func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) guerrilla.BackendResult {
 	to := client.RcptTo
 	from := client.MailFrom
 	if len(to) == 0 {
-		return "554 Error: no recipient", false
+		return guerrilla.NewBackendResult("554 Error: no recipient")
 	}
 
 	// to do: timeout when adding to SaveMailChan
@@ -98,12 +98,12 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) (string, 
 	select {
 	case status := <-savedNotify:
 		if status == 1 {
-			return fmt.Sprintf("250 OK : queued as %s", client.Hash), true
+			return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %s", client.Hash))
 		}
-		return "554 Error: transaction failed, blame it on the weather", false
+		return guerrilla.NewBackendResult("554 Error: transaction failed, blame it on the weather")
 	case <-time.After(time.Second * 30):
 		log.Debug("timeout")
-		return "554 Error: transaction timeout", false
+		return guerrilla.NewBackendResult("554 Error: transaction timeout")
 	}
 }
 
