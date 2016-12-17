@@ -4,5 +4,7 @@ go:
   - 1.5
 
 install:
-  - go get
+  - go get github.com/Masterminds/glide
+  - go install github.com/Masterminds/glide
+  - glide up
   - make guerrillad
