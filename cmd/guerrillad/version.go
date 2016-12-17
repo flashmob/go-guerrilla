@@ -4,7 +4,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	guerrilla "github.com/jordanschalm/guerrilla"
+	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
 var versionCmd = &cobra.Command{

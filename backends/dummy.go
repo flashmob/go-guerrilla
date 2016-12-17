@@ -5,7 +5,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	guerrilla "github.com/jordanschalm/guerrilla"
+	"github.com/flashmob/go-guerrilla"
 )
 
 type DummyBackend struct {
