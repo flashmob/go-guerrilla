@@ -13,8 +13,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/jordanschalm/guerrilla"
+	"github.com/jordanschalm/guerrilla/backends"
 )
 
 var (
