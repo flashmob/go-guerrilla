@@ -288,16 +288,9 @@ func (server *server) handleClient(client *client) {
 				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
 				client.state = ClientData
 
-			case strings.Index(cmd, "STARTTLS") == 0:
-				if  !server.config.StartTLSOn {
-					goto unrecognized_command
-
-				}
+			case server.config.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
 				client.responseAdd("220 Ready to start TLS")
 				client.state = ClientStartTLS
-				break
-				unrecognized_command:
-				fallthrough
 			default:
 
 				client.responseAdd("500 Unrecognized command: " + cmd)
