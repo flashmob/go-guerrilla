@@ -1,8 +1,6 @@
 package backends
 
 import (
-	"fmt"
-
 	log "github.com/Sirupsen/logrus"
 
 	"github.com/flashmob/go-guerrilla"
@@ -29,9 +27,9 @@ func (b *DummyBackend) Initialize(config map[string]interface{}) {
 	b.loadConfig(config)
 }
 
-func (b *DummyBackend) Process(client *guerrilla.Client) guerrilla.BackendResult {
+func (b *DummyBackend) Process(mail *guerrilla.MailData) guerrilla.BackendResult {
 	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s / to: %v", client.MailFrom.String(), client.RcptTo)
+		log.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
 	}
-	return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %d", client.ID))
+	return guerrilla.NewBackendResult("250 OK")
 }

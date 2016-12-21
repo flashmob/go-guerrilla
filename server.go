@@ -78,9 +78,11 @@ func (server *server) Start() error {
 			continue
 		}
 		server.sem <- 1
-		go server.handleClient(&Client{
+		go server.handleClient(&client{
+			MailData: &MailData{
+				Address: conn.RemoteAddr().String(),
+			},
 			conn:        conn,
-			Address:     conn.RemoteAddr().String(),
 			ConnectedAt: time.Now(),
 			bufin:       newSMTPBufferedReader(conn),
 			bufout:      bufio.NewWriter(conn),
@@ -101,7 +103,7 @@ func (server *server) allowsHost(host string) bool {
 }
 
 // Upgrades a client connection to TLS
-func (server *server) upgradeToTLS(client *Client) bool {
+func (server *server) upgradeToTLS(client *client) bool {
 	tlsConn := tls.Server(client.conn, server.tlsConfig)
 	err := tlsConn.Handshake()
 	if err != nil {
@@ -117,7 +119,7 @@ func (server *server) upgradeToTLS(client *Client) bool {
 }
 
 // Closes a client connection
-func (server *server) closeConn(client *Client) {
+func (server *server) closeConn(client *client) {
 	client.conn.Close()
 	client.conn = nil
 	<-server.sem
@@ -125,7 +127,7 @@ func (server *server) closeConn(client *Client) {
 
 // Reads from the client until a terminating sequence is encountered,
 // or until a timeout occurs.
-func (server *server) read(client *Client) (string, error) {
+func (server *server) read(client *client) (string, error) {
 	var input, reply string
 	var err error
 
@@ -158,7 +160,7 @@ func (server *server) read(client *Client) (string, error) {
 }
 
 // Writes a response to the client.
-func (server *server) writeResponse(client *Client) error {
+func (server *server) writeResponse(client *client) error {
 	client.conn.SetDeadline(time.Now().Add(server.timeout))
 	size, err := client.bufout.WriteString(client.response)
 	if err != nil {
@@ -173,7 +175,7 @@ func (server *server) writeResponse(client *Client) error {
 }
 
 // Handles an entire client SMTP exchange
-func (server *server) handleClient(client *Client) {
+func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
 	log.Info("Handling client: ", client.ID)
 
@@ -287,8 +289,8 @@ func (server *server) handleClient(client *Client) {
 
 			default:
 				client.responseAdd("500 Unrecognized command: " + cmd)
-				client.Errors++
-				if client.Errors > MaxUnrecognizedCommands {
+				client.errors++
+				if client.errors > MaxUnrecognizedCommands {
 					client.responseAdd("554 Too many unrecognized commands")
 					client.kill()
 				}
@@ -325,7 +327,7 @@ func (server *server) handleClient(client *Client) {
 			}
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
-				res := server.backend.Process(client)
+				res := server.backend.Process(client.MailData)
 				if res.Code() < 300 {
 					client.messagesSent++
 				}
