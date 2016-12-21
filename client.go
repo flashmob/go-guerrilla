@@ -12,7 +12,7 @@ type ClientState int
 
 const (
 	// The client has connected, and is awaiting our first response
-	ClientHandshake = iota
+	ClientGreeting = iota
 	// We have responded to the client's connection and are awaiting a command
 	ClientCmd
 	// We have received the sender and recipient information

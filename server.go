@@ -204,7 +204,7 @@ func (server *server) handleClient(client *client) {
 
 	for client.isAlive() {
 		switch client.state {
-		case ClientHandshake:
+		case ClientGreeting:
 			client.responseAdd(greeting)
 			client.state = ClientCmd
 
