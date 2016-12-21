@@ -176,7 +176,7 @@ func (server *server) writeResponse(client *Client) error {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *Client) {
 	defer server.closeConn(client)
-	log.Info("Handling client: ", client.ID)
+	log.Infof("Handle client [%s], id: %d", client.Address, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
