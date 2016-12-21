@@ -289,10 +289,17 @@ func (server *server) handleClient(client *client) {
 				client.state = ClientData
 
 			case strings.Index(cmd, "STARTTLS") == 0:
+				if  !server.config.StartTLSOn {
+					goto unrecognized_command
+
+				}
 				client.responseAdd("220 Ready to start TLS")
 				client.state = ClientStartTLS
-
+				break
+				unrecognized_command:
+				fallthrough
 			default:
+
 				client.responseAdd("500 Unrecognized command: " + cmd)
 				client.errors++
 				if client.errors > MaxUnrecognizedCommands {
