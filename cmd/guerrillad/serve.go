@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,6 +71,20 @@ func serve(cmd *cobra.Command, args []string) {
 		log.WithError(err).Fatal("Error while reading config")
 	}
 
+	// Check that max clients is not greater than system open file limit.
+	fileLimit := getFileLimit()
+
+	if fileLimit > 0 {
+		maxClients := 0
+		for _, s := range cmdConfig.Servers {
+			maxClients += s.MaxClients
+		}
+		if maxClients > fileLimit {
+			log.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
+		}
+	}
+
 	// Write out our PID
 	if len(pidFile) > 0 {
 		if f, err := os.Create(pidFile); err == nil {
@@ -95,7 +112,7 @@ func serve(cmd *cobra.Command, args []string) {
 		}
 		cmdConfig.Backend = b
 	default:
-		log.Fatalf("Unknown backend: %s" , cmdConfig.BackendName)
+		log.Fatalf("Unknown backend: %s", cmdConfig.BackendName)
 	}
 
 	app := guerrilla.New(&cmdConfig.AppConfig)
@@ -130,4 +147,19 @@ func readConfig(path string, verbose bool, config *CmdConfig) error {
 
 	guerrilla.ConfigLoadTime = time.Now()
 	return nil
+}
+
+func getFileLimit() int {
+	cmd := exec.Command("ulimit", "-n")
+	out, err := cmd.Output()
+	if err != nil {
+		return -1
+	}
+
+	limit, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		return -1
+	}
+
+	return limit
 }
