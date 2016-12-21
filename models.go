@@ -19,10 +19,10 @@ var (
 // Must return an SMTP message (i.e. "250 OK") and a boolean indicating
 // whether the message was processed successfully.
 type Backend interface {
-	Process(*Client) BackendResult
+	Process(*MailData) BackendResult
 }
 
-// EmailResponse represents a response to an SMTP client after receiving DATA.
+// BackendResult represents a response to an SMTP client after receiving DATA.
 // The String method should return an SMTP message ready to send back to the
 // client, for example `250 OK: Message received`.
 type BackendResult interface {

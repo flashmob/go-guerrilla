@@ -81,9 +81,9 @@ func (g *GuerrillaDBAndRedisBackend) Finalize() error {
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) guerrilla.BackendResult {
-	to := client.RcptTo
-	from := client.MailFrom
+func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.MailData) guerrilla.BackendResult {
+	to := mail.RcptTo
+	from := mail.MailFrom
 	if len(to) == 0 {
 		return guerrilla.NewBackendResult("554 Error: no recipient")
 	}
@@ -91,16 +91,16 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) guerrilla
 	// to do: timeout when adding to SaveMailChan
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
-	savedNotify := make(chan int)
-	g.saveMailChan <- &savePayload{client, from, to[0], savedNotify}
+	savedNotify := make(chan *saveStatus)
+	g.saveMailChan <- &savePayload{mail, from, to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
 	case status := <-savedNotify:
-		if status == 1 {
-			return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %s", client.Hash))
+		if status.err != nil {
+			return guerrilla.NewBackendResult("554 Error: " + status.err.Error())
 		}
-		return guerrilla.NewBackendResult("554 Error: transaction failed, blame it on the weather")
+		return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
 	case <-time.After(time.Second * 30):
 		log.Debug("timeout")
 		return guerrilla.NewBackendResult("554 Error: transaction timeout")
@@ -108,10 +108,15 @@ func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client) guerrilla
 }
 
 type savePayload struct {
-	client      *guerrilla.Client
+	mail        *guerrilla.MailData
 	from        *guerrilla.EmailParts
 	recipient   *guerrilla.EmailParts
-	savedNotify chan int
+	savedNotify chan *saveStatus
+}
+
+type saveStatus struct {
+	err  error
+	hash string
 }
 
 type redisClient struct {
@@ -157,28 +162,28 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
-		length = len(payload.client.Data)
+		length = len(payload.mail.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Subject = MimeHeaderDecode(payload.client.Subject)
-		payload.client.Hash = MD5Hex(
+		payload.mail.Subject = MimeHeaderDecode(payload.mail.Subject)
+		hash := MD5Hex(
 			to,
-			payload.client.MailFrom.String(),
-			payload.client.Subject,
+			payload.mail.MailFrom.String(),
+			payload.mail.Subject,
 			ts)
 		// Add extra headers
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
-		addHead += "Received: from " + payload.client.Helo + " (" + payload.client.Helo + "  [" + payload.client.Address + "])\r\n"
-		addHead += "	by " + payload.recipient.Host + " with SMTP id " + payload.client.Hash + "@" + payload.recipient.Host + ";\r\n"
+		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.Address + "])\r\n"
+		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		payload.client.Data = Compress(addHead, payload.client.Data)
+		payload.mail.Data = Compress(addHead, payload.mail.Data)
 		body = "gzencode"
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {
-			_, doErr := redisClient.conn.Do("SETEX", payload.client.Hash, g.config.RedisExpireSeconds, payload.client.Data)
+			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, payload.mail.Data)
 			if doErr == nil {
-				payload.client.Data = ""
+				payload.mail.Data = ""
 				body = "redis"
 			}
 		} else {
@@ -187,28 +192,29 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		// bind data to cursor
 		ins.Bind(
 			to,
-			payload.client.MailFrom.String(),
-			payload.client.Subject,
+			payload.mail.MailFrom.String(),
+			payload.mail.Subject,
 			body,
-			payload.client.Data,
-			payload.client.Hash,
+			payload.mail.Data,
+			hash,
 			to,
-			payload.client.Address,
-			payload.client.MailFrom.String(),
-			payload.client.TLS,
+			payload.mail.Address,
+			payload.mail.MailFrom.String(),
+			payload.mail.TLS,
 		)
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {
-			log.WithError(err).Warn("Database error while inserting")
-			payload.savedNotify <- -1
+			errMsg := "Database error while inserting"
+			log.WithError(err).Warn(errMsg)
+			payload.savedNotify <- &saveStatus{errors.New(errMsg), hash}
 		} else {
-			log.Debugf("Email saved %s (len=%d)", payload.client.Hash, length)
+			log.Debugf("Email saved %s (len=%d)", hash, length)
 			_, _, err = incr.Exec()
 			if err != nil {
 				log.WithError(err).Warn("Database error while incr count")
 			}
-			payload.savedNotify <- 1
+			payload.savedNotify <- &saveStatus{nil, hash}
 		}
 	}
 }

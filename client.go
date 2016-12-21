@@ -15,28 +15,19 @@ const (
 	ClientHandshake = iota
 	// We have responded to the client's connection and are awaiting a command
 	ClientCmd
-	// We have recieved the sender and recipient information
+	// We have received the sender and recipient information
 	ClientData
 	// We have agreed with the client to secure the connection over TLS
 	ClientStartTLS
 )
 
-type Client struct {
-	ID int64
-	// Message sent in HELO command
-	Helo string
-	// Sender
-	MailFrom *EmailParts
-	// Recipients
-	RcptTo       []*EmailParts
-	Address      string
-	Data         string
-	Subject      string
-	Hash         string
-	ConnectedAt  time.Time
-	KilledAt     time.Time
-	TLS          bool
-	Errors       int
+type client struct {
+	*MailData
+	ID          int64
+	ConnectedAt time.Time
+	KilledAt    time.Time
+	// Number of errors encountered during session with this client
+	errors       int
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
@@ -46,24 +37,37 @@ type Client struct {
 	bufout   *bufio.Writer
 }
 
-func (c *Client) responseAdd(r string) {
+type MailData struct {
+	Address string
+	// Message sent in EHLO command
+	Helo string
+	// Sender
+	MailFrom *EmailParts
+	// Recipients
+	RcptTo  []*EmailParts
+	Data    string
+	Subject string
+	TLS     bool
+}
+
+func (c *client) responseAdd(r string) {
 	c.response = c.response + r + "\r\n"
 }
 
-func (c *Client) reset() {
+func (c *client) reset() {
 	c.MailFrom = &EmailParts{}
 	c.RcptTo = []*EmailParts{}
 }
 
-func (c *Client) kill() {
+func (c *client) kill() {
 	c.KilledAt = time.Now()
 }
 
-func (c *Client) isAlive() bool {
+func (c *client) isAlive() bool {
 	return c.KilledAt.IsZero()
 }
 
-func (c *Client) scanSubject(reply string) {
+func (c *client) scanSubject(reply string) {
 	if c.Subject == "" && (len(reply) > 8) {
 		test := strings.ToUpper(reply[0:9])
 		if i := strings.Index(test, "SUBJECT: "); i == 0 {
