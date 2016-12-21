@@ -201,6 +201,10 @@ func (server *server) handleClient(client *client) {
 		}
 		advertiseTLS = ""
 	}
+	if !server.config.StartTLSOn {
+		// STARTTLS turned off, don't advertise it
+		advertiseTLS = ""
+	}
 
 	for client.isAlive() {
 		switch client.state {
