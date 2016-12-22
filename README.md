@@ -38,7 +38,7 @@ funded from our bitcoin donation address:
 So far we have the following bounties are still open:
 (Updated 22 Dec 2016)
 
--Let's encrypt TLS certificate support! 
+- Let's encrypt TLS certificate support! 
 Take a look at https://github.com/flashmob/go-guerrilla/issues/29
 (0.5 for a successful merge)
 
@@ -55,9 +55,12 @@ a few common cases, some unit tests would be good too. Automate to
 (0.25 BTC for a successful merge)
 
 - Profiling: Simulate a configurable number of simultaneous clients 
-(eg 500) which send commands at random speeds with messages of various 
-lengths. Provide a report of all the bottlenecks and setup so that the 
-report can be run automatically run when code is pushed to github.
+(eg 5000) which send commands at random speeds with messages of various 
+lengths. Some connections to use TLS. Some connections may produce 
+errors, eg. disconnect randomly after a few commands, issue unexpected
+input or timeout. Provide a report of all the bottlenecks and setup so 
+that the report can be run automatically run when code is pushed to 
+github.
 (0.25 BTC)
 
 - Looking for someone to do a code review & possibly fix any tidbits,
@@ -255,7 +258,7 @@ Currently, the server comes with two example backends:
 Releases
 ========
 
-(Master branch - Not officially released yet)
+(Master branch - Release Candidate 1 for v1.6)
 Large refactoring of the code. 
 - Introduced "backends": modular architecture for saving email
 - Issue: Use as a package in your own projects! https://github.com/flashmob/go-guerrilla/issues/20
