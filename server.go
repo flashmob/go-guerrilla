@@ -82,7 +82,7 @@ func (server *server) Start() error {
 		server.sem <- 1
 		go server.handleClient(&client{
 			Envelope: &Envelope{
-				Address: conn.RemoteAddr().String(),
+				RemoteAddress: conn.RemoteAddr().String(),
 			},
 			conn:        conn,
 			ConnectedAt: time.Now(),
@@ -109,7 +109,7 @@ func (server *server) upgradeToTLS(client *client) bool {
 	tlsConn := tls.Server(client.conn, server.tlsConfig)
 	err := tlsConn.Handshake()
 	if err != nil {
-		log.WithError(err).Warn("[%s] Failed TLS handshake", client.Address)
+		log.WithError(err).Warn("[%s] Failed TLS handshake", client.RemoteAddress)
 		return false
 	}
 	client.conn = net.Conn(tlsConn)
@@ -179,7 +179,7 @@ func (server *server) writeResponse(client *client) error {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
-	log.Infof("Handle client [%s], id: %d", client.Address, client.ID)
+	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
@@ -218,17 +218,17 @@ func (server *server) handleClient(client *client) {
 			input, err := server.read(client)
 			log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				log.WithError(err).Warnf("Client closed the connection: %s", client.Address)
+				log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.WithError(err).Warnf("Timeout: %s", client.Address)
+				log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
 				client.responseAdd("500 Line too long.")
 				client.kill()
 				break
 			} else if err != nil {
-				log.WithError(err).Warnf("Read error: %s", client.Address)
+				log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
 				client.kill()
 				break
 			}

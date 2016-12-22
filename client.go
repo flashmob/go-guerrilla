@@ -39,16 +39,17 @@ type client struct {
 
 // Email represents a single SMTP message.
 type Envelope struct {
-	Address string
+	// Remote IP address
+	RemoteAddress string
 	// Message sent in EHLO command
-	Helo string
+	Helo          string
 	// Sender
-	MailFrom *EmailAddress
+	MailFrom      *EmailAddress
 	// Recipients
-	RcptTo  []*EmailAddress
-	Data    string
-	Subject string
-	TLS     bool
+	RcptTo        []*EmailAddress
+	Data          string
+	Subject       string
+	TLS           bool
 }
 
 func (c *client) responseAdd(r string) {

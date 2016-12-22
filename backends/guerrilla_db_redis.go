@@ -173,7 +173,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		// Add extra headers
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
-		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.Address + "])\r\n"
+		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
 		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
@@ -198,7 +198,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			payload.mail.Data,
 			hash,
 			to,
-			payload.mail.Address,
+			payload.mail.RemoteAddress,
 			payload.mail.MailFrom.String(),
 			payload.mail.TLS,
 		)
