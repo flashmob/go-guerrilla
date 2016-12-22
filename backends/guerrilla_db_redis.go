@@ -1,25 +1,19 @@
 package backends
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-
+	"github.com/flashmob/go-guerrilla"
 	"github.com/garyburd/redigo/redis"
+
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
-
-	guerrilla "github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/util"
-	"reflect"
-	"strings"
 )
-
-func init() {
-	backends["guerrilla-db-redis"] = &GuerrillaDBAndRedisBackend{}
-}
 
 type GuerrillaDBAndRedisBackend struct {
 	config       guerrillaDBAndRedisConfig
@@ -46,45 +40,21 @@ func convertError(name string) error {
 // Load the backend config for the backend. It has already been unmarshalled
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig guerrilla.BackendConfig) error {
-	// Use reflection so that we can provide a nice error message
-	g.config = guerrillaDBAndRedisConfig{}
-	s := reflect.ValueOf(&g.config).Elem() // so that we can set the values
-	typeOfT := s.Type()
-	types := reflect.TypeOf(g.config)
-	for i := 0; i < s.NumField(); i++ {
-		f := s.Field(i)
-		// read the tags of the config struct
-		field_name := types.Field(i).Tag.Get("json")
-		if len(field_name) > 0 {
-			// parse the tag to
-			// get the field name from struct tag
-			split := strings.Split(field_name, ",")
-			field_name = split[0]
-		} else {
-			// could have no tag
-			// so use the reflected field name
-			field_name = typeOfT.Field(i).Name
-		}
-		if f.Type().Name() == "int" {
-			if intVal, converted := backendConfig[field_name].(float64); converted {
-				s.Field(i).SetInt(int64(intVal))
-			} else {
-				return convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
-			}
-		}
-		if f.Type().Name() == "string" {
-			if stringVal, converted := backendConfig[field_name].(string); converted {
-				s.Field(i).SetString(stringVal)
-			} else {
-				return convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
-			}
-		}
+func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig map[string]interface{}) error {
+	data, err := json.Marshal(backendConfig)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	err = json.Unmarshal(data, &g.config)
+	if g.config.NumberOfWorkers < 1 {
+		return errors.New("Must have more than 1 worker")
+	}
+
+	return err
 }
 
-func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig guerrilla.BackendConfig) error {
+func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interface{}) error {
 	err := g.loadConfig(backendConfig)
 	if err != nil {
 		return err
@@ -111,33 +81,42 @@ func (g *GuerrillaDBAndRedisBackend) Finalize() error {
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(client *guerrilla.Client, from *guerrilla.EmailParts, to []*guerrilla.EmailParts) string {
+func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.Envelope) guerrilla.BackendResult {
+	to := mail.RcptTo
+	from := mail.MailFrom
 	if len(to) == 0 {
-		return "554 Error: no recipient"
+		return guerrilla.NewBackendResult("554 Error: no recipient")
 	}
 
 	// to do: timeout when adding to SaveMailChan
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
-	g.saveMailChan <- &savePayload{client: client, from: from, recipient: to[0]}
+	savedNotify := make(chan *saveStatus)
+	g.saveMailChan <- &savePayload{mail, from, to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
-	case status := <-client.SavedNotify:
-		if status == 1 {
-			return fmt.Sprintf("250 OK : queued as %s", client.Hash)
+	case status := <-savedNotify:
+		if status.err != nil {
+			return guerrilla.NewBackendResult("554 Error: " + status.err.Error())
 		}
-		return "554 Error: transaction failed, blame it on the weather"
+		return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
 	case <-time.After(time.Second * 30):
 		log.Debug("timeout")
-		return "554 Error: transaction timeout"
+		return guerrilla.NewBackendResult("554 Error: transaction timeout")
 	}
 }
 
 type savePayload struct {
-	client    *guerrilla.Client
-	from      *guerrilla.EmailParts
-	recipient *guerrilla.EmailParts
+	mail        *guerrilla.Envelope
+	from        *guerrilla.EmailAddress
+	recipient   *guerrilla.EmailAddress
+	savedNotify chan *saveStatus
+}
+
+type saveStatus struct {
+	err  error
+	hash string
 }
 
 type redisClient struct {
@@ -147,7 +126,7 @@ type redisClient struct {
 }
 
 func (g *GuerrillaDBAndRedisBackend) saveMail() {
-	var to,  body string
+	var to, body string
 	var err error
 
 	var redisErr error
@@ -183,28 +162,28 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
-		length = len(payload.client.Data)
+		length = len(payload.mail.Data)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.client.Subject = util.MimeHeaderDecode(payload.client.Subject)
-		payload.client.Hash = util.MD5Hex(
-			&to,
-			&payload.client.MailFrom,
-			&payload.client.Subject,
-			&ts)
+		payload.mail.Subject = MimeHeaderDecode(payload.mail.Subject)
+		hash := MD5Hex(
+			to,
+			payload.mail.MailFrom.String(),
+			payload.mail.Subject,
+			ts)
 		// Add extra headers
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
-		addHead += "Received: from " + payload.client.Helo + " (" + payload.client.Helo + "  [" + payload.client.Address + "])\r\n"
-		addHead += "	by " + payload.recipient.Host + " with SMTP id " + payload.client.Hash + "@" + payload.recipient.Host + ";\r\n"
+		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
+		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 		// compress to save space
-		payload.client.Data = util.Compress(&addHead, &payload.client.Data)
+		payload.mail.Data = Compress(addHead, payload.mail.Data)
 		body = "gzencode"
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {
-			_, doErr := redisClient.conn.Do("SETEX", payload.client.Hash, g.config.RedisExpireSeconds, payload.client.Data)
+			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, payload.mail.Data)
 			if doErr == nil {
-				payload.client.Data = ""
+				payload.mail.Data = ""
 				body = "redis"
 			}
 		} else {
@@ -213,28 +192,29 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 		// bind data to cursor
 		ins.Bind(
 			to,
-			payload.client.MailFrom,
-			payload.client.Subject,
+			payload.mail.MailFrom.String(),
+			payload.mail.Subject,
 			body,
-			payload.client.Data,
-			payload.client.Hash,
+			payload.mail.Data,
+			hash,
 			to,
-			payload.client.Address,
-			payload.client.MailFrom,
-			payload.client.TLS,
+			payload.mail.RemoteAddress,
+			payload.mail.MailFrom.String(),
+			payload.mail.TLS,
 		)
 		// save, discard result
 		_, _, err = ins.Exec()
 		if err != nil {
-			log.WithError(err).Warn("Database error while inster")
-			payload.client.SavedNotify <- -1
+			errMsg := "Database error while inserting"
+			log.WithError(err).Warn(errMsg)
+			payload.savedNotify <- &saveStatus{errors.New(errMsg), hash}
 		} else {
-			log.Debugf("Email saved %s (len=%d)", payload.client.Hash, length)
+			log.Debugf("Email saved %s (len=%d)", hash, length)
 			_, _, err = incr.Exec()
 			if err != nil {
 				log.WithError(err).Warn("Database error while incr count")
 			}
-			payload.client.SavedNotify <- 1
+			payload.savedNotify <- &saveStatus{nil, hash}
 		}
 	}
 }

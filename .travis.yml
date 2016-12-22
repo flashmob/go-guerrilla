@@ -1,0 +1,11 @@
+language: go
+
+go:
+  - 1.5
+
+install:
+  - export GO15VENDOREXPERIMENT=1
+  - go get github.com/Masterminds/glide
+  - go install github.com/Masterminds/glide
+  - glide up
+  - make guerrillad
