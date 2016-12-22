@@ -22,7 +22,7 @@ const (
 )
 
 type client struct {
-	*MailData
+	*Envelope
 	ID          int64
 	ConnectedAt time.Time
 	KilledAt    time.Time
@@ -37,7 +37,7 @@ type client struct {
 	bufout   *bufio.Writer
 }
 
-type MailData struct {
+type Envelope struct {
 	Address string
 	// Message sent in EHLO command
 	Helo string

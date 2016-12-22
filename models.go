@@ -19,7 +19,7 @@ var (
 // Must return an SMTP message (i.e. "250 OK") and a boolean indicating
 // whether the message was processed successfully.
 type Backend interface {
-	Process(*MailData) BackendResult
+	Process(*Envelope) BackendResult
 }
 
 // BackendResult represents a response to an SMTP client after receiving DATA.

@@ -80,7 +80,7 @@ func (server *server) Start() error {
 		}
 		server.sem <- 1
 		go server.handleClient(&client{
-			MailData: &MailData{
+			Envelope: &Envelope{
 				Address: conn.RemoteAddr().String(),
 			},
 			conn:        conn,
@@ -332,7 +332,7 @@ func (server *server) handleClient(client *client) {
 			}
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
-				res := server.backend.Process(client.MailData)
+				res := server.backend.Process(client.Envelope)
 				if res.Code() < 300 {
 					client.messagesSent++
 				}
