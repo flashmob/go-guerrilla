@@ -8,8 +8,8 @@ import (
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (*EmailParts, error) {
-	email := &EmailParts{}
+func extractEmail(str string) (*EmailAddress, error) {
+	email := &EmailAddress{}
 	var err error
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]

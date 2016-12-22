@@ -56,17 +56,17 @@ func NewBackendResult(message string) BackendResult {
 	return backendResult(message)
 }
 
-// EmailParts encodes an email address of the form `<user@host>`
-type EmailParts struct {
+// EmailAddress encodes an email address of the form `<user@host>`
+type EmailAddress struct {
 	User string
 	Host string
 }
 
-func (ep *EmailParts) String() string {
+func (ep *EmailAddress) String() string {
 	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
 }
 
-func (ep *EmailParts) isEmpty() bool {
+func (ep *EmailAddress) isEmpty() bool {
 	return ep.User == "" && ep.Host == ""
 }
 

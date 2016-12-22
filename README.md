@@ -153,7 +153,7 @@ your application processes emails received by the Guerrilla app.
 ```go
 type CustomBackend struct {...}
 
-func (cb *CustomBackend) Process(c *guerrilla.Client) guerrilla.BackendResult {
+func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult {
   err := saveSomewhere(c.Data)
   if err != nil {
     return guerrilla.NewBackendResult(fmt.Sprintf("554 Error: %s", err.Error()))

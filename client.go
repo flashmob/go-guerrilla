@@ -37,14 +37,15 @@ type client struct {
 	bufout   *bufio.Writer
 }
 
+// Email represents a single SMTP message.
 type Envelope struct {
 	Address string
 	// Message sent in EHLO command
 	Helo string
 	// Sender
-	MailFrom *EmailParts
+	MailFrom *EmailAddress
 	// Recipients
-	RcptTo  []*EmailParts
+	RcptTo  []*EmailAddress
 	Data    string
 	Subject string
 	TLS     bool
@@ -55,8 +56,8 @@ func (c *client) responseAdd(r string) {
 }
 
 func (c *client) reset() {
-	c.MailFrom = &EmailParts{}
-	c.RcptTo = []*EmailParts{}
+	c.MailFrom = &EmailAddress{}
+	c.RcptTo = []*EmailAddress{}
 }
 
 func (c *client) kill() {

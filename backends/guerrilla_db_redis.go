@@ -109,8 +109,8 @@ func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.Envelope) guerrilla
 
 type savePayload struct {
 	mail        *guerrilla.Envelope
-	from        *guerrilla.EmailParts
-	recipient   *guerrilla.EmailParts
+	from        *guerrilla.EmailAddress
+	recipient   *guerrilla.EmailAddress
 	savedNotify chan *saveStatus
 }
 

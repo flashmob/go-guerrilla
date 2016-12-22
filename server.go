@@ -12,8 +12,9 @@ import (
 
 	"errors"
 
-	log "github.com/Sirupsen/logrus"
 	"runtime"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -364,7 +365,7 @@ func (server *server) handleClient(client *client) {
 	}
 }
 
-func (s *server) checkRcpt(RcptTo []*EmailParts) error {
+func (s *server) checkRcpt(RcptTo []*EmailAddress) error {
 	for _, rcpt := range RcptTo {
 		if !s.allowsHost(rcpt.Host) {
 			return errors.New("550 Error: Host not allowed: " + rcpt.Host)
