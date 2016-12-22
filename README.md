@@ -34,35 +34,34 @@ from our bitcoin donation address:
 
 `1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
-So far we have the following bounties:
+So far we have the following bounties are still open:
+(Updated 22 Dec 2016)
 
-- Client Pooling: When a client is finished, it should be placed into a
-pool instead of being destroyed. Looking for a idiomatic
-Go solution with channels. (0.5 BTC for a successful merge)
-See discussion here:  https://github.com/flashmob/go-guerrilla/issues/11
-
-- Modularize: Ability for the server to be used as a package. If it used
-as a package, an API would be exposed, and a new program would be able
-to start several servers on different ports, would be possible to
-specify a config file for each server, and specify its own
-saveMail function (otherwise, revert to default). Would be good to
-make it GoDep friendly too - or any other dependency tool out there.
-(0.5 BTC for a successful merge)
+-Let's encrypt TLS certificate support! 
+Take a look at https://github.com/flashmob/go-guerrilla/issues/29
+(0.5 for a successful merge)
 
 - Analytics: A web based admin panel that displays live statistics,
 including the number of clients, memory usage, graph the number of
 connections/bytes/memory used for the last 24h.
-Show the top senders by: IP, by domain & by HELO message.
+Show the top source clients by: IP, by domain & by HELO message.
 Using websocket via https & password protected.
 (1 BTC for a successful merge)
 
 - Testing: Automated test that can start the server and test end-to-end
-a few common cases, some unit tests would be good too.
+a few common cases, some unit tests would be good too. Automate to
+ run when code is pushed to github
 (0.25 BTC for a successful merge)
+
+- Profiling: Simulate a configurable number of simultaneous clients 
+(eg 500) which send commands at random speeds with messages of various 
+lengths. Provide a report of all the bottlenecks and setup so that the 
+report can be run automatically run when code is pushed to github.
+(0.25 BTC)
 
 - Looking for someone to do a code review & possibly fix any tidbits,
 they find, or suggestions for doing things better.
-(0.25 BTC for a successful merge)
+(Already one bounty of 0.25 paid, however, more is always welcome)
 
 Ready to roll up your sleeves and have a go?
 Please open an issue for more clarification / details on Github.
@@ -237,7 +236,13 @@ http://jsonlint.com/#
 
 
 Releases
-=========================================================
+========
+
+1.6
+- Modularized email saving backends 
+- Ability to be used as a package
+
+
 1.5.1 - 4nd Nov 2016
 - Small optimizations to the way email is saved
 
