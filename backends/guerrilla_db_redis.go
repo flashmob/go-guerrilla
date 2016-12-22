@@ -81,7 +81,7 @@ func (g *GuerrillaDBAndRedisBackend) Finalize() error {
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.MailData) guerrilla.BackendResult {
+func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.Envelope) guerrilla.BackendResult {
 	to := mail.RcptTo
 	from := mail.MailFrom
 	if len(to) == 0 {
@@ -108,9 +108,9 @@ func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.MailData) guerrilla
 }
 
 type savePayload struct {
-	mail        *guerrilla.MailData
-	from        *guerrilla.EmailParts
-	recipient   *guerrilla.EmailParts
+	mail        *guerrilla.Envelope
+	from        *guerrilla.EmailAddress
+	recipient   *guerrilla.EmailAddress
 	savedNotify chan *saveStatus
 }
 

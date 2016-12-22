@@ -12,8 +12,9 @@ import (
 
 	"errors"
 
-	log "github.com/Sirupsen/logrus"
 	"runtime"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -80,7 +81,7 @@ func (server *server) Start() error {
 		}
 		server.sem <- 1
 		go server.handleClient(&client{
-			MailData: &MailData{
+			Envelope: &Envelope{
 				Address: conn.RemoteAddr().String(),
 			},
 			conn:        conn,
@@ -332,7 +333,7 @@ func (server *server) handleClient(client *client) {
 			}
 
 			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
-				res := server.backend.Process(client.MailData)
+				res := server.backend.Process(client.Envelope)
 				if res.Code() < 300 {
 					client.messagesSent++
 				}
@@ -364,7 +365,7 @@ func (server *server) handleClient(client *client) {
 	}
 }
 
-func (s *server) checkRcpt(RcptTo []*EmailParts) error {
+func (s *server) checkRcpt(RcptTo []*EmailAddress) error {
 	for _, rcpt := range RcptTo {
 		if !s.allowsHost(rcpt.Host) {
 			return errors.New("550 Error: Host not allowed: " + rcpt.Host)
