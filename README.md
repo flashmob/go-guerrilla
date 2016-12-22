@@ -9,28 +9,29 @@ An minimalist SMTP server written in Go, made for receiving large volumes of mai
 ### What is Go Guerrilla SMTPd?
 
 It's a small SMTP server written in Go, for the purpose of receiving large volume of email.
-Written for GuerrillaMail.com which processes tens of thousands of emails
+Written for GuerrillaMail.com which processes hundreds of thousands of emails
 every hour.
 
 The purpose of this daemon is to grab the email, save it to the database
 and disconnect as quickly as possible.
 
-A typical user of this software would probably want to customize the save_mail.go source for
-their own systems.
+A typical user of this software would probably want to look into 
+`backends/guerrilla_db_redis.go` source file to use as an example to 
+customize for their own systems.
 
-This server does not attempt to filter HTML, check for spam or do any sender
-verification. These steps should be performed by other programs.
-The server does NOT send any email including bounces. This should
-be performed by a separate program.
+This server does not attempt to filter HTML, check for spam or do any 
+sender verification. These steps should be performed by other programs,
+ (or perhaps your own custom backend?).
+The server does not send any email including bounces.
 
 The software is using MIT License (MIT) - contributors welcome.
 
 ### Roadmap / Contributing & Bounties
 
 
-Pull requests / issue reporting & discussion / code reviews always welcome.
-To encourage more pull requests, we are now offering bounties funded
-from our bitcoin donation address:
+Pull requests / issue reporting & discussion / code reviews always 
+welcome. To encourage more pull requests, we are now offering bounties 
+funded from our bitcoin donation address:
 
 `1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
@@ -91,6 +92,8 @@ event driven I/O (2012). A year later, the latest script also became inadequate
 Getting started
 ===========================
 
+(Assuming that you have GNU make and latest Go on your system)
+
 To build, just run
 
 ```
@@ -99,10 +102,10 @@ $ make guerrillad
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
 
-By default, the saveMail() function saves the meta-data of an email
-into MySQL while the body is saved in Redis.
+See `backends/guerrilla_db_redis.go` source to use an example for creating your own email saving backend, 
+or the dummy one if you'd like to start from scratch.
 
-If you want to use the default saveMail() function, setup the following table
+If you want to build on the sample `guerrilla-db-redis` module, setup the following table
 in MySQL:
 
 	CREATE TABLE IF NOT EXISTS `new_mail` (
@@ -134,7 +137,8 @@ to query and join, while the body of the email is fetched from Redis
 if needed.
 
 You can implement your own saveMail function to use whatever storage /
-backend fits for you.
+backend fits for you. Please share them ^_^, in particular, we would 
+like to see other formats such as maildir and mbox.
 
 
 Use as a package
@@ -186,64 +190,82 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
 
 
     {
-        "allowed_hosts": "guerrillamail.com,guerrillamailblock.com,sharklasers.com,guerrillamail.net,guerrillamail.org" // What hosts to accept
-        "primary_mail_host":"sharklasers.com", // main domain
-        "verbose":false, // report all events to log
-        "mysql_db":"gmail_mail", // name of mysql database
-        "mysql_host":"127.0.0.1:3306", // mysql host and port (tcp)
-        "mysql_pass":"ok", // mysql password
-        "mysql_user":"gmail_mail", // mysql username
-        "mail_table":"new_mail", // mysql save table. Email meta-data is saved there
-        "redis_interface" : "127.0.0.1:6379", // redis host and port, email data payload is saved there
-        "redis_expire_seconds" : 3600, // how long to keep in redis
-        "save_workers_size" : 3, // number workers saving email from all servers
+        "allowed_hosts": ["guerrillamail.com","guerrillamailblock.com","sharklasers.com","guerrillamail.net","guerrillamail.org"], // What hosts to accept
         "pid_file" : "/var/run/go-guerrilla.pid", // pid = process id, so that other programs can send signals to our server
-            "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
-                {
-                    "is_enabled" : true, // boolean
-                    "host_name":"mail.test.com", // the hostname of the server as set by MX record
-                    "max_size": 1000000, // maximum size of an email in bytes
-                    "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
-                    "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
-                    "timeout":180, // timeout in number of seconds before an idle connection is closed
-                    "listen_interface":"127.0.0.1:25", // listen on ip and port
-                    "start_tls_on":true, // supports the STARTTLS command?
-                    "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
-                    "max_clients": 1000, // max clients at one time
-                    "log_file":"/dev/stdout" // where to log to
-                },
-                // the following is a second server, but listening on port 465 and always using TLS
-                {
-                    "is_enabled" : true,
-                    "host_name":"mail.test.com",
-                    "max_size":1000000,
-                    "private_key_file":"/path/to/pem/file/test.com.key",
-                    "public_key_file":"/path/to/pem/file/test.com.crt",
-                    "timeout":180,
-                    "listen_interface":"127.0.0.1:465",
-                    "start_tls_on":false,
-                    "tls_always_on":true,
-                    "max_clients":500,
-                    "log_file":"/dev/stdout"
-                }
-                // repeat as many servers as you need
-            ]
+                "backend_name": "guerrilla-db-redis", // what backend to use for saving email. See /backends dir
+                "backend_config" :
+                    {
+                        "mysql_db":"gmail_mail",
+                        "mysql_host":"127.0.0.1:3306",
+                        "mysql_pass":"ok",
+                        "mysql_user":"root",
+                        "mail_table":"new_mail",
+                        "redis_interface" : "127.0.0.1:6379",
+                        "redis_expire_seconds" : 7200,
+                        "save_workers_size" : 3,
+                        "primary_mail_host":"sharklasers.com"
+                    },
+                "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
+                    {
+                        "is_enabled" : true, // boolean
+                        "host_name":"mail.test.com", // the hostname of the server as set by MX record
+                        "max_size": 1000000, // maximum size of an email in bytes
+                        "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
+                        "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
+                        "timeout":180, // timeout in number of seconds before an idle connection is closed
+                        "listen_interface":"127.0.0.1:25", // listen on ip and port
+                        "start_tls_on":true, // supports the STARTTLS command?
+                        "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
+                        "max_clients": 1000, // max clients at one time
+                        "log_file":"/dev/stdout" // where to log to (currently ignored)
+                    },
+                    // the following is a second server, but listening on port 465 and always using TLS
+                    {
+                        "is_enabled" : true,
+                        "host_name":"mail.test.com",
+                        "max_size":1000000,
+                        "private_key_file":"/path/to/pem/file/test.com.key",
+                        "public_key_file":"/path/to/pem/file/test.com.crt",
+                        "timeout":180,
+                        "listen_interface":"127.0.0.1:465",
+                        "start_tls_on":false,
+                        "tls_always_on":true,
+                        "max_clients":500,
+                        "log_file":"/dev/stdout"
+                    }
+                    // repeat as many servers as you need
+                ]
+            }
     }
 
 The Json parser is very strict on syntax. If there's a parse error and it
 doesn't give much clue, then test your syntax here:
 http://jsonlint.com/#
 
+Email Saving Backends
+=====================
+
+Backends provide for a modular way to save email and for the ability to
+extend this functionality. They can be swapped in or out via the config. 
+Currently, the server comes with two example backends: 
+
+- dummy : used for testing purposes
+- guerrilla_db_redis: example uses MySQL and Redis to store email, used on Guerrilla Mail
 
 Releases
 ========
 
-1.6
-- Modularized email saving backends 
-- Ability to be used as a package
+(Master branch - Not officially released yet)
+Large refactoring of the code. 
+- Introduced "backends": modular architecture for saving email
+- Issue: Use as a package in your own projects! https://github.com/flashmob/go-guerrilla/issues/20
+- Issue: Do not include dot-suffix in emails https://github.com/flashmob/go-guerrilla/issues/24
+- Logging functionality: logrus is now used for logging. Currently output is going to stdout
+- Incompatible change: Config's allowed_hosts is now an array
+- Incompatible change: The server's command is now a command called `guerrillad`
+ 
 
-
-1.5.1 - 4nd Nov 2016
+1.5.1 - 4nd Nov 2016 (Latest tagged release)
 - Small optimizations to the way email is saved
 
 1.5 - 2nd Nov 2016
@@ -275,7 +297,9 @@ sample (goguerrilla.conf.sample)
 
 
 Using Nginx as a proxy
-=========================================================
+======================
+Note: This release temporarily does not have proxy support.
+An issue has been opened to put back in https://github.com/flashmob/go-guerrilla/issues/30
 Nginx can be used to proxy SMTP traffic for GoGuerrilla SMTPd
 
 Why proxy SMTP with Nginx?
