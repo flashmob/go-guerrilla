@@ -1,40 +1,43 @@
-package util
+package backends
 
 import (
 	"bytes"
 	"compress/zlib"
 	"crypto/md5"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/textproto"
 	"regexp"
 	"strings"
 
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
-
-	guerrilla "github.com/flashmob/go-guerrilla"
 )
 
-var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
+// First capturing group is header name, second is header value.
+// Accounts for folding headers.
+var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
 
-func ExtractEmail(str string) (email *guerrilla.EmailParts, err error) {
-	email = &guerrilla.EmailParts{}
-	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
-		email.User = matched[1]
-		email.Host = validHost(matched[2])
-	} else {
-		if res := strings.Split(str, "@"); len(res) > 1 {
-			email.User = res[0]
-			email.Host = validHost(res[1])
+func ParseHeaders(mailData string) map[string]string {
+	var headerSectionEnds int
+	for i, char := range mailData[:len(mailData)-4] {
+		if char == '\r' {
+			if mailData[i+1] == '\n' && mailData[i+2] == '\r' && mailData[i+3] == '\n' {
+				headerSectionEnds = i + 2
+			}
 		}
 	}
-	if email.User == "" || email.Host == "" {
-		err = errors.New("Invalid address, [" + email.User + "@" + email.Host + "] address:" + str)
+	headers := make(map[string]string)
+	// TODO header comments and textproto Reader instead of regex
+	matches := headerRegex.FindAllStringSubmatch(mailData[:headerSectionEnds], -1)
+	for _, h := range matches {
+		name := textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(strings.Replace(h[1], "\r\n", "", -1)))
+		val := strings.TrimSpace(strings.Replace(h[2], "\r\n", "", -1))
+		headers[name] = val
 	}
-	return
+	return headers
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
@@ -69,16 +72,6 @@ func MimeHeaderDecode(str string) string {
 		}
 	}
 	return str
-}
-
-var valihostRegex, _ = regexp.Compile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
-
-func validHost(host string) string {
-	host = strings.Trim(host, " ")
-	if valihostRegex.MatchString(host) {
-		return host
-	}
-	return ""
 }
 
 // decode from 7bit to 8bit UTF-8
@@ -152,11 +145,11 @@ func fixCharset(charset string) string {
 }
 
 // returns an md5 hash as string of hex characters
-func MD5Hex(stringArguments ...*string) string {
+func MD5Hex(stringArguments ...string) string {
 	h := md5.New()
 	var r *strings.Reader
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(h, r)
 	}
 	sum := h.Sum([]byte{})
@@ -164,12 +157,12 @@ func MD5Hex(stringArguments ...*string) string {
 }
 
 // concatenate & compress all strings  passed in
-func Compress(stringArguments ...*string) string {
+func Compress(stringArguments ...string) string {
 	var b bytes.Buffer
 	var r *strings.Reader
 	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
 	for i := 0; i < len(stringArguments); i++ {
-		r = strings.NewReader(*stringArguments[i])
+		r = strings.NewReader(stringArguments[i])
 		io.Copy(w, r)
 	}
 	w.Close()
