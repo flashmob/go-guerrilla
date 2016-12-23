@@ -107,7 +107,7 @@ func (c *client) SetTimeout(t time.Duration) {
 	c.conn.SetDeadline(time.Now().Add(t * time.Second))
 }
 
-func (c *client) Reset(conn net.Conn, clientID int64) {
+func (c *client) Init(conn net.Conn, clientID int64) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)

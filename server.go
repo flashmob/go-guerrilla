@@ -14,6 +14,7 @@ import (
 	"runtime"
 
 	log "github.com/Sirupsen/logrus"
+	"sync"
 )
 
 const (
@@ -32,6 +33,8 @@ type server struct {
 	timeout   time.Duration
 	sem       chan int
 	clientPool       *Pool
+	wg               sync.WaitGroup // for waiting to shutdown
+	listener net.Listener
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
@@ -61,7 +64,9 @@ func newServer(sc *ServerConfig, b Backend) (*server, error) {
 
 // Begin accepting SMTP clients
 func (server *server) Start() error {
+	defer server.waitAllClientsToClose()
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
+	server.listener = listener
 	if err != nil {
 		return fmt.Errorf("Cannot listen on port: %s", err.Error())
 	}
@@ -73,21 +78,52 @@ func (server *server) Start() error {
 		log.Debugf("Waiting for a new client. Client ID: %d", clientID)
 		conn, err := listener.Accept()
 		if err != nil {
-			log.WithError(err).Info("Error accepting client")
+			if e, ok := err.(net.Error); ok && !e.Temporary() {
+				log.Infof("Server [%s] has stopped", server.config.ListenInterface)
+				return nil
+			}
+			log.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
-		server.sem <- 1
-		go func(){
-			c, err:=server.clientPool.Borrow(conn, clientID)
-			if err == nil {
+		go func(c *client, borrow_err error){
+			if borrow_err == nil {
 				server.handleClient(c)
 				server.clientPool.Return(c)
 			} else {
-				log.WithError(err).Info("couldn't borrow a new client")
+				log.WithError(borrow_err).Info("couldn't borrow a new client")
+				// we could not get a client, so close the connection.
+				conn.Close()
+
 			}
-		}()
+		}(server.clientPool.Borrow(conn, clientID)) // intentionally placed so that evaluation happens before go func
 		clientID++
 	}
+}
+
+func (server *server) Shutdown() {
+	defer server.waitAllClientsToClose()
+	server.listener.Close()
+	//server.shuttingDownFlag.Store(true)
+	//cfg := server.configStore.Load().(guerrilla.ServerConfig)
+	//log.Infof("shutting down pool [%s]", cfg.ListenInterface)
+	log.Infof("shutting down pool")
+	server.clientPool.Shutdown()
+
+	//log.Infof("Waiting for all [%s] clients to close", cfg.ListenInterface)
+
+
+}
+
+
+
+// wait for all active clients to finish
+func (server *server) waitAllClientsToClose() {
+	server.wg.Wait()
+	log.Infof("All clients closed")
+}
+
+func (server *server) GetActiveClientsCount() int {
+	return server.clientPool.GetActiveClientsCount()
 }
 
 // Verifies that the host is a valid recipient.
@@ -120,7 +156,8 @@ func (server *server) upgradeToTLS(client *client) bool {
 func (server *server) closeConn(client *client) {
 	client.conn.Close()
 	client.conn = nil
-	<-server.sem
+	server.wg.Done()
+	//<-server.sem
 }
 
 // Reads from the client until a terminating sequence is encountered,
@@ -175,12 +212,13 @@ func (server *server) writeResponse(client *client) error {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
+	server.wg.Add(1)
 	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
 		server.config.Hostname, Version, client.ID,
-		len(server.sem), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
+		server.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
 
 	helo := fmt.Sprintf("250 %s Hello", server.config.Hostname)
 	ehlo := fmt.Sprintf("250-%s Hello", server.config.Hostname)

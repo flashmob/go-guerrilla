@@ -44,11 +44,12 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 }
 
-func sigHandler() {
+func sigHandler(app guerrilla.Guerrilla) {
 	// handle SIGHUP for reloading the configuration while running
-	signal.Notify(signalChannel, syscall.SIGHUP)
+	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT)
 
 	for sig := range signalChannel {
+
 		if sig == syscall.SIGHUP {
 			err := readConfig(configPath, verbose, &cmdConfig)
 			if err != nil {
@@ -57,6 +58,9 @@ func sigHandler() {
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
 			}
 			// TODO: reinitialize
+		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT {
+			log.Infof("sigkill")
+			app.Shutdown()
 		} else {
 			os.Exit(0)
 		}
@@ -117,7 +121,7 @@ func serve(cmd *cobra.Command, args []string) {
 
 	app := guerrilla.New(&cmdConfig.AppConfig)
 	go app.Start()
-	sigHandler()
+	sigHandler(app)
 }
 
 // Superset of `guerrilla.AppConfig` containing options specific

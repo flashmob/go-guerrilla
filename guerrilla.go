@@ -4,6 +4,7 @@ import log "github.com/Sirupsen/logrus"
 
 type Guerrilla interface {
 	Start()
+	Shutdown()
 }
 
 type guerrilla struct {
@@ -36,5 +37,11 @@ func New(ac *AppConfig) Guerrilla {
 func (g *guerrilla) Start() {
 	for _, s := range g.servers {
 		go s.Start()
+	}
+}
+
+func (g *guerrilla) Shutdown() {
+	for _, s := range g.servers {
+		s.Shutdown()
 	}
 }
