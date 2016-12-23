@@ -398,3 +398,22 @@ Benchmarking:
 http://www.jrh.org/smtp/index.html
 Test 500 clients:
 $ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183
+
+Authors
+=======
+
+Project Lead: 
+-------------
+Flashmob, GuerrillaMail.com, Contact: flashmob@gmail.com
+
+Major Contributors: 
+-------------------
+
+Reza Mohammadi https://github.com/remohammadi
+Jordan Schalm https://github.com/jordanschalm 
+
+Thanks to:
+----------
+https://github.com/dvcrn
+https://github.com/athoune
+... and anyone else who opened an issue / sent a PR / gave suggestions!
