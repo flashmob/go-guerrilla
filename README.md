@@ -409,11 +409,12 @@ Flashmob, GuerrillaMail.com, Contact: flashmob@gmail.com
 Major Contributors: 
 -------------------
 
-Reza Mohammadi https://github.com/remohammadi
-Jordan Schalm https://github.com/jordanschalm 
+* Reza Mohammadi https://github.com/remohammadi
+* Jordan Schalm https://github.com/jordanschalm 
 
 Thanks to:
 ----------
-https://github.com/dvcrn
-https://github.com/athoune
+* https://github.com/dvcrn
+* https://github.com/athoune
+
 ... and anyone else who opened an issue / sent a PR / gave suggestions!
