@@ -1,7 +1,6 @@
 package guerrilla
 
 import (
-	"bufio"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
@@ -32,6 +31,7 @@ type server struct {
 	maxSize   int64
 	timeout   time.Duration
 	sem       chan int
+	clientPool       *Pool
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
@@ -41,14 +41,14 @@ func newServer(sc *ServerConfig, b Backend) (*server, error) {
 		backend: b,
 		maxSize: sc.MaxSize,
 		sem:     make(chan int, sc.MaxClients),
+		timeout : time.Duration(sc.Timeout),
+		clientPool: NewPool(sc.MaxClients),
 	}
-
 	if server.config.TLSAlwaysOn || server.config.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(server.config.PublicKeyFile, server.config.PrivateKeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error loading TLS certificate: %s", err.Error())
 		}
-
 		server.tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.VerifyClientCertIfGiven,
@@ -56,9 +56,6 @@ func newServer(sc *ServerConfig, b Backend) (*server, error) {
 			Rand:         rand.Reader,
 		}
 	}
-
-	server.timeout = time.Duration(server.config.Timeout) * time.Second
-
 	return server, nil
 }
 
@@ -80,16 +77,15 @@ func (server *server) Start() error {
 			continue
 		}
 		server.sem <- 1
-		go server.handleClient(&client{
-			Envelope: &Envelope{
-				RemoteAddress: conn.RemoteAddr().String(),
-			},
-			conn:        conn,
-			ConnectedAt: time.Now(),
-			bufin:       newSMTPBufferedReader(conn),
-			bufout:      bufio.NewWriter(conn),
-			ID:          clientID,
-		})
+		go func(){
+			c, err:=server.clientPool.Borrow(conn, clientID)
+			if err == nil {
+				server.handleClient(c)
+				server.clientPool.Return(c)
+			} else {
+				log.WithError(err).Info("couldn't borrow a new client")
+			}
+		}()
 		clientID++
 	}
 }
@@ -113,8 +109,8 @@ func (server *server) upgradeToTLS(client *client) bool {
 		return false
 	}
 	client.conn = net.Conn(tlsConn)
-	client.bufin = newSMTPBufferedReader(client.conn)
-	client.bufout = bufio.NewWriter(client.conn)
+	client.bufout.Reset(client.conn)
+	client.bufin.Reset(client.conn)
 	client.TLS = true
 
 	return true
@@ -141,7 +137,7 @@ func (server *server) read(client *client) (string, error) {
 	}
 
 	for {
-		client.conn.SetDeadline(time.Now().Add(server.timeout))
+		client.SetTimeout(server.timeout)
 		reply, err = client.bufin.ReadString('\n')
 		input = input + reply
 		if client.state == ClientData && reply != "" {
@@ -163,7 +159,7 @@ func (server *server) read(client *client) (string, error) {
 
 // Writes a response to the client.
 func (server *server) writeResponse(client *client) error {
-	client.conn.SetDeadline(time.Now().Add(server.timeout))
+	client.SetTimeout(server.timeout)
 	size, err := client.bufout.WriteString(client.response)
 	if err != nil {
 		return err
@@ -212,7 +208,6 @@ func (server *server) handleClient(client *client) {
 		case ClientGreeting:
 			client.responseAdd(greeting)
 			client.state = ClientCmd
-
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := server.read(client)

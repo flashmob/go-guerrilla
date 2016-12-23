@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,10 +32,11 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response string
-	conn     net.Conn
-	bufin    *smtpBufferedReader
-	bufout   *bufio.Writer
+	response  string
+	conn      net.Conn
+	bufin     *smtpBufferedReader
+	bufout    *bufio.Writer
+	timeoutMu sync.Mutex
 }
 
 // Email represents a single SMTP message.
@@ -50,6 +52,19 @@ type Envelope struct {
 	Data          string
 	Subject       string
 	TLS           bool
+}
+
+func NewClient(conn net.Conn, clientID int64) *client {
+	return &client{
+		conn:             conn,
+		Envelope: &Envelope{
+			RemoteAddress: conn.RemoteAddr().String(),
+		},
+		ConnectedAt:      time.Now(),
+		bufin:            newSMTPBufferedReader(conn),
+		bufout:           bufio.NewWriter(conn),
+		ID:               clientID,
+	}
 }
 
 func (c *client) responseAdd(r string) {
@@ -84,4 +99,26 @@ func (c *client) scanSubject(reply string) {
 			c.Subject = c.Subject + reply[1:]
 		}
 	}
+}
+
+func (c *client) SetTimeout(t time.Duration) {
+	defer c.timeoutMu.Unlock()
+	c.timeoutMu.Lock()
+	c.conn.SetDeadline(time.Now().Add(t * time.Second))
+}
+
+func (c *client) Reset(conn net.Conn, clientID int64) {
+	c.conn = conn
+	// reset our reader & writer
+	c.bufout.Reset(conn)
+	c.bufin.Reset(conn)
+	// reset session data
+	c.state = 0
+	c.KilledAt = time.Time{}
+	c.ConnectedAt = time.Now()
+	c.ID = clientID
+	c.TLS = false
+	c.errors = 0
+	c.response = ""
+	c.Helo = ""
 }

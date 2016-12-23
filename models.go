@@ -109,6 +109,12 @@ func (sbr *smtpBufferedReader) setLimit(n int64) {
 	sbr.alr.setLimit(n)
 }
 
+// Set a new reader & use it to reset the underlying reader
+func (sbr *smtpBufferedReader) Reset(r io.Reader) {
+	sbr.alr = newAdjustableLimitedReader(r, CommandLineMaxLength)
+	sbr.Reader.Reset(sbr.alr)
+}
+
 // Allocate a new SMTPBufferedReader
 func newSMTPBufferedReader(rd io.Reader) *smtpBufferedReader {
 	alr := newAdjustableLimitedReader(rd, CommandLineMaxLength)
