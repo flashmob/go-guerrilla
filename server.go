@@ -70,7 +70,7 @@ func (server *server) Start() error {
 	}
 
 	log.Infof("Listening on TCP %s", server.config.ListenInterface)
-	var clientID int64
+	var clientID uint64
 	clientID = 1
 	for {
 		log.Debugf("Waiting for a new client. Client ID: %d", clientID)

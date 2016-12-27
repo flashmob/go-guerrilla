@@ -26,7 +26,7 @@ const (
 
 type client struct {
 	*Envelope
-	ID          int64
+	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
 	// Number of errors encountered during session with this client
@@ -56,7 +56,7 @@ type Envelope struct {
 	TLS     bool
 }
 
-func NewClient(conn net.Conn, clientID int64) *client {
+func NewClient(conn net.Conn, clientID uint64) *client {
 	return &client{
 		conn: conn,
 		Envelope: &Envelope{
@@ -109,7 +109,7 @@ func (c *client) SetTimeout(t time.Duration) {
 	c.conn.SetDeadline(time.Now().Add(t * time.Second))
 }
 
-func (c *client) Init(conn net.Conn, clientID int64) {
+func (c *client) Init(conn net.Conn, clientID uint64) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)

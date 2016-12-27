@@ -26,7 +26,7 @@ type Pool struct {
 }
 
 type lentClients struct {
-	m  map[int64]*client
+	m  map[uint64]*client
 	mu sync.Mutex // guards access to this struct
 }
 
@@ -35,7 +35,7 @@ func NewPool(poolSize int) *Pool {
 	return &Pool{
 		pool:         make(chan *client, poolSize),
 		sem:          make(chan bool, poolSize),
-		lendingBook:  lentClients{m: make(map[int64]*client, poolSize)},
+		lendingBook:  lentClients{m: make(map[uint64]*client, poolSize)},
 		ShutdownChan: make(chan int, 1),
 	}
 }
@@ -79,7 +79,7 @@ func (p *Pool) GetActiveClientsCount() int {
 }
 
 // Borrow a Client from the pool. Will block if len(activeClients) > maxClients
-func (p *Pool) Borrow(conn net.Conn, clientID int64) (*client, error) {
+func (p *Pool) Borrow(conn net.Conn, clientID uint64) (*client, error) {
 	p.borrowGuard.Lock()
 	defer p.borrowGuard.Unlock()
 	var c *client
