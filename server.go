@@ -104,10 +104,9 @@ func (server *server) Shutdown() {
 	//server.shuttingDownFlag.Store(true)
 	//cfg := server.configStore.Load().(guerrilla.ServerConfig)
 	//log.Infof("shutting down pool [%s]", cfg.ListenInterface)
-	log.Infof("shutting down pool")
+	log.Infof("shutting down pool [%s]", server.config.ListenInterface)
 	server.clientPool.Shutdown()
 
-	//log.Infof("Waiting for all [%s] clients to close", cfg.ListenInterface)
 
 }
 
@@ -264,7 +263,7 @@ func (server *server) handleClient(client *client) {
 				break
 			}
 			if server.isShuttingDown() {
-				client.state = 4
+				client.state = ClientShutdown
 				continue
 			}
 
@@ -357,6 +356,9 @@ func (server *server) handleClient(client *client) {
 				continue
 			}
 			client.state = ClientCmd
+			if server.isShuttingDown() {
+				client.state = ClientShutdown
+			}
 
 			if client.MailFrom.isEmpty() {
 				client.responseAdd("550 Error: No sender")
@@ -386,7 +388,7 @@ func (server *server) handleClient(client *client) {
 			}
 			// change to command state
 			client.state = ClientCmd
-		case 4:
+		case ClientShutdown:
 			// shutdown state
 			client.responseAdd("421 Server is shutting down. Please try again later. Sayonara!")
 			client.kill()

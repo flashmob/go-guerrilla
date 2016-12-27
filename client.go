@@ -20,6 +20,8 @@ const (
 	ClientData
 	// We have agreed with the client to secure the connection over TLS
 	ClientStartTLS
+	// Server will shutdown, client to shutdown on next command turn
+	ClientShutdown
 )
 
 type client struct {
