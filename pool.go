@@ -33,9 +33,9 @@ type lentClients struct {
 // NewPool creates a new pool of Clients.
 func NewPool(poolSize int) *Pool {
 	return &Pool{
-		pool:        make(chan *client, poolSize),
-		sem:         make(chan bool, poolSize),
-		lendingBook: lentClients{m: make(map[int64]*client, poolSize)},
+		pool:         make(chan *client, poolSize),
+		sem:          make(chan bool, poolSize),
+		lendingBook:  lentClients{m: make(map[int64]*client, poolSize)},
 		ShutdownChan: make(chan int, 1),
 	}
 }
@@ -46,8 +46,8 @@ func NewPool(poolSize int) *Pool {
 func (p *Pool) Shutdown() {
 	const aVeryLowTimeout = 1
 	p.isShuttingDownFlg.Store(true) // close from borrowing
-	p.ShutdownChan <- 1 // release any waiting p.sem
-	p.borrowGuard.Lock() // ensure no other thread is in the borrowing now
+	p.ShutdownChan <- 1             // release any waiting p.sem
+	p.borrowGuard.Lock()            // ensure no other thread is in the borrowing now
 	// set a low timeout
 	for _, c := range p.lendingBook.m {
 		c.SetTimeout(time.Duration(int64(aVeryLowTimeout)))

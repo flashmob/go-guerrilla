@@ -44,26 +44,26 @@ type Envelope struct {
 	// Remote IP address
 	RemoteAddress string
 	// Message sent in EHLO command
-	Helo          string
+	Helo string
 	// Sender
-	MailFrom      *EmailAddress
+	MailFrom *EmailAddress
 	// Recipients
-	RcptTo        []*EmailAddress
-	Data          string
-	Subject       string
-	TLS           bool
+	RcptTo  []*EmailAddress
+	Data    string
+	Subject string
+	TLS     bool
 }
 
 func NewClient(conn net.Conn, clientID int64) *client {
 	return &client{
-		conn:             conn,
+		conn: conn,
 		Envelope: &Envelope{
 			RemoteAddress: conn.RemoteAddr().String(),
 		},
-		ConnectedAt:      time.Now(),
-		bufin:            newSMTPBufferedReader(conn),
-		bufout:           bufio.NewWriter(conn),
-		ID:               clientID,
+		ConnectedAt: time.Now(),
+		bufin:       newSMTPBufferedReader(conn),
+		bufout:      bufio.NewWriter(conn),
+		ID:          clientID,
 	}
 }
 

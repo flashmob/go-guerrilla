@@ -26,23 +26,23 @@ const (
 
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
-	config    *ServerConfig
-	backend   Backend
-	tlsConfig *tls.Config
-	maxSize   int64
-	timeout   time.Duration
-	clientPool       *Pool
-	wg               sync.WaitGroup // for waiting to shutdown
-	listener net.Listener
+	config     *ServerConfig
+	backend    Backend
+	tlsConfig  *tls.Config
+	maxSize    int64
+	timeout    time.Duration
+	clientPool *Pool
+	wg         sync.WaitGroup // for waiting to shutdown
+	listener   net.Listener
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
 func newServer(sc *ServerConfig, b *Backend) (*server, error) {
 	server := &server{
-		config:  sc,
-		backend: *b,
-		maxSize: sc.MaxSize,
-		timeout : time.Duration(sc.Timeout),
+		config:     sc,
+		backend:    *b,
+		maxSize:    sc.MaxSize,
+		timeout:    time.Duration(sc.Timeout),
 		clientPool: NewPool(sc.MaxClients),
 	}
 	if server.config.TLSAlwaysOn || server.config.StartTLSOn {
@@ -83,7 +83,7 @@ func (server *server) Start() error {
 			log.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
-		go func(c *client, borrow_err error){
+		go func(c *client, borrow_err error) {
 			if borrow_err == nil {
 				server.handleClient(c)
 				server.clientPool.Return(c)
@@ -109,10 +109,7 @@ func (server *server) Shutdown() {
 
 	//log.Infof("Waiting for all [%s] clients to close", cfg.ListenInterface)
 
-
 }
-
-
 
 // wait for all active clients to finish
 func (server *server) waitAllClientsToClose() {
@@ -267,7 +264,7 @@ func (server *server) handleClient(client *client) {
 				break
 			}
 			if server.isShuttingDown() {
-				client.state = 4;
+				client.state = 4
 				continue
 			}
 
@@ -394,7 +391,6 @@ func (server *server) handleClient(client *client) {
 			client.responseAdd("421 Server is shutting down. Please try again later. Sayonara!")
 			client.kill()
 		}
-
 
 		if len(client.response) > 0 {
 			log.Debugf("Writing response to client: \n%s", client.response)

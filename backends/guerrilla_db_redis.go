@@ -158,10 +158,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			// recover form closed channel
 			fmt.Println("Recovered in f", r)
 		}
-		if db.Raw!=nil {
+		if db.Raw != nil {
 			db.Raw.Close()
 		}
-		if redisClient.conn!=nil {
+		if redisClient.conn != nil {
 			log.Infof("closed redis")
 			redisClient.conn.Close()
 		}
@@ -242,7 +242,7 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 			// handle error
 			return err
 		}
-		c.isConnected = true;
+		c.isConnected = true
 	}
 
 	return nil
