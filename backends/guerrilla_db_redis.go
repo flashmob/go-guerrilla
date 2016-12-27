@@ -131,13 +131,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 
 	var redisErr error
 	var length int
-	defer func() {
-		if r := recover(); r != nil {
-			// recover form closed channel
-			fmt.Println("Recovered in f", r)
-		}
-		g.wg.Done()
-	}()
+
 	redisClient := &redisClient{}
 	db := autorc.New(
 		"tcp",
@@ -159,6 +153,15 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 	if sqlErr != nil {
 		log.WithError(sqlErr).Fatalf("failed while db.Prepare(UPDATE...)")
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			// recover form closed channel
+			fmt.Println("Recovered in f", r)
+		}
+		db.Raw.Close()
+		redisClient.conn.Close()
+		g.wg.Done()
+	}()
 
 	//  receives values from the channel repeatedly until it is closed.
 	for {
