@@ -13,5 +13,5 @@ install:
   - glide up
 
 script:
-  - diff -u <(echo -n) <(gofmt -d .)
+  - ./.travis.gofmt.sh
   - make guerrillad
