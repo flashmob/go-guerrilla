@@ -107,7 +107,6 @@ func (server *server) Shutdown() {
 	log.Infof("shutting down pool [%s]", server.config.ListenInterface)
 	server.clientPool.Shutdown()
 
-
 }
 
 // wait for all active clients to finish
