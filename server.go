@@ -31,19 +31,17 @@ type server struct {
 	tlsConfig *tls.Config
 	maxSize   int64
 	timeout   time.Duration
-	sem       chan int
 	clientPool       *Pool
 	wg               sync.WaitGroup // for waiting to shutdown
 	listener net.Listener
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b Backend) (*server, error) {
+func newServer(sc *ServerConfig, b *Backend) (*server, error) {
 	server := &server{
 		config:  sc,
-		backend: b,
+		backend: *b,
 		maxSize: sc.MaxSize,
-		sem:     make(chan int, sc.MaxClients),
 		timeout : time.Duration(sc.Timeout),
 		clientPool: NewPool(sc.MaxClients),
 	}
@@ -119,7 +117,6 @@ func (server *server) Shutdown() {
 // wait for all active clients to finish
 func (server *server) waitAllClientsToClose() {
 	server.wg.Wait()
-	log.Infof("All clients closed")
 }
 
 func (server *server) GetActiveClientsCount() int {

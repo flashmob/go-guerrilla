@@ -1,6 +1,8 @@
 package guerrilla
 
-import log "github.com/Sirupsen/logrus"
+import (
+	log "github.com/Sirupsen/logrus"
+)
 
 type Guerrilla interface {
 	Start()
@@ -10,21 +12,20 @@ type Guerrilla interface {
 type guerrilla struct {
 	Config  *AppConfig
 	servers []*server
+	backend Backend
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig) Guerrilla {
-	g := &guerrilla{ac, []*server{}}
-
+func New(ac *AppConfig, b *Backend) Guerrilla {
+	g := &guerrilla{ac, []*server{}, *b}
 	// Instantiate servers
 	for _, sc := range ac.Servers {
 		if !sc.IsEnabled {
 			continue
 		}
-
 		// Add relevant app-wide config options to each server
 		sc.AllowedHosts = ac.AllowedHosts
-		server, err := newServer(sc, ac.Backend)
+		server, err := newServer(sc, b)
 		if err != nil {
 			log.WithError(err).Error("Failed to create server")
 		}
@@ -43,5 +44,8 @@ func (g *guerrilla) Start() {
 func (g *guerrilla) Shutdown() {
 	for _, s := range g.servers {
 		s.Shutdown()
+		log.Infof("shutdown completed for [%s]", s.config.ListenInterface)
 	}
+	g.backend.Shutdown()
+	log.Infof("Backend shutdown completed")
 }

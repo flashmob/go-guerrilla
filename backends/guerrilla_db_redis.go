@@ -75,8 +75,8 @@ func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interfa
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Finalize() error {
-	close(g.saveMailChan)
+func (g *GuerrillaDBAndRedisBackend) Shutdown() error {
+	close(g.saveMailChan) // workers will stop
 	g.wg.Wait()
 	return nil
 }
@@ -131,6 +131,13 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 
 	var redisErr error
 	var length int
+	defer func() {
+		if r := recover(); r != nil {
+			// recover form closed channel
+			fmt.Println("Recovered in f", r)
+		}
+		g.wg.Done()
+	}()
 	redisClient := &redisClient{}
 	db := autorc.New(
 		"tcp",
@@ -157,8 +164,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 	for {
 		payload := <-g.saveMailChan
 		if payload == nil {
-			log.Debug("No more payload")
-			g.wg.Done()
+			log.Debug("No more saveMailChan payload")
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost

@@ -59,8 +59,10 @@ func sigHandler(app guerrilla.Guerrilla) {
 			}
 			// TODO: reinitialize
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT {
-			log.Infof("sigkill")
+			log.Infof("Shutdown signal caught")
 			app.Shutdown()
+			log.Infof("Shutdown completd, exiting.")
+			os.Exit(0)
 		} else {
 			os.Exit(0)
 		}
@@ -102,24 +104,27 @@ func serve(cmd *cobra.Command, args []string) {
 			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
 		}
 	}
-
+	var backend guerrilla.Backend
 	switch cmdConfig.BackendName {
 	case "dummy":
 		b := &backends.DummyBackend{}
 		b.Initialize(cmdConfig.BackendConfig)
-		cmdConfig.Backend = b
+		backend = guerrilla.Backend(b)
 	case "guerrilla-db-redis":
 		b := &backends.GuerrillaDBAndRedisBackend{}
 		err = b.Initialize(cmdConfig.BackendConfig)
 		if err != nil {
 			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
 		}
-		cmdConfig.Backend = b
+
+		backend = guerrilla.Backend(b)
 	default:
 		log.Fatalf("Unknown backend: %s", cmdConfig.BackendName)
 	}
+	b := &backends.GuerrillaDBAndRedisBackend{}
+	err = b.Initialize(cmdConfig.BackendConfig)
 
-	app := guerrilla.New(&cmdConfig.AppConfig)
+	app := guerrilla.New(&cmdConfig.AppConfig, &backend)
 	go app.Start()
 	sigHandler(app)
 }

@@ -2,7 +2,6 @@ package guerrilla
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	Backend      Backend
 	Servers      []*ServerConfig `json:"servers"`
 	AllowedHosts []string        `json:"allowed_hosts"`
 }

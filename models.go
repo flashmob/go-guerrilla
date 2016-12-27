@@ -20,6 +20,7 @@ var (
 // whether the message was processed successfully.
 type Backend interface {
 	Process(*Envelope) BackendResult
+	Shutdown() error
 }
 
 // BackendResult represents a response to an SMTP client after receiving DATA.

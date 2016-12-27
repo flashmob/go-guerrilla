@@ -172,11 +172,11 @@ func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult 
 See Configuration section below for setting configuration options.
 ```go
 config := &guerrilla.AppConfig{
-  Backend: &CustomBackend{...},
   Servers: []*guerrilla.ServerConfig{...},
   AllowedHosts: []string{...}
 }
-app := guerrilla.New(config)
+backend := &CustomBackend{...}
+app := guerrilla.New(config, backend)
 ```
 
 ## Start the app.
