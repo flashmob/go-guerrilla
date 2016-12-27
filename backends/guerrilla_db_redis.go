@@ -120,9 +120,9 @@ type saveStatus struct {
 }
 
 type redisClient struct {
-	count int
-	conn  redis.Conn
-	time  int
+	isConnected bool
+	conn        redis.Conn
+	time        int
 }
 
 func (g *GuerrillaDBAndRedisBackend) saveMail() {
@@ -158,8 +158,14 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			// recover form closed channel
 			fmt.Println("Recovered in f", r)
 		}
-		db.Raw.Close()
-		redisClient.conn.Close()
+		if db.Raw!=nil {
+			db.Raw.Close()
+		}
+		if redisClient.conn!=nil {
+			log.Infof("closed redis")
+			redisClient.conn.Close()
+		}
+
 		g.wg.Done()
 	}()
 
@@ -229,13 +235,16 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
-	if c.count == 0 {
+
+	if c.isConnected == false {
 		c.conn, err = redis.Dial("tcp", redisInterface)
 		if err != nil {
 			// handle error
 			return err
 		}
+		c.isConnected = true;
 	}
+
 	return nil
 }
 
