@@ -46,21 +46,20 @@ func NewPool(poolSize int) *Pool {
 func (p *Pool) Shutdown() {
 	const aVeryLowTimeout = 1
 	p.isShuttingDownFlg.Store(true) // close from borrowing
-
 	p.ShutdownChan <- 1 // release any waiting p.sem
-
 	p.borrowGuard.Lock() // ensure no other thread is in the borrowing now
-	// set a low timeout and message the clients to kill
+	// set a low timeout
 	for _, c := range p.lendingBook.m {
 		c.SetTimeout(time.Duration(int64(aVeryLowTimeout)))
-		c.kill()
-		p.lendingBookRemove(c)
 	}
 }
 
 // returns true if the pool is shutting down
 func (p *Pool) IsShuttingDown() bool {
-	return p.isShuttingDownFlg.Load().(bool)
+	if value, ok := p.isShuttingDownFlg.Load().(bool); ok {
+		return value
+	}
+	return false
 }
 
 // set a timeout for all lent clients

@@ -77,7 +77,7 @@ func (server *server) Start() error {
 		conn, err := listener.Accept()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				log.Infof("Server [%s] has stopped", server.config.ListenInterface)
+				log.Infof("Server [%s] has stopped accepting new clients", server.config.ListenInterface)
 				return nil
 			}
 			log.WithError(err).Info("Temporary error accepting client")
@@ -206,6 +206,10 @@ func (server *server) writeResponse(client *client) error {
 	return nil
 }
 
+func (server *server) isShuttingDown() bool {
+	return server.clientPool.IsShuttingDown()
+}
+
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
@@ -261,6 +265,10 @@ func (server *server) handleClient(client *client) {
 				log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
 				client.kill()
 				break
+			}
+			if server.isShuttingDown() {
+				client.state = 4;
+				continue
 			}
 
 			input = strings.Trim(input, " \r\n")
@@ -381,7 +389,12 @@ func (server *server) handleClient(client *client) {
 			}
 			// change to command state
 			client.state = ClientCmd
+		case 4:
+			// shutdown state
+			client.responseAdd("421 Server is shutting down. Please try again later. Sayonara!")
+			client.kill()
 		}
+
 
 		if len(client.response) > 0 {
 			log.Debugf("Writing response to client: \n%s", client.response)
