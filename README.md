@@ -185,6 +185,14 @@ app := guerrilla.New(config, backend)
 app.Start()
 ```
 
+## Shutting down.
+`Shutdown` will do a graceful shutdown, close all the connections, close
+ the ports, and gracefully shutdown the backend. It will block until all
+  operations are complete.
+ 
+```go
+app.Shutdown()
+```
 
 Configuration
 ============================================
