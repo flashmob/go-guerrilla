@@ -1,4 +1,16 @@
+// integration / smokeless
+// =======================
 // Tests are in a different package so we can test as a consumer of the guerrilla package
+// The following are integration / smokeless, that test the overall server.
+// (Please put unit tests to go in a different file)
+// How it works:
+// Server's log output is redirected to the logBuffer which is then used by the tests to look for expected behaviour
+// the package sets up the logBuffer & redirection by the use of package init()
+// (self signed certs are also generated on each run)
+// server's responses from a connection are also used to check for expected behaviour
+// to run:
+// $ go test
+
 package test
 
 import (
@@ -13,14 +25,13 @@ import (
 	"bufio"
 
 	"bytes"
-	"io/ioutil"
-	//"strings"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
-	//"net"
+	"io/ioutil"
 	"net"
 	"strings"
-	//	"io"
 )
 
 type TestConfig struct {
@@ -33,9 +44,9 @@ var (
 	// hold the output of logs
 	logBuffer bytes.Buffer
 	// logs redirected to this writer
-	bw *bufio.Writer
+	logOut *bufio.Writer
 	// read the logs
-	br *bufio.Reader
+	logIn *bufio.Reader
 	// app config loaded here
 	config *TestConfig
 
@@ -45,10 +56,10 @@ var (
 )
 
 func init() {
-	bw = bufio.NewWriter(&logBuffer)
-	br = bufio.NewReader(&logBuffer)
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
 	log.SetLevel(log.DebugLevel)
-	log.SetOutput(bw)
+	log.SetOutput(logOut)
 	config = &TestConfig{}
 	if err := json.Unmarshal([]byte(configJson), config); err != nil {
 		initErr = errors.New("Could not unmartial config," + err.Error())
@@ -132,8 +143,8 @@ func TestStart(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	app.Shutdown()
-	bw.Flush()
-	if read, err := ioutil.ReadAll(br); err == nil {
+	logOut.Flush()
+	if read, err := ioutil.ReadAll(logIn); err == nil {
 		logOutput := string(read)
 		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:4654"); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:4654")
@@ -160,7 +171,7 @@ func TestStart(t *testing.T) {
 			t.Error("Server did not complete shutdown on 127.0.0.1:2526")
 		}
 		if i := strings.Index(logOutput, "shutting down pool [127.0.0.1:4654]"); i < 0 {
-			t.Error("Server did not shutdown shutdown on 127.0.0.1:4654")
+			t.Error("Server did not shutdown pool on 127.0.0.1:4654")
 		}
 		if i := strings.Index(logOutput, "shutting down pool [127.0.0.1:2526]"); i < 0 {
 			t.Error("Server did not shutdown pool on 127.0.0.1:2526")
@@ -171,10 +182,11 @@ func TestStart(t *testing.T) {
 
 	}
 	logBuffer.Reset()
-	br.Reset(&logBuffer)
+	logIn.Reset(&logBuffer)
 
 }
 
+// Simple smoke-test to see if the server can listen & issues a greeting on connect
 func TestGreeting(t *testing.T) {
 	//log.SetOutput(os.Stdout)
 	if initErr != nil {
@@ -182,23 +194,51 @@ func TestGreeting(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
+
+		// 1. plaintext connection
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
 		if err != nil {
 			// handle error
 			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
 		}
-		fmt.Fprint(conn, "HELO localtester")
 		conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500)))
-		helo, err := bufio.NewReader(conn).ReadString('\n')
+		greeting, err := bufio.NewReader(conn).ReadString('\n')
+		//fmt.Println(greeting)
 		if err != nil {
 			t.Error(err)
+			t.FailNow()
 		} else {
 			expected := "220 mail.guerrillamail.com SMTP Guerrilla"
-			if strings.Index(helo, expected) != 0 {
-				t.Error("Server did not have the expected greeting prefix", expected)
+			if strings.Index(greeting, expected) != 0 {
+				t.Error("Server[1] did not have the expected greeting prefix", expected)
 			}
 		}
+		conn.Close()
 
+		// 2. tls connection
+		roots, err := x509.SystemCertPool()
+		conn, err = tls.Dial("tcp", config.Servers[1].ListenInterface, &tls.Config{
+			RootCAs:            roots,
+			InsecureSkipVerify: true,
+			ServerName:         "127.0.0.1",
+		})
+		if err != nil {
+			// handle error
+			t.Error(err, "Cannot dial server (TLS)", config.Servers[1].ListenInterface)
+			t.FailNow()
+		}
+		conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500)))
+		greeting, err = bufio.NewReader(conn).ReadString('\n')
+		//fmt.Println(greeting)
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		} else {
+			expected := "220 mail.guerrillamail.com SMTP Guerrilla"
+			if strings.Index(greeting, expected) != 0 {
+				t.Error("Server[2] (TLS) did not have the expected greeting prefix", expected)
+			}
+		}
 		conn.Close()
 
 	} else {
@@ -209,16 +249,91 @@ func TestGreeting(t *testing.T) {
 			t.FailNow()
 		}
 	}
-
-	bw.Flush()
-	if read, err := ioutil.ReadAll(br); err == nil {
+	app.Shutdown()
+	logOut.Flush()
+	if read, err := ioutil.ReadAll(logIn); err == nil {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
 
-	app.Shutdown()
+}
+
+// start up a server, connect a client, greet, then shutdown, then client sends a command
+// expecting: 421 Server is shutting down. Please try again later. Sayonara!
+// server should close connection after that
+func TestShutDown(t *testing.T) {
+
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
+		if err != nil {
+			// handle error
+			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
+		}
+		bufin := bufio.NewReader(conn)
+
+		// should be ample time to complete the test
+		conn.SetDeadline(time.Now().Add(time.Duration(time.Second * 20)))
+		// read greeting, ignore it
+		_, err = bufin.ReadString('\n')
+
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			n, err := fmt.Fprintln(conn, "HELO localtester\r")
+			if err != nil {
+				log.WithError(err).Info("n was %d", n)
+			}
+			_, err = bufin.ReadString('\n')
+
+			// do a shutdown while the client is connected & in client state
+			go app.Shutdown()
+
+			// issue a command while shutting down
+			n, err = fmt.Fprintln(conn, "HELP\r")
+			if err != nil {
+				log.WithError(err).Info("n was %d", n)
+			}
+			response, err := bufin.ReadString('\n')
+			//fmt.Println(response)
+			expected := "421 Server is shutting down. Please try again later. Sayonara!"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not shut down with", expected)
+			}
+			time.Sleep(time.Millisecond * 250) // let server to close
+
+		}
+
+		conn.Close()
+
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		//	fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
+			t.Error("Server did not handle any clients")
+		}
+	}
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
 
 }

@@ -85,6 +85,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
 				log.Infof("Server [%s] has stopped accepting new clients", server.config.ListenInterface)
 				// the listener has been closed, wait for clients to exit
+				log.Infof("shutting down pool [%s]", server.config.ListenInterface)
 				server.clientPool.ShutdownWait()
 				server.closedListener <- true
 				return nil
