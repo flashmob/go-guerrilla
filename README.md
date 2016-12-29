@@ -1,4 +1,6 @@
 
+[![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
+
 Go-Guerrilla SMTPd
 ====================
 
@@ -172,19 +174,27 @@ func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult 
 See Configuration section below for setting configuration options.
 ```go
 config := &guerrilla.AppConfig{
-  Backend: &CustomBackend{...},
   Servers: []*guerrilla.ServerConfig{...},
   AllowedHosts: []string{...}
 }
-app := guerrilla.New(config)
+backend := &CustomBackend{...}
+app := guerrilla.New(config, backend)
 ```
 
 ## Start the app.
 `Start` is non-blocking, so make sure the main goroutine is kept busy
 ```go
-app.Start()
+app.Start() (startErrors []error)
 ```
 
+## Shutting down.
+`Shutdown` will do a graceful shutdown, close all the connections, close
+ the ports, and gracefully shutdown the backend. It will block until all
+  operations are complete.
+ 
+```go
+app.Shutdown()
+```
 
 Configuration
 ============================================

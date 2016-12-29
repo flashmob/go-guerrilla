@@ -44,11 +44,12 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 }
 
-func sigHandler() {
+func sigHandler(app guerrilla.Guerrilla) {
 	// handle SIGHUP for reloading the configuration while running
-	signal.Notify(signalChannel, syscall.SIGHUP)
+	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL)
 
 	for sig := range signalChannel {
+
 		if sig == syscall.SIGHUP {
 			err := readConfig(configPath, verbose, &cmdConfig)
 			if err != nil {
@@ -57,6 +58,11 @@ func sigHandler() {
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
 			}
 			// TODO: reinitialize
+		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
+			log.Infof("Shutdown signal caught")
+			app.Shutdown()
+			log.Infof("Shutdown completd, exiting.")
+			os.Exit(0)
 		} else {
 			os.Exit(0)
 		}
@@ -98,26 +104,29 @@ func serve(cmd *cobra.Command, args []string) {
 			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
 		}
 	}
-
+	var backend guerrilla.Backend
 	switch cmdConfig.BackendName {
 	case "dummy":
 		b := &backends.DummyBackend{}
 		b.Initialize(cmdConfig.BackendConfig)
-		cmdConfig.Backend = b
+		backend = guerrilla.Backend(b)
 	case "guerrilla-db-redis":
 		b := &backends.GuerrillaDBAndRedisBackend{}
 		err = b.Initialize(cmdConfig.BackendConfig)
 		if err != nil {
 			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
 		}
-		cmdConfig.Backend = b
+
+		backend = guerrilla.Backend(b)
 	default:
 		log.Fatalf("Unknown backend: %s", cmdConfig.BackendName)
 	}
+	b := &backends.GuerrillaDBAndRedisBackend{}
+	err = b.Initialize(cmdConfig.BackendConfig)
 
-	app := guerrilla.New(&cmdConfig.AppConfig)
+	app := guerrilla.New(&cmdConfig.AppConfig, &backend)
 	go app.Start()
-	sigHandler()
+	sigHandler(app)
 }
 
 // Superset of `guerrilla.AppConfig` containing options specific

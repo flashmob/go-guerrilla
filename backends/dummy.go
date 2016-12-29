@@ -27,6 +27,10 @@ func (b *DummyBackend) Initialize(config map[string]interface{}) {
 	b.loadConfig(config)
 }
 
+func (b *DummyBackend) Shutdown() error {
+	return nil
+}
+
 func (b *DummyBackend) Process(mail *guerrilla.Envelope) guerrilla.BackendResult {
 	if b.config.LogReceivedMails {
 		log.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)

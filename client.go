@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,11 +20,13 @@ const (
 	ClientData
 	// We have agreed with the client to secure the connection over TLS
 	ClientStartTLS
+	// Server will shutdown, client to shutdown on next command turn
+	ClientShutdown
 )
 
 type client struct {
 	*Envelope
-	ID          int64
+	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
 	// Number of errors encountered during session with this client
@@ -31,10 +34,11 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response string
-	conn     net.Conn
-	bufin    *smtpBufferedReader
-	bufout   *bufio.Writer
+	response  string
+	conn      net.Conn
+	bufin     *smtpBufferedReader
+	bufout    *bufio.Writer
+	timeoutMu sync.Mutex
 }
 
 // Email represents a single SMTP message.
@@ -42,14 +46,27 @@ type Envelope struct {
 	// Remote IP address
 	RemoteAddress string
 	// Message sent in EHLO command
-	Helo          string
+	Helo string
 	// Sender
-	MailFrom      *EmailAddress
+	MailFrom *EmailAddress
 	// Recipients
-	RcptTo        []*EmailAddress
-	Data          string
-	Subject       string
-	TLS           bool
+	RcptTo  []*EmailAddress
+	Data    string
+	Subject string
+	TLS     bool
+}
+
+func NewClient(conn net.Conn, clientID uint64) *client {
+	return &client{
+		conn: conn,
+		Envelope: &Envelope{
+			RemoteAddress: conn.RemoteAddr().String(),
+		},
+		ConnectedAt: time.Now(),
+		bufin:       newSMTPBufferedReader(conn),
+		bufout:      bufio.NewWriter(conn),
+		ID:          clientID,
+	}
 }
 
 func (c *client) responseAdd(r string) {
@@ -84,4 +101,30 @@ func (c *client) scanSubject(reply string) {
 			c.Subject = c.Subject + reply[1:]
 		}
 	}
+}
+
+func (c *client) setTimeout(t time.Duration) {
+	defer c.timeoutMu.Unlock()
+	c.timeoutMu.Lock()
+	c.conn.SetDeadline(time.Now().Add(t * time.Second))
+}
+
+func (c *client) init(conn net.Conn, clientID uint64) {
+	c.conn = conn
+	// reset our reader & writer
+	c.bufout.Reset(conn)
+	c.bufin.Reset(conn)
+	// reset session data
+	c.state = 0
+	c.KilledAt = time.Time{}
+	c.ConnectedAt = time.Now()
+	c.ID = clientID
+	c.TLS = false
+	c.errors = 0
+	c.response = ""
+	c.Helo = ""
+}
+
+func (c *client) getID() uint64 {
+	return c.ID
 }

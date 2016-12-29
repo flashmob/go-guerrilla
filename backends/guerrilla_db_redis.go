@@ -75,8 +75,8 @@ func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interfa
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Finalize() error {
-	close(g.saveMailChan)
+func (g *GuerrillaDBAndRedisBackend) Shutdown() error {
+	close(g.saveMailChan) // workers will stop
 	g.wg.Wait()
 	return nil
 }
@@ -120,9 +120,9 @@ type saveStatus struct {
 }
 
 type redisClient struct {
-	count int
-	conn  redis.Conn
-	time  int
+	isConnected bool
+	conn        redis.Conn
+	time        int
 }
 
 func (g *GuerrillaDBAndRedisBackend) saveMail() {
@@ -131,6 +131,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 
 	var redisErr error
 	var length int
+
 	redisClient := &redisClient{}
 	db := autorc.New(
 		"tcp",
@@ -152,13 +153,27 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 	if sqlErr != nil {
 		log.WithError(sqlErr).Fatalf("failed while db.Prepare(UPDATE...)")
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			// recover form closed channel
+			fmt.Println("Recovered in f", r)
+		}
+		if db.Raw != nil {
+			db.Raw.Close()
+		}
+		if redisClient.conn != nil {
+			log.Infof("closed redis")
+			redisClient.conn.Close()
+		}
+
+		g.wg.Done()
+	}()
 
 	//  receives values from the channel repeatedly until it is closed.
 	for {
 		payload := <-g.saveMailChan
 		if payload == nil {
-			log.Debug("No more payload")
-			g.wg.Done()
+			log.Debug("No more saveMailChan payload")
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
@@ -220,13 +235,16 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
-	if c.count == 0 {
+
+	if c.isConnected == false {
 		c.conn, err = redis.Dial("tcp", redisInterface)
 		if err != nil {
 			// handle error
 			return err
 		}
+		c.isConnected = true
 	}
+
 	return nil
 }
 
