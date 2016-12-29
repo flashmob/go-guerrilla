@@ -26,7 +26,7 @@ import (
 
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
+	//	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -216,9 +216,9 @@ func TestGreeting(t *testing.T) {
 		conn.Close()
 
 		// 2. tls connection
-		roots, err := x509.SystemCertPool()
+		//	roots, err := x509.SystemCertPool()
 		conn, err = tls.Dial("tcp", config.Servers[1].ListenInterface, &tls.Config{
-			RootCAs:            roots,
+
 			InsecureSkipVerify: true,
 			ServerName:         "127.0.0.1",
 		})
