@@ -1,4 +1,6 @@
 
+[![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
+
 Go-Guerrilla SMTPd
 ====================
 
