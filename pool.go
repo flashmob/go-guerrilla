@@ -25,7 +25,6 @@ type Poolable interface {
 	getID() uint64
 }
 
-
 // Pool holds Clients.
 type Pool struct {
 	// clients that are ready to be borrowed
