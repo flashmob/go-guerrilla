@@ -15,3 +15,4 @@ install:
 script:
   - ./.travis.gofmt.sh
   - make guerrillad
+  - go test ./tests
