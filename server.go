@@ -14,6 +14,7 @@ import (
 	"runtime"
 
 	log "github.com/Sirupsen/logrus"
+
 	"sync"
 )
 
@@ -26,24 +27,26 @@ const (
 
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
-	config     *ServerConfig
-	backend    Backend
-	tlsConfig  *tls.Config
-	maxSize    int64
-	timeout    time.Duration
-	clientPool *Pool
-	wg         sync.WaitGroup // for waiting to shutdown
-	listener   net.Listener
+	config         *ServerConfig
+	backend        Backend
+	tlsConfig      *tls.Config
+	maxSize        int64
+	timeout        time.Duration
+	clientPool     *Pool
+	wg             sync.WaitGroup // for waiting to shutdown
+	listener       net.Listener
+	closedListener chan (bool)
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b *Backend) (*server, error) {
+func newServer(sc ServerConfig, b *Backend) (*server, error) {
 	server := &server{
-		config:     sc,
-		backend:    *b,
-		maxSize:    sc.MaxSize,
-		timeout:    time.Duration(sc.Timeout),
-		clientPool: NewPool(sc.MaxClients),
+		config:         &sc,
+		backend:        *b,
+		maxSize:        sc.MaxSize,
+		timeout:        time.Duration(sc.Timeout),
+		clientPool:     NewPool(sc.MaxClients),
+		closedListener: make(chan (bool), 1),
 	}
 	if server.config.TLSAlwaysOn || server.config.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(server.config.PublicKeyFile, server.config.PrivateKeyFile)
@@ -61,23 +64,33 @@ func newServer(sc *ServerConfig, b *Backend) (*server, error) {
 }
 
 // Begin accepting SMTP clients
-func (server *server) Start() error {
-	defer server.waitAllClientsToClose()
+func (server *server) Start(startWG *sync.WaitGroup) error {
+	var clientID uint64
+	clientID = 0
+
 	listener, err := net.Listen("tcp", server.config.ListenInterface)
 	server.listener = listener
 	if err != nil {
-		return fmt.Errorf("Cannot listen on port: %s", err.Error())
+		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.config.ListenInterface, err.Error())
 	}
 
 	log.Infof("Listening on TCP %s", server.config.ListenInterface)
-	var clientID uint64
-	clientID = 1
+	startWG.Done() // start successful
+
+	defer func() {
+		// shutdown the pool just before leaving, will block until pool is shut
+		log.Infof("shutting down pool [%s]", server.config.ListenInterface)
+		server.clientPool.ShutdownWait()
+	}()
+
 	for {
-		log.Debugf("Waiting for a new client. Client ID: %d", clientID)
+		log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.config.ListenInterface, clientID+1)
 		conn, err := listener.Accept()
+		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
 				log.Infof("Server [%s] has stopped accepting new clients", server.config.ListenInterface)
+				server.closedListener <- true
 				return nil
 			}
 			log.WithError(err).Info("Temporary error accepting client")
@@ -93,25 +106,23 @@ func (server *server) Start() error {
 				conn.Close()
 
 			}
-		}(server.clientPool.Borrow(conn, clientID)) // intentionally placed so that evaluation happens before go func
-		clientID++
+			// intentionally placed Borrow in args so that it's called in the
+			// same main goroutine.
+		}(server.clientPool.Borrow(conn, clientID))
+
 	}
 }
 
 func (server *server) Shutdown() {
-	defer server.waitAllClientsToClose()
-	server.listener.Close()
-	//server.shuttingDownFlag.Store(true)
-	//cfg := server.configStore.Load().(guerrilla.ServerConfig)
-	//log.Infof("shutting down pool [%s]", cfg.ListenInterface)
-	log.Infof("shutting down pool [%s]", server.config.ListenInterface)
-	server.clientPool.Shutdown()
 
-}
+	server.clientPool.ShutdownState()
+	if server.listener != nil {
+		server.listener.Close()
+		// wait for the listener to close.
+		<-server.closedListener
+		// At this point Start will exit and close down the pool
+	}
 
-// wait for all active clients to finish
-func (server *server) waitAllClientsToClose() {
-	server.wg.Wait()
 }
 
 func (server *server) GetActiveClientsCount() int {
@@ -148,8 +159,6 @@ func (server *server) upgradeToTLS(client *client) bool {
 func (server *server) closeConn(client *client) {
 	client.conn.Close()
 	client.conn = nil
-	server.wg.Done()
-	//<-server.sem
 }
 
 // Reads from the client until a terminating sequence is encountered,
@@ -208,7 +217,7 @@ func (server *server) isShuttingDown() bool {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
-	server.wg.Add(1)
+
 	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
 	// Initial greeting

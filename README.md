@@ -182,7 +182,7 @@ app := guerrilla.New(config, backend)
 ## Start the app.
 `Start` is non-blocking, so make sure the main goroutine is kept busy
 ```go
-app.Start()
+app.Start() (startErrors []error)
 ```
 
 ## Shutting down.
