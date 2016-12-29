@@ -77,12 +77,6 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 	log.Infof("Listening on TCP %s", server.config.ListenInterface)
 	startWG.Done() // start successful
 
-	defer func() {
-		// shutdown the pool just before leaving, will block until pool is shut
-		log.Infof("shutting down pool [%s]", server.config.ListenInterface)
-		server.clientPool.ShutdownWait()
-	}()
-
 	for {
 		log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.config.ListenInterface, clientID+1)
 		conn, err := listener.Accept()
@@ -90,6 +84,8 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
 				log.Infof("Server [%s] has stopped accepting new clients", server.config.ListenInterface)
+				// the listener has been closed, wait for clients to exit
+				server.clientPool.ShutdownWait()
 				server.closedListener <- true
 				return nil
 			}
@@ -115,15 +111,16 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 }
 
 func (server *server) Shutdown() {
-
 	server.clientPool.ShutdownState()
 	if server.listener != nil {
 		server.listener.Close()
 		// wait for the listener to close.
 		<-server.closedListener
 		// At this point Start will exit and close down the pool
+	} else {
+		// listener already closed, wait for clients to exit
+		server.clientPool.ShutdownWait()
 	}
-
 }
 
 func (server *server) GetActiveClientsCount() int {

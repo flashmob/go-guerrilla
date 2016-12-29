@@ -2,7 +2,6 @@ package guerrilla
 
 import (
 	"errors"
-	log "github.com/Sirupsen/logrus"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -65,8 +64,7 @@ func (p *Pool) ShutdownState() {
 	p.poolGuard.Lock() // ensure no other thread is in the borrowing now
 	defer p.poolGuard.Unlock()
 	p.isShuttingDownFlg.Store(true) // no more borrowing
-	log.Info("wait p.ShutdownChan <- 1     ", len(p.ShutdownChan))
-	p.ShutdownChan <- 1 // release any waiting p.sem
+	p.ShutdownChan <- 1             // release any waiting p.sem
 
 	// set a low timeout
 	var c Poolable
@@ -79,7 +77,6 @@ func (p *Pool) ShutdownState() {
 func (p *Pool) ShutdownWait() {
 	p.poolGuard.Lock() // ensure no other thread is in the borrowing now
 	defer p.poolGuard.Unlock()
-
 	p.activeClients.wg.Wait() // wait for clients to finish
 	if len(p.ShutdownChan) > 0 {
 		// drain
