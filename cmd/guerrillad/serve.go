@@ -46,7 +46,7 @@ func init() {
 
 func sigHandler(app guerrilla.Guerrilla) {
 	// handle SIGHUP for reloading the configuration while running
-	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, os.Interrupt)
+	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL)
 
 	for sig := range signalChannel {
 
@@ -58,7 +58,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
 			}
 			// TODO: reinitialize
-		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT {
+		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			log.Infof("Shutdown signal caught")
 			app.Shutdown()
 			log.Infof("Shutdown completd, exiting.")
