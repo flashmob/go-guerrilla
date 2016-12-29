@@ -96,7 +96,8 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			log.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
-		go func(c *client, borrow_err error) {
+		go func(p Poolable, borrow_err error) {
+			c := p.(*client)
 			if borrow_err == nil {
 				server.handleClient(c)
 				server.clientPool.Return(c)
@@ -175,7 +176,7 @@ func (server *server) read(client *client) (string, error) {
 	}
 
 	for {
-		client.SetTimeout(server.timeout)
+		client.setTimeout(server.timeout)
 		reply, err = client.bufin.ReadString('\n')
 		input = input + reply
 		if client.state == ClientData && reply != "" {
@@ -197,7 +198,7 @@ func (server *server) read(client *client) (string, error) {
 
 // Writes a response to the client.
 func (server *server) writeResponse(client *client) error {
-	client.SetTimeout(server.timeout)
+	client.setTimeout(server.timeout)
 	size, err := client.bufout.WriteString(client.response)
 	if err != nil {
 		return err

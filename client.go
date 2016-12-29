@@ -103,13 +103,13 @@ func (c *client) scanSubject(reply string) {
 	}
 }
 
-func (c *client) SetTimeout(t time.Duration) {
+func (c *client) setTimeout(t time.Duration) {
 	defer c.timeoutMu.Unlock()
 	c.timeoutMu.Lock()
 	c.conn.SetDeadline(time.Now().Add(t * time.Second))
 }
 
-func (c *client) Init(conn net.Conn, clientID uint64) {
+func (c *client) init(conn net.Conn, clientID uint64) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)
@@ -123,4 +123,8 @@ func (c *client) Init(conn net.Conn, clientID uint64) {
 	c.errors = 0
 	c.response = ""
 	c.Helo = ""
+}
+
+func (c *client) getID() uint64 {
+	return c.ID
 }
