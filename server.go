@@ -228,6 +228,8 @@ func (server *server) read(client *client, maxSize int64) (string, error) {
 			break
 		}
 		if strings.HasSuffix(input, suffix) {
+			// discard the suffix and stop reading
+			input = input[0 : len(input)-len(suffix)]
 			break
 		}
 	}
