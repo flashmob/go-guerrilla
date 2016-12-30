@@ -20,8 +20,11 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 )
 
+const (
+	defaultPidFile = "/var/run/go-guerrilla.pid"
+)
+
 var (
-	iface      string
 	configPath string
 	pidFile    string
 
@@ -38,8 +41,9 @@ var (
 func init() {
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		"goguerrilla.conf", "Path to the configuration file")
-	serveCmd.PersistentFlags().StringVarP(&pidFile, "pid-file", "p",
-		"/var/run/go-guerrilla.pid", "Path to the pid file")
+	// intentionally didn't specify default pidFile; value from config is used if flag is empty
+	serveCmd.PersistentFlags().StringVarP(&pidFile, "pidFile", "p",
+		"", "Path to the pid file")
 
 	rootCmd.AddCommand(serveCmd)
 }
@@ -51,7 +55,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 	for sig := range signalChannel {
 
 		if sig == syscall.SIGHUP {
-			err := readConfig(configPath, verbose, &cmdConfig)
+			err := readConfig(configPath, pidFile, &cmdConfig)
 			if err != nil {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
@@ -72,7 +76,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 
-	err := readConfig(configPath, verbose, &cmdConfig)
+	err := readConfig(configPath, pidFile, &cmdConfig)
 	if err != nil {
 		log.WithError(err).Fatal("Error while reading config")
 	}
@@ -124,9 +128,13 @@ func serve(cmd *cobra.Command, args []string) {
 	b := &backends.GuerrillaDBAndRedisBackend{}
 	err = b.Initialize(cmdConfig.BackendConfig)
 
-	app := guerrilla.New(&cmdConfig.AppConfig, &backend)
-	go app.Start()
-	sigHandler(app)
+	if app, err := guerrilla.New(&cmdConfig.AppConfig, &backend); err == nil {
+		go app.Start()
+		sigHandler(app)
+	} else {
+		log.WithError(err).Fatalf("Exiting")
+	}
+
 }
 
 // Superset of `guerrilla.AppConfig` containing options specific
@@ -138,7 +146,7 @@ type CmdConfig struct {
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
-func readConfig(path string, verbose bool, config *CmdConfig) error {
+func readConfig(path string, pidFile string, config *CmdConfig) error {
 	// load in the config.
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -148,6 +156,13 @@ func readConfig(path string, verbose bool, config *CmdConfig) error {
 	err = json.Unmarshal(data, &config)
 	if err != nil {
 		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	}
+
+	// override config pidFile with with flag from the command line
+	if len(pidFile) > 0 {
+		config.AppConfig.PidFile = pidFile
+	} else if len(config.AppConfig.PidFile) == 0 {
+		config.AppConfig.PidFile = defaultPidFile
 	}
 
 	if len(config.AllowedHosts) == 0 {

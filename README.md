@@ -178,13 +178,13 @@ config := &guerrilla.AppConfig{
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}
-app := guerrilla.New(config, backend)
+app, err := guerrilla.New(config, backend)
 ```
 
 ## Start the app.
 `Start` is non-blocking, so make sure the main goroutine is kept busy
 ```go
-app.Start() (startErrors []error)
+startErrors := app.Start()
 ```
 
 ## Shutting down.

@@ -66,7 +66,7 @@ func init() {
 	} else {
 		setupCerts(config)
 		backend := getDummyBackend(config.BackendConfig)
-		app = guerrilla.New(&config.AppConfig, &backend)
+		app, _ = guerrilla.New(&config.AppConfig, &backend)
 	}
 
 }
@@ -337,3 +337,8 @@ func TestShutDown(t *testing.T) {
 	logIn.Reset(&logBuffer)
 
 }
+
+// todo: more tests
+// 1. Maximum DATA size exceeded
+// 2. Very long command
+// 3. valid DATA received (no dot char at the end)

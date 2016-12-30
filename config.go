@@ -4,6 +4,7 @@ package guerrilla
 type AppConfig struct {
 	Servers      []ServerConfig `json:"servers"`
 	AllowedHosts []string       `json:"allowed_hosts"`
+	PidFile      string         `json:"pid_file"`
 }
 
 // ServerConfig specifies config options for a single server

@@ -13,13 +13,13 @@ type Guerrilla interface {
 
 type guerrilla struct {
 	Config  *AppConfig
-	servers []server
+	servers map[string]*server
 	backend *Backend
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig, b *Backend) Guerrilla {
-	g := &guerrilla{ac, []server{}, b}
+func New(ac *AppConfig, b *Backend) (Guerrilla, error) {
+	g := &guerrilla{ac, make(map[string]*server, len(ac.Servers)), b}
 	// Instantiate servers
 	for _, sc := range ac.Servers {
 		if !sc.IsEnabled {
@@ -31,10 +31,14 @@ func New(ac *AppConfig, b *Backend) Guerrilla {
 		if err != nil {
 			log.WithError(err).Error("Failed to create server")
 		} else {
-			g.servers = append(g.servers, *server)
+			// all good.
+			g.servers[sc.ListenInterface] = server
 		}
 	}
-	return g
+	if len(g.servers) == 0 {
+		return g, errors.New("There are no servers that can start, please check your config")
+	}
+	return g, nil
 }
 
 // Entry point for the application. Starts all servers.
@@ -47,13 +51,13 @@ func (g *guerrilla) Start() (startErrors []error) {
 	var startWG sync.WaitGroup
 	startWG.Add(len(g.servers))
 	// start servers, send any errors back to errs channel
-	for i := 0; i < len(g.servers); i++ {
+	for ListenInterface := range g.servers {
 		go func(s *server) {
 			if err := s.Start(&startWG); err != nil {
 				errs <- err
 				startWG.Done()
 			}
-		}(&g.servers[i])
+		}(g.servers[ListenInterface])
 	}
 	// wait for all servers to start
 	startWG.Wait()
@@ -69,9 +73,9 @@ func (g *guerrilla) Start() (startErrors []error) {
 }
 
 func (g *guerrilla) Shutdown() {
-	for _, s := range g.servers {
+	for ListenInterface, s := range g.servers {
 		s.Shutdown()
-		log.Infof("shutdown completed for [%s]", s.config.ListenInterface)
+		log.Infof("shutdown completed for [%s]", ListenInterface)
 	}
 	log.Infof("Backend shutdown completed")
 }
