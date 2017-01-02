@@ -228,8 +228,8 @@ func (server *server) read(client *client, maxSize int64) (string, error) {
 				// Extract the subject while we're at it
 				client.scanSubject(reply)
 			}
-			if int64(len(input)) > server.config.MaxSize {
-				return input, fmt.Errorf("Maximum DATA size exceeded (%d)", server.config.MaxSize)
+			if int64(len(input)) > maxSize {
+				return input, fmt.Errorf("Maximum DATA size exceeded (%d)", maxSize)
 			}
 		}
 		if err != nil {
