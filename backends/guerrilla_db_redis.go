@@ -92,7 +92,7 @@ func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.Envelope) guerrilla
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
 	savedNotify := make(chan *saveStatus)
-	g.saveMailChan <- &savePayload{mail, from, to[0], savedNotify}
+	g.saveMailChan <- &savePayload{mail, from, &to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {

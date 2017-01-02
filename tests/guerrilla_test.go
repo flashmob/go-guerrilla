@@ -129,6 +129,32 @@ func setupCerts(c *TestConfig) {
 	}
 }
 
+func connect(serverIndex int, deadline time.Duration) (net.Conn, *bufio.Reader, error) {
+	var bufin *bufio.Reader
+
+	conn, err := net.Dial("tcp", config.Servers[serverIndex].ListenInterface)
+	if err != nil {
+		// handle error
+		//t.Error("Cannot dial server", config.Servers[0].ListenInterface)
+		return conn, bufin, errors.New("Cannot dial server: " + config.Servers[serverIndex].ListenInterface + "," + err.Error())
+	}
+	bufin = bufio.NewReader(conn)
+
+	// should be ample time to complete the test
+	conn.SetDeadline(time.Now().Add(time.Duration(time.Second * deadline)))
+	// read greeting, ignore it
+	_, err = bufin.ReadString('\n')
+	return conn, bufin, err
+}
+
+func command(conn net.Conn, bufin *bufio.Reader, command string) (reply string, err error) {
+	_, err = fmt.Fprintln(conn, command+"\r")
+	if err == nil {
+		return bufin.ReadString('\n')
+	}
+	return "", err
+}
+
 // Testing start and stop of server
 func TestStart(t *testing.T) {
 	if initErr != nil {
@@ -181,6 +207,7 @@ func TestStart(t *testing.T) {
 		}
 
 	}
+	// don't forget to reset
 	logBuffer.Reset()
 	logIn.Reset(&logBuffer)
 
@@ -258,6 +285,7 @@ func TestGreeting(t *testing.T) {
 			t.Error("Server did not handle any clients")
 		}
 	}
+	// don't forget to reset
 	logBuffer.Reset()
 	logIn.Reset(&logBuffer)
 
@@ -273,45 +301,30 @@ func TestShutDown(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
+		conn, bufin, err := connect(0, 20)
 		if err != nil {
 			// handle error
-			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
-		}
-		bufin := bufio.NewReader(conn)
-
-		// should be ample time to complete the test
-		conn.SetDeadline(time.Now().Add(time.Duration(time.Second * 20)))
-		// read greeting, ignore it
-		_, err = bufin.ReadString('\n')
-
-		if err != nil {
-			t.Error(err)
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			n, err := fmt.Fprintln(conn, "HELO localtester\r")
-			if err != nil {
-				log.WithError(err).Info("n was %d", n)
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
 			}
-			_, err = bufin.ReadString('\n')
 
 			// do a shutdown while the client is connected & in client state
 			go app.Shutdown()
 
 			// issue a command while shutting down
-			n, err = fmt.Fprintln(conn, "HELP\r")
+			response, err := command(conn, bufin, "HELP")
 			if err != nil {
-				log.WithError(err).Info("n was %d", n)
+				t.Error("Help command failed", err.Error())
 			}
-			response, err := bufin.ReadString('\n')
-			//fmt.Println(response)
 			expected := "421 Server is shutting down. Please try again later. Sayonara!"
 			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not shut down with", expected)
+				t.Error("Server did not shut down with", expected, ", it said:"+response)
 			}
 			time.Sleep(time.Millisecond * 250) // let server to close
-
 		}
 
 		conn.Close()
@@ -325,6 +338,7 @@ func TestShutDown(t *testing.T) {
 			t.FailNow()
 		}
 	}
+	// assuming server has shutdown by now
 	logOut.Flush()
 	if read, err := ioutil.ReadAll(logIn); err == nil {
 		logOutput := string(read)
@@ -333,7 +347,422 @@ func TestShutDown(t *testing.T) {
 			t.Error("Server did not handle any clients")
 		}
 	}
+	// don't forget to reset
 	logBuffer.Reset()
 	logIn.Reset(&logBuffer)
 
 }
+
+// add more than 100 recipients, it should fail at 101
+func TestRFC2821LimitRecipients(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+
+			for i := 0; i < 101; i++ {
+				if _, err := command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
+					t.Error("RCPT TO", err.Error())
+					break
+				}
+			}
+			response, err := command(conn, bufin, "RCPT TO:last@grr.la")
+			if err != nil {
+				t.Error("rcpt command failed", err.Error())
+			}
+			expected := "452 Too many recipients"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+
+		conn.Close()
+		app.Shutdown()
+
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+
+	logOut.Flush()
+
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+// RCPT TO & MAIL FROM with 64 chars in local part, it should fail at 65
+func TestRFC2832LimitLocalPart(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// repeat > 64 characters in local part
+			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 65)))
+			if err != nil {
+				t.Error("rcpt command failed", err.Error())
+			}
+			expected := "501 Local part too long"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// what about if it's exactly 64?
+			// repeat > 64 characters in local part
+			response, err = command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 64)))
+			if err != nil {
+				t.Error("rcpt command failed", err.Error())
+			}
+			expected = "250 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+
+		conn.Close()
+		app.Shutdown()
+
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+
+	logOut.Flush()
+
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+//RFC2821LimitPath fail if path > 256 but different error if below
+
+func TestRFC2821LimitPath(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// repeat > 256 characters in local part
+			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 257-7)))
+			if err != nil {
+				t.Error("rcpt command failed", err.Error())
+			}
+			expected := "501 Path too long"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// what about if it's exactly 256?
+			response, err = command(conn, bufin,
+				fmt.Sprintf("RCPT TO:%s@%s.la", strings.Repeat("a", 64), strings.Repeat("b", 257-5-64)))
+			if err != nil {
+				t.Error("rcpt command failed", err.Error())
+			}
+			expected = "454 Error: Relay access denied"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+// RFC2821LimitDomain 501 Domain cannot exceed 255 characters
+func TestRFC2821LimitDomain(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// repeat > 64 characters in local part
+			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:a@%s.l", strings.Repeat("a", 255-2)))
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := "501 Path too long"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// what about if it's exactly 255?
+			response, err = command(conn, bufin,
+				fmt.Sprintf("RCPT TO:a@%s.la", strings.Repeat("b", 255-4)))
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "454 Error: Relay access denied"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+// It should error when MAIL FROM was given twice
+func TestNestedMailCmd(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// repeat > 64 characters in local part
+			response, err := command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := "503 Error: nested MAIL command"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Plot twist: if you EHLO , it should allow MAIL FROM again
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Plot twist: if you RSET , it should allow MAIL FROM again
+			response, err = command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+// It should error on a very long command line, exceeding CommandLineMaxLength 1024
+func TestCommandLineMaxLength(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// repeat > 1024 characters
+			response, err := command(conn, bufin, strings.Repeat("s", guerrilla.CommandLineMaxLength+1))
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+
+			expected := "500 Line too long"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+// It should error on a very long message, exceeding servers config value
+func TestDataMaxLength(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := connect(0, 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+
+			response, err := command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = command(conn, bufin, "RCPT TO:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = command(conn, bufin, "DATA")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+
+			response, err = command(
+				conn,
+				bufin,
+				fmt.Sprintf("Subject:test\r\n\r\nHello %s\r\n.\r\n",
+					strings.Repeat("n", int(config.Servers[0].MaxSize-26))))
+
+			//expected := "500 Line too long"
+			expected := "550 Error: Maximum line length exceeded"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			for _, err := range startErrors {
+				t.Error(err)
+			}
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
+//
