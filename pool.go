@@ -18,8 +18,6 @@ type Poolable interface {
 	setTimeout(t time.Duration)
 	// set a new connection and client id
 	init(c net.Conn, clientID uint64)
-	// reset any internal state
-	reset()
 	// get a unique id
 	getID() uint64
 }
@@ -140,7 +138,6 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64) (Poolable, error) {
 func (p *Pool) Return(c Poolable) {
 	select {
 	case p.pool <- c:
-		c.reset()
 	default:
 		// hasta la vista, baby...
 	}

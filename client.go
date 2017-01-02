@@ -50,7 +50,7 @@ type Envelope struct {
 	// Sender
 	MailFrom *EmailAddress
 	// Recipients
-	RcptTo  []*EmailAddress
+	RcptTo  []EmailAddress
 	Data    string
 	Subject string
 	TLS     bool
@@ -73,9 +73,19 @@ func (c *client) responseAdd(r string) {
 	c.response = c.response + r + "\r\n"
 }
 
-func (c *client) reset() {
+func (c *client) resetTransaction() {
 	c.MailFrom = &EmailAddress{}
-	c.RcptTo = []*EmailAddress{}
+	c.RcptTo = []EmailAddress{}
+	c.Data = ""
+	c.Subject = ""
+}
+
+func (c *client) isInTransaction() bool {
+	isMailFromEmpty := *c.MailFrom == (EmailAddress{})
+	if isMailFromEmpty {
+		return false
+	}
+	return true
 }
 
 func (c *client) kill() {
@@ -106,7 +116,10 @@ func (c *client) scanSubject(reply string) {
 func (c *client) setTimeout(t time.Duration) {
 	defer c.timeoutMu.Unlock()
 	c.timeoutMu.Lock()
-	c.conn.SetDeadline(time.Now().Add(t * time.Second))
+	if c.conn != nil {
+		c.conn.SetDeadline(time.Now().Add(t * time.Second))
+	}
+
 }
 
 func (c *client) init(conn net.Conn, clientID uint64) {
