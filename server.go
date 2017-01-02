@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"errors"
-
 	"runtime"
 
 	log "github.com/Sirupsen/logrus"
@@ -24,6 +22,14 @@ const (
 	CommandLineMaxLength = 1024
 	// Number of allowed unrecognized commands before we terminate the connection
 	MaxUnrecognizedCommands = 5
+	// The maximum total length of a reverse-path or forward-path is 256
+	RFC2821LimitPath = 256
+	// The maximum total length of a user name or other local-part is 64
+	RFC2832LimitLocalPart = 64
+	//The maximum total length of a domain name or number is 255
+	RFC2821LimitDomain = 255
+	// The minimum total number of recipients that must be buffered is 100
+	RFC2821LimitRecipients = 100
 )
 
 // Server listens for SMTP clients on the port specified in its config
@@ -217,12 +223,14 @@ func (server *server) read(client *client, maxSize int64) (string, error) {
 		client.setTimeout(server.timeout.Load().(time.Duration))
 		reply, err = client.bufin.ReadString('\n')
 		input = input + reply
-		if client.state == ClientData && reply != "" {
-			// Extract the subject while we're at it
-			client.scanSubject(reply)
-		}
-		if int64(len(input)) > maxSize {
-			return input, fmt.Errorf("Maximum DATA size exceeded (%d)", maxSize)
+		if err == nil && client.state == ClientData {
+			if reply != "" {
+				// Extract the subject while we're at it
+				client.scanSubject(reply)
+			}
+			if int64(len(input)) > server.config.MaxSize {
+				return input, fmt.Errorf("Maximum DATA size exceeded (%d)", server.config.MaxSize)
+			}
 		}
 		if err != nil {
 			break
@@ -326,36 +334,49 @@ func (server *server) handleClient(client *client) {
 			switch {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
+				client.resetTransaction()
 				client.responseAdd(helo)
 
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
+				client.resetTransaction()
 				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + help)
 
 			case strings.Index(cmd, "HELP") == 0:
 				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
-				client.reset()
+				if client.isInTransaction() {
+					client.responseAdd("503 Error: nested MAIL command")
+					break
+				}
 				from, err := extractEmail(input[10:])
 				if err != nil {
-					client.responseAdd("550 Error: Invalid Sender")
+					client.responseAdd(err.Error())
 				} else {
 					client.MailFrom = from
 					client.responseAdd("250 OK")
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
+				if len(client.RcptTo) > RFC2821LimitRecipients {
+					client.responseAdd("452 Too many recipients")
+					break
+				}
 				to, err := extractEmail(input[8:])
 				if err != nil {
-					client.responseAdd("550 Error: Invalid Recipient")
+					client.responseAdd(err.Error())
 				} else {
-					client.RcptTo = append(client.RcptTo, to)
-					client.responseAdd("250 OK")
+					if !server.allowsHost(to.Host) {
+						client.responseAdd("454 Error: Relay access denied: " + to.Host)
+					} else {
+						client.RcptTo = append(client.RcptTo, *to)
+						client.responseAdd("250 OK")
+					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
-				client.reset()
+				client.resetTransaction()
 				client.responseAdd("250 OK")
 
 			case strings.Index(cmd, "VRFY") == 0:
@@ -369,6 +390,14 @@ func (server *server) handleClient(client *client) {
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
+				if client.MailFrom.isEmpty() {
+					client.responseAdd("503 Error: No sender")
+					break
+				}
+				if len(client.RcptTo) == 0 {
+					client.responseAdd("503 Error: No recipients")
+					break
+				}
 				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
 				client.state = ClientData
 
@@ -403,37 +432,25 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd("451 Error: " + err.Error())
 				}
 				log.WithError(err).Warn("Error reading data")
-				continue
+				break
 			}
+
+			res := server.backend.Process(client.Envelope)
+			if res.Code() < 300 {
+				client.messagesSent++
+			}
+			client.responseAdd(res.String())
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
 			}
-
-			if client.MailFrom.isEmpty() {
-				client.responseAdd("550 Error: No sender")
-				continue
-			}
-			if len(client.RcptTo) == 0 {
-				client.responseAdd("550 Error: No recipients")
-				continue
-			}
-
-			if rcptErr := server.checkRcpt(client.RcptTo); rcptErr == nil {
-				res := server.backend.Process(client.Envelope)
-				if res.Code() < 300 {
-					client.messagesSent++
-				}
-				client.responseAdd(res.String())
-			} else {
-				client.responseAdd("550 Error: " + rcptErr.Error())
-			}
+			client.resetTransaction()
 
 		case ClientStartTLS:
 			if !client.TLS && sc.StartTLSOn {
 				if server.upgradeToTLS(client) {
 					advertiseTLS = ""
-					client.reset()
+					client.resetTransaction()
 				}
 			}
 			// change to command state
@@ -454,13 +471,4 @@ func (server *server) handleClient(client *client) {
 		}
 
 	}
-}
-
-func (s *server) checkRcpt(RcptTo []*EmailAddress) error {
-	for _, rcpt := range RcptTo {
-		if !s.allowsHost(rcpt.Host) {
-			return errors.New("550 Error: Host not allowed: " + rcpt.Host)
-		}
-	}
-	return nil
 }
