@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jordanschalm/guerrilla/dashboard"
+	"github.com/flashmob/go-guerrilla/dashboard"
 )
 
 func main() {
