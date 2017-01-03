@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Guerrilla | Dashboard</title>
+	</head>
+	<body>
+		<canvas id="ram-graph" width="500" height="200"></canvas>
+	</body>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/smoothie/1.27.0/smoothie.min.js"></script>
+	<script>
+	var conn = new WebSocket('ws://localhost:8080/ws');
+	var smoothie = new SmoothieChart();
+	var ram = new TimeSeries();
+
+	smoothie.addTimeSeries(ram);
+	smoothie.streamTo(document.getElementById('ram-graph'), 1000);
+
+	conn.onclose = function(event) {
+		console.log(event);
+	}
+
+	conn.onmessage = function(event) {
+		console.log(JSON.parse(event.data));
+		var point = JSON.parse(event.data);
+		ram.append(new Date(point.t).getTime(), point.y);
+	}
+	</script>
+</html>
