@@ -42,6 +42,7 @@ func Run(c *Config) {
 	r := mux.NewRouter()
 	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/login", loginHandler)
+	r.HandleFunc("/logout", logoutHandler)
 	r.HandleFunc("/ws", webSocketHandler)
 
 	rand.Seed(time.Now().UnixNano())
@@ -93,6 +94,24 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "POST":
+		sess := getSession(r)
+		if sess == nil {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		store.unsubscribe(sess.id)
+		sess.expires = time.Now()
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	if !isLoggedIn(r) {
 		w.WriteHeader(http.StatusForbidden)
@@ -109,7 +128,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	sess.ws = conn
 	c := make(chan *point)
 	sess.send = c
-	store.subscribe(c)
+	store.subscribe(sess.id, c)
 	go sess.receive()
 	go sess.transmit()
 }
@@ -121,7 +140,7 @@ func startSession(w http.ResponseWriter, r *http.Request) error {
 		Name:  "SID",
 		Value: sessionID,
 		Path:  "/",
-		// Secure: true,
+		// Secure: true, // TODO re-add this when TLS is set up
 	}
 
 	sess := &session{

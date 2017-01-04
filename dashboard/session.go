@@ -20,7 +20,9 @@ var idCharset = []byte("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234
 type session struct {
 	start, expires time.Time
 	id             string
-	ws             *websocket.Conn
+	// Whether we have a valid
+	alive bool
+	ws    *websocket.Conn
 	// Messages to send over the websocket are received on this channel
 	send <-chan *point
 }
@@ -44,8 +46,8 @@ func (s *session) receive() {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.WithError(err).Error("Websocket closed unexpectedly")
-				break
 			}
+			break
 		}
 		log.Infof("Message: %s", string(message))
 	}

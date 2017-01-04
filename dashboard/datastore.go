@@ -13,12 +13,13 @@ const (
 
 type dataStore struct {
 	ram  []*point
-	subs []chan<- *point
+	subs map[string]chan<- *point
 }
 
 func newDataStore() *dataStore {
 	return &dataStore{
-		ram: make([]*point, 0, maxTicks),
+		ram:  make([]*point, 0, maxTicks),
+		subs: make(map[string]chan<- *point),
 	}
 }
 
@@ -31,34 +32,20 @@ func (ds *dataStore) addPoint(p *point) {
 	ds.notify(p)
 }
 
-func (ds *dataStore) subscribe(c chan<- *point) {
-	ds.subs = append(ds.subs, c)
+func (ds *dataStore) subscribe(id string, c chan<- *point) {
+	ds.subs[id] = c
+}
+
+func (ds *dataStore) unsubscribe(id string) {
+	delete(ds.subs, id)
 }
 
 func (ds *dataStore) notify(p *point) {
-	var toUnsubscribe []int
-	for i, c := range ds.subs {
+	for _, c := range ds.subs {
 		select {
 		case c <- p:
 		default:
-			close(c)
-			toUnsubscribe = append(toUnsubscribe, i)
 		}
-	}
-
-	if len(toUnsubscribe) > 0 {
-		newSubs := ds.subs[:0]
-		for i, c := range ds.subs {
-			if i != toUnsubscribe[0] {
-				newSubs = append(newSubs, c)
-			} else {
-				toUnsubscribe = toUnsubscribe[1:]
-				if len(toUnsubscribe) == 0 {
-					break
-				}
-			}
-		}
-		ds.subs = newSubs
 	}
 }
 
