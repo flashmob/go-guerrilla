@@ -1,24 +1,30 @@
 package backends
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
+
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/flashmob/go-guerrilla"
 	"github.com/garyburd/redigo/redis"
 
+	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 )
 
+func init() {
+	// decorator pattern
+	backends["guerrilla-db-redis"] = &AbstractBackend{
+		extendedBackend: &GuerrillaDBAndRedisBackend{},
+	}
+}
+
 type GuerrillaDBAndRedisBackend struct {
-	config       guerrillaDBAndRedisConfig
-	saveMailChan chan *savePayload
-	wg           sync.WaitGroup
+	helper
+	config guerrillaDBAndRedisConfig
+	AbstractBackend
 }
 
 type guerrillaDBAndRedisConfig struct {
@@ -40,83 +46,28 @@ func convertError(name string) error {
 // Load the backend config for the backend. It has already been unmarshalled
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig map[string]interface{}) error {
-	data, err := json.Marshal(backendConfig)
+func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
+	configType := baseConfig(&guerrillaDBAndRedisConfig{})
+	bcfg, err := g.helper.extractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
-
-	err = json.Unmarshal(data, &g.config)
-	if g.config.NumberOfWorkers < 1 {
-		return errors.New("Must have more than 1 worker")
-	}
-
-	return err
-}
-
-func (g *GuerrillaDBAndRedisBackend) Initialize(backendConfig map[string]interface{}) error {
-	err := g.loadConfig(backendConfig)
-	if err != nil {
-		return err
-	}
-
-	if err := g.testDbConnections(); err != nil {
-		return err
-	}
-
-	g.saveMailChan = make(chan *savePayload, g.config.NumberOfWorkers)
-
-	// start some savemail workers
-	g.wg.Add(g.config.NumberOfWorkers)
-	for i := 0; i < g.config.NumberOfWorkers; i++ {
-		go g.saveMail()
-	}
-
+	m := bcfg.(*guerrillaDBAndRedisConfig)
+	g.config = *m
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) Shutdown() error {
-	close(g.saveMailChan) // workers will stop
-	g.wg.Wait()
-	return nil
+func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
+	return g.config.NumberOfWorkers
 }
 
-func (g *GuerrillaDBAndRedisBackend) Process(mail *guerrilla.Envelope) guerrilla.BackendResult {
+func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) BackendResult {
 	to := mail.RcptTo
-	from := mail.MailFrom
+	log.Info("(g *GuerrillaDBAndRedisBackend) Process called")
 	if len(to) == 0 {
-		return guerrilla.NewBackendResult("554 Error: no recipient")
+		return NewBackendResult("554 Error: no recipient")
 	}
-
-	// to do: timeout when adding to SaveMailChan
-	// place on the channel so that one of the save mail workers can pick it up
-	// TODO: support multiple recipients
-	savedNotify := make(chan *saveStatus)
-	g.saveMailChan <- &savePayload{mail, from, &to[0], savedNotify}
-	// wait for the save to complete
-	// or timeout
-	select {
-	case status := <-savedNotify:
-		if status.err != nil {
-			return guerrilla.NewBackendResult("554 Error: " + status.err.Error())
-		}
-		return guerrilla.NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
-	case <-time.After(time.Second * 30):
-		log.Debug("timeout")
-		return guerrilla.NewBackendResult("554 Error: transaction timeout")
-	}
-}
-
-type savePayload struct {
-	mail        *guerrilla.Envelope
-	from        *guerrilla.EmailAddress
-	recipient   *guerrilla.EmailAddress
-	savedNotify chan *saveStatus
-}
-
-type saveStatus struct {
-	err  error
-	hash string
+	return nil
 }
 
 type redisClient struct {
@@ -125,7 +76,7 @@ type redisClient struct {
 	time        int
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMail() {
+func (g *GuerrillaDBAndRedisBackend) saveMailWorker() {
 	var to, body string
 	var err error
 
@@ -165,8 +116,6 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 			log.Infof("closed redis")
 			redisClient.conn.Close()
 		}
-
-		g.wg.Done()
 	}()
 
 	//  receives values from the channel repeatedly until it is closed.
@@ -235,7 +184,6 @@ func (g *GuerrillaDBAndRedisBackend) saveMail() {
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
-
 	if c.isConnected == false {
 		c.conn, err = redis.Dial("tcp", redisInterface)
 		if err != nil {
@@ -244,12 +192,11 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 		}
 		c.isConnected = true
 	}
-
 	return nil
 }
 
 // test database connection settings
-func (g *GuerrillaDBAndRedisBackend) testDbConnections() (err error) {
+func (g *GuerrillaDBAndRedisBackend) testSettings() (err error) {
 	db := autorc.New(
 		"tcp",
 		"",

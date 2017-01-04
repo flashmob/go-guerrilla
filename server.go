@@ -13,6 +13,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	"github.com/flashmob/go-guerrilla/backends"
 	"sync"
 	"sync/atomic"
 )
@@ -37,7 +38,7 @@ type server struct {
 	//mainConfigStore  atomic.Value // stores guerrilla.Config
 	configStore atomic.Value // stores guerrilla.ServerConfig
 	//config         *ServerConfig
-	backend         Backend
+	backend         backends.Backend
 	tlsConfig       *tls.Config
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
@@ -55,9 +56,9 @@ type allowedHosts struct {
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc ServerConfig, b *Backend) (*server, error) {
+func newServer(sc ServerConfig, b backends.Backend) (*server, error) {
 	server := &server{
-		backend:         *b,
+		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
@@ -390,7 +391,7 @@ func (server *server) handleClient(client *client) {
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
-				if client.MailFrom.isEmpty() {
+				if client.MailFrom.IsEmpty() {
 					client.responseAdd("503 Error: No sender")
 					break
 				}

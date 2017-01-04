@@ -3,6 +3,7 @@ package guerrilla
 import (
 	"errors"
 	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/backends"
 	"sync"
 )
 
@@ -14,12 +15,16 @@ type Guerrilla interface {
 type guerrilla struct {
 	Config  *AppConfig
 	servers map[string]*server
-	backend *Backend
+	backend backends.Backend
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig, b *Backend) (Guerrilla, error) {
-	g := &guerrilla{ac, make(map[string]*server, len(ac.Servers)), b}
+func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
+	g := &guerrilla{
+		ac,
+		make(map[string]*server, len(ac.Servers)),
+		b,
+	}
 	// Instantiate servers
 	for _, sc := range ac.Servers {
 		if !sc.IsEnabled {

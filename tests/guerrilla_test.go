@@ -66,7 +66,7 @@ func init() {
 	} else {
 		setupCerts(config)
 		backend := getDummyBackend(config.BackendConfig)
-		app, _ = guerrilla.New(&config.AppConfig, &backend)
+		app, _ = guerrilla.New(&config.AppConfig, backend)
 	}
 
 }
@@ -113,12 +113,16 @@ var configJson = `
 }
 `
 
-func getDummyBackend(backendConfig map[string]interface{}) guerrilla.Backend {
-	var backend guerrilla.Backend
-	b := &backends.DummyBackend{}
+func getDummyBackend(backendConfig map[string]interface{}) backends.Backend {
+	var backend backends.Backend
+	b := &backends.AbstractBackend{}
 	b.Initialize(backendConfig)
-	backend = guerrilla.Backend(b)
+	backend = backends.Backend(b)
 	return backend
+}
+
+func getBackend(backendName string, backendConfig map[string]interface{}) (backends.Backend, error) {
+	return backends.New(backendName, backendConfig)
 }
 
 func setupCerts(c *TestConfig) {

@@ -2,6 +2,7 @@ package guerrilla
 
 import (
 	"bufio"
+	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
 	"strings"
 	"sync"
@@ -25,7 +26,7 @@ const (
 )
 
 type client struct {
-	*Envelope
+	*envelope.Envelope
 	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
@@ -41,25 +42,10 @@ type client struct {
 	timeoutMu sync.Mutex
 }
 
-// Email represents a single SMTP message.
-type Envelope struct {
-	// Remote IP address
-	RemoteAddress string
-	// Message sent in EHLO command
-	Helo string
-	// Sender
-	MailFrom *EmailAddress
-	// Recipients
-	RcptTo  []EmailAddress
-	Data    string
-	Subject string
-	TLS     bool
-}
-
 func NewClient(conn net.Conn, clientID uint64) *client {
 	return &client{
 		conn: conn,
-		Envelope: &Envelope{
+		Envelope: &envelope.Envelope{
 			RemoteAddress: conn.RemoteAddr().String(),
 		},
 		ConnectedAt: time.Now(),
@@ -74,14 +60,14 @@ func (c *client) responseAdd(r string) {
 }
 
 func (c *client) resetTransaction() {
-	c.MailFrom = &EmailAddress{}
-	c.RcptTo = []EmailAddress{}
+	c.MailFrom = &envelope.EmailAddress{}
+	c.RcptTo = []envelope.EmailAddress{}
 	c.Data = ""
 	c.Subject = ""
 }
 
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := *c.MailFrom == (EmailAddress{})
+	isMailFromEmpty := *c.MailFrom == (envelope.EmailAddress{})
 	if isMailFromEmpty {
 		return false
 	}

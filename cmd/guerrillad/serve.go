@@ -59,6 +59,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 			if err != nil {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
+				//app.Reinitialize(cmdConfig)
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
 			}
 			// TODO: reinitialize
@@ -108,27 +109,13 @@ func serve(cmd *cobra.Command, args []string) {
 			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
 		}
 	}
-	var backend guerrilla.Backend
-	switch cmdConfig.BackendName {
-	case "dummy":
-		b := &backends.DummyBackend{}
-		b.Initialize(cmdConfig.BackendConfig)
-		backend = guerrilla.Backend(b)
-	case "guerrilla-db-redis":
-		b := &backends.GuerrillaDBAndRedisBackend{}
-		err = b.Initialize(cmdConfig.BackendConfig)
-		if err != nil {
-			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
-		}
-
-		backend = guerrilla.Backend(b)
-	default:
-		log.Fatalf("Unknown backend: %s", cmdConfig.BackendName)
+	var backend backends.Backend
+	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig)
+	if err != nil {
+		log.WithError(err).Fatalf("Exiting")
 	}
-	b := &backends.GuerrillaDBAndRedisBackend{}
-	err = b.Initialize(cmdConfig.BackendConfig)
 
-	if app, err := guerrilla.New(&cmdConfig.AppConfig, &backend); err == nil {
+	if app, err := guerrilla.New(&cmdConfig.AppConfig, backend); err == nil {
 		go app.Start()
 		sigHandler(app)
 	} else {
@@ -142,7 +129,7 @@ func serve(cmd *cobra.Command, args []string) {
 type CmdConfig struct {
 	guerrilla.AppConfig
 	BackendName   string                 `json:"backend_name"`
-	BackendConfig map[string]interface{} `json:"backend_config"`
+	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
