@@ -15,16 +15,13 @@ import (
 )
 
 func init() {
-	// decorator pattern
 	backends["guerrilla-db-redis"] = &AbstractBackend{
-		extendedBackend: &GuerrillaDBAndRedisBackend{},
-	}
+		extend: &GuerrillaDBAndRedisBackend{}}
 }
 
 type GuerrillaDBAndRedisBackend struct {
-	helper
-	config guerrillaDBAndRedisConfig
 	AbstractBackend
+	config guerrillaDBAndRedisConfig
 }
 
 type guerrillaDBAndRedisConfig struct {
@@ -48,7 +45,7 @@ func convertError(name string) error {
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := baseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := g.helper.extractConfig(backendConfig, configType)
+	bcfg, err := g.extractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
@@ -76,13 +73,12 @@ type redisClient struct {
 	time        int
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMailWorker() {
+func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
 	var err error
 
 	var redisErr error
 	var length int
-
 	redisClient := &redisClient{}
 	db := autorc.New(
 		"tcp",
@@ -106,7 +102,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker() {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			// recover form closed channel
+			//recover form closed channel
 			fmt.Println("Recovered in f", r)
 		}
 		if db.Raw != nil {
@@ -120,7 +116,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker() {
 
 	//  receives values from the channel repeatedly until it is closed.
 	for {
-		payload := <-g.saveMailChan
+		payload := <-saveMailChan
 		if payload == nil {
 			log.Debug("No more saveMailChan payload")
 			return

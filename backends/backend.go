@@ -5,7 +5,6 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/envelope"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,10 +21,8 @@ type Backend interface {
 	Initialize(BackendConfig) error
 	Shutdown() error
 
-	// Private
-
-	// start save mail worker
-	saveMailWorker()
+	// start save mail worker(s)
+	saveMailWorker(chan *savePayload)
 	// get the number of workers that will be stared
 	getNumberOfWorkers() int
 	// test database settings, permissions, correct paths, etc, before starting workers
@@ -58,51 +55,6 @@ type savePayload struct {
 type helper struct {
 	saveMailChan chan *savePayload
 	wg           sync.WaitGroup
-}
-
-// Load the backend config for the backend. It has already been unmarshalled
-// from the main config file 'backend' config "backend_config"
-// Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-// The reason why using reflection is because we'll get a nice error message if the field is missing
-// the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
-// error messages
-func (h *helper) extractConfig(configData BackendConfig, configType baseConfig) (interface{}, error) {
-	// Use reflection so that we can provide a nice error message
-	s := reflect.ValueOf(configType).Elem() // so that we can set the values
-	m := reflect.ValueOf(configType).Elem()
-	t := reflect.TypeOf(configType).Elem()
-	typeOfT := s.Type()
-
-	for i := 0; i < m.NumField(); i++ {
-		f := s.Field(i)
-		// read the tags of the config struct
-		field_name := t.Field(i).Tag.Get("json")
-		if len(field_name) > 0 {
-			// parse the tag to
-			// get the field name from struct tag
-			split := strings.Split(field_name, ",")
-			field_name = split[0]
-		} else {
-			// could have no tag
-			// so use the reflected field name
-			field_name = typeOfT.Field(i).Name
-		}
-		if f.Type().Name() == "int" {
-			if intVal, converted := configData[field_name].(float64); converted {
-				s.Field(i).SetInt(int64(intVal))
-			} else {
-				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
-			}
-		}
-		if f.Type().Name() == "string" {
-			if stringVal, converted := configData[field_name].(string); converted {
-				s.Field(i).SetString(stringVal)
-			} else {
-				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
-			}
-		}
-	}
-	return configType, nil
 }
 
 // BackendResult represents a response to an SMTP client after receiving DATA.
@@ -146,7 +98,7 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 	if !found {
 		return nil, fmt.Errorf("backend %q not found", backendName)
 	}
-	p := &backendProxy{b: backend}
+	p := &BackendGateway{b: backend}
 	err := p.Initialize(backendConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
@@ -154,21 +106,22 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 	return p, nil
 }
 
-type backendProxy struct {
-	helper
+type BackendGateway struct {
 	AbstractBackend
-	b Backend
+	saveMailChan chan *savePayload
+	wg           sync.WaitGroup
+	b            Backend
 }
 
 // Distributes an envelope to one of the backend workers
-func (p *backendProxy) Process(e *envelope.Envelope) BackendResult {
+func (p *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	to := e.RcptTo
 	from := e.MailFrom
 
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
 	savedNotify := make(chan *saveStatus)
-	p.helper.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
+	p.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
@@ -182,17 +135,17 @@ func (p *backendProxy) Process(e *envelope.Envelope) BackendResult {
 		return NewBackendResult("554 Error: transaction timeout")
 	}
 }
-func (p *backendProxy) Shutdown() error {
+func (p *BackendGateway) Shutdown() error {
 	err := p.b.Shutdown()
 	if err == nil {
-		close(p.helper.saveMailChan) // workers will stop
-		p.helper.wg.Wait()
+		close(p.saveMailChan) // workers will stop
+		p.wg.Wait()
 	}
 	return err
 
 }
 
-func (p *backendProxy) Initialize(cfg BackendConfig) error {
+func (p *BackendGateway) Initialize(cfg BackendConfig) error {
 	err := p.b.Initialize(cfg)
 	if err == nil {
 		workersSize := p.b.getNumberOfWorkers()
@@ -202,14 +155,13 @@ func (p *backendProxy) Initialize(cfg BackendConfig) error {
 		if err := p.b.testSettings(); err != nil {
 			return err
 		}
-
-		p.helper.saveMailChan = make(chan *savePayload, workersSize)
+		p.saveMailChan = make(chan *savePayload, workersSize)
 		// start our savemail workers
-		p.helper.wg.Add(workersSize)
+		p.wg.Add(workersSize)
 		for i := 0; i < workersSize; i++ {
 			go func() {
-				p.b.saveMailWorker()
-				p.helper.wg.Done()
+				p.b.saveMailWorker(p.saveMailChan)
+				p.wg.Done()
 			}()
 		}
 	}

@@ -3,7 +3,7 @@ package backends
 func init() {
 	// decorator pattern
 	backends["dummy"] = &AbstractBackend{
-		extendedBackend: &DummyBackend{},
+		extend: &DummyBackend{},
 	}
 }
 
@@ -29,7 +29,7 @@ func (b *DummyBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	// from the main config file 'backend' config "backend_config"
 	// Now we need to convert each type and copy into the dummyConfig struct
 	configType := baseConfig(&dummyConfig{})
-	bcfg, err := b.helper.extractConfig(backendConfig, configType)
+	bcfg, err := b.extractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
