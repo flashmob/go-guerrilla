@@ -13,8 +13,8 @@ import (
 const (
 	dashboard      = "index.html"
 	login          = "login.html"
-	dashboardPath  = "html/index.html"
-	loginPath      = "html/login.html"
+	dashboardPath  = "dashboard/html/index.html"
+	loginPath      = "dashboard/html/login.html"
 	sessionTimeout = time.Hour * 24 // TODO replace with config
 )
 

@@ -395,6 +395,11 @@ func (server *server) handleClient(client *client) {
 			res := server.backend.Process(client.Envelope)
 			if res.Code() < 300 {
 				client.messagesSent++
+				log.WithFields(map[string]interface{}{
+					"helo":          client.Helo,
+					"remoteAddress": client.RemoteAddress,
+					"success":       true,
+				}).Info("Received message")
 			}
 			client.responseAdd(res.String())
 			client.state = ClientCmd

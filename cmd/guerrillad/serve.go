@@ -18,6 +18,8 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/dashboard"
+	// "github.com/flashmob/go-guerrilla/dashboard"
 )
 
 var (
@@ -42,6 +44,8 @@ func init() {
 		"/var/run/go-guerrilla.pid", "Path to the pid file")
 
 	rootCmd.AddCommand(serveCmd)
+
+	log.AddHook(dashboard.NewLogHook())
 }
 
 func sigHandler(app guerrilla.Guerrilla) {
@@ -86,7 +90,7 @@ func serve(cmd *cobra.Command, args []string) {
 			maxClients += s.MaxClients
 		}
 		if maxClients > fileLimit {
-			log.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			log.Warnf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}

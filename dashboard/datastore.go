@@ -3,6 +3,8 @@ package dashboard
 import (
 	"runtime"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -63,4 +65,50 @@ func ramListener(interval time.Duration, store *dataStore) {
 		runtime.ReadMemStats(memStats)
 		store.addPoint(&point{t, memStats.Alloc})
 	}
+}
+
+type SendEvent struct {
+	timeStamp     time.Time
+	helo          string
+	remoteAddress string
+}
+
+type LogHook struct {
+	events chan *SendEvent
+}
+
+func NewLogHook() *LogHook {
+	events := make(chan *SendEvent)
+	return &LogHook{events}
+}
+
+func (h *LogHook) Levels() []log.Level {
+	return []log.Level{log.InfoLevel}
+}
+
+func (h *LogHook) Fire(e *log.Entry) error {
+	// helo, ok := e.Data["helo"]
+	// if !ok {
+	// 	return nil
+	// }
+	// heloStr, ok := helo.(string)
+	// if !ok {
+	// 	return nil
+	// }
+	//
+	// addr, ok := e.Data["remoteAddress"]
+	// if !ok {
+	// 	return nil
+	// }
+	// addrStr, ok := addr.(string)
+	// if !ok {
+	// 	return nil
+	// }
+	//
+	// h.events <- &SendEvent{
+	// 	timeStamp:     e.Time,
+	// 	helo:          heloStr,
+	// 	remoteAddress: addrStr,
+	// }
+	return nil
 }
