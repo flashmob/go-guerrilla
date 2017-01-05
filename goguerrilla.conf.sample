@@ -1,7 +1,7 @@
 {
     "allowed_hosts": [
       "guerrillamail.com",
-      "guerrillamailblock.com"
+      "guerrillamailblock.com",
       "sharklasers.com",
       "guerrillamail.net",
       "guerrillamail.org"
