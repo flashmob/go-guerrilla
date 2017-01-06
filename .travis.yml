@@ -17,3 +17,4 @@ script:
   - make guerrillad
   - go test ./tests
   - go test
+  - go test ./cmd/guerrillad
