@@ -179,7 +179,7 @@ func TestSampleConfig(t *testing.T) {
 	if jsonBytes, err := ioutil.ReadFile(fileName); err == nil {
 		ac := &AppConfig{}
 		if err := ac.Load(jsonBytes); err != nil {
-			// sample config can have broken link to ke
+			// sample config can have broken tls certs
 			if strings.Index(err.Error(), "could not stat key") != 0 {
 				t.Error("Cannot load config", fileName, "|", err)
 				t.FailNow()
@@ -205,8 +205,8 @@ func TestConfigChangeEvents(t *testing.T) {
 		"config_change:pid_file":                       false,
 		"config_change:allowed_hosts":                  false,
 		"server_change:start_server":                   false, // 127.0.0.1:4654 will be added
-		"server_change:127.0.0.1:9999:stop_server":     false, // removed
-		"server_change:127.0.0.1:3333:stop_server":     false, // disabled
+		"server_change:127.0.0.1:9999:stop_server":     false, // server removed
+		"server_change:127.0.0.1:3333:stop_server":     false, // server disabled
 		"server_change:127.0.0.1:2526:new_log_file":    false,
 		"server_change:127.0.0.1:2527:reopen_log_file": false,
 		"server_change:127.0.0.1:2526:timeout":         false,

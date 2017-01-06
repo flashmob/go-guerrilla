@@ -149,14 +149,14 @@ func (c *CmdConfig) load(jsonBytes []byte) error {
 
 func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig) {
 	// has backend changed?
-	if !reflect.DeepEqual(c.BackendConfig, oldConfig.BackendConfig) {
-		guerrilla.Bus.Publish("config_change:backend_config", *c)
+	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
+		guerrilla.Bus.Publish("config_change:backend_config", c)
 	}
 	if c.BackendName != oldConfig.BackendName {
-		guerrilla.Bus.Publish("config_change:backend_config", *c)
+		guerrilla.Bus.Publish("config_change:backend_name", c)
 	}
 	// call other emitChangeEvents
-	c.AppConfig.EmitChangeEvents(oldConfig)
+	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig)
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
