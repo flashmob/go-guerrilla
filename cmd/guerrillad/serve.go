@@ -54,7 +54,6 @@ func sigHandler(app guerrilla.Guerrilla) {
 	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL)
 
 	for sig := range signalChannel {
-
 		if sig == syscall.SIGHUP {
 			// save old config & load in new one
 			oldConfig := cmdConfig
@@ -64,11 +63,9 @@ func sigHandler(app guerrilla.Guerrilla) {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
 				cmdConfig = newConfig
-				//app.Reinitialize(cmdConfig)
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
 				cmdConfig.emitChangeEvents(&oldConfig)
 			}
-			// TODO: reinitialize
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			log.Infof("Shutdown signal caught")
 			app.Shutdown()
@@ -177,7 +174,6 @@ func readConfig(path string, pidFile string, config *CmdConfig) error {
 	if len(config.AllowedHosts) == 0 {
 		return errors.New("Empty `allowed_hosts` is not allowed")
 	}
-
 	guerrilla.ConfigLoadTime = time.Now()
 	return nil
 }
@@ -188,11 +184,9 @@ func getFileLimit() int {
 	if err != nil {
 		return -1
 	}
-
 	limit, err := strconv.Atoi(strings.TrimSpace(string(out)))
 	if err != nil {
 		return -1
 	}
-
 	return limit
 }

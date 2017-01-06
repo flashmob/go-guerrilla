@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+func init() {
+	test.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/")
+}
+
 // a configuration file with a dummy backend
 
 //
@@ -116,7 +120,7 @@ var configJsonB = `
             "host_name":"mail2.guerrillamail.com",
             "max_size": 100017,
             "private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"./tests/mail2.guerrillamail.com.cert.pem",
+            "public_key_file": "./tests/mail2.guerrillamail.com.cert.pem",
             "timeout":160,
             "listen_interface":"127.0.0.1:2527",
             "start_tls_on":true,
@@ -192,11 +196,11 @@ func TestSampleConfig(t *testing.T) {
 
 // make sure that we get all the config change events
 func TestConfigChangeEvents(t *testing.T) {
-	test.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/")
+
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
 	// simulate timestamp change
-	time.Sleep(time.Second)
+	time.Sleep(time.Second + time.Millisecond*500)
 	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
