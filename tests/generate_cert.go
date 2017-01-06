@@ -63,7 +63,7 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 
 // validFrom - Creation date formatted as Jan 1 15:04:05 2011 or ""
 
-func generateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string) {
+func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string, dirPrefix string) {
 
 	if len(host) == 0 {
 		log.Fatalf("Missing required --host parameter")
@@ -141,14 +141,14 @@ func generateCert(host string, validFrom string, validFor time.Duration, isCA bo
 		log.Fatalf("Failed to create certificate: %s", err)
 	}
 
-	certOut, err := os.Create("./" + host + ".cert.pem")
+	certOut, err := os.Create(dirPrefix + host + ".cert.pem")
 	if err != nil {
 		log.Fatalf("failed to open cert.pem for writing: %s", err)
 	}
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	certOut.Close()
 
-	keyOut, err := os.OpenFile("./"+host+".key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.OpenFile(dirPrefix+host+".key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Print("failed to open key.pem for writing:", err)
 		return

@@ -16,3 +16,4 @@ script:
   - ./.travis.gofmt.sh
   - make guerrillad
   - go test ./tests
+  - go test

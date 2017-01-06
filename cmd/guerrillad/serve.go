@@ -18,6 +18,7 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"reflect"
 )
 
 const (
@@ -55,12 +56,17 @@ func sigHandler(app guerrilla.Guerrilla) {
 	for sig := range signalChannel {
 
 		if sig == syscall.SIGHUP {
-			err := readConfig(configPath, pidFile, &cmdConfig)
+			// save old config & load in new one
+			oldConfig := cmdConfig
+			newConfig := CmdConfig{}
+			err := readConfig(configPath, pidFile, &newConfig)
 			if err != nil {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
+				cmdConfig = newConfig
 				//app.Reinitialize(cmdConfig)
 				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
+				cmdConfig.emitChangeEvents(&oldConfig)
 			}
 			// TODO: reinitialize
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
@@ -132,6 +138,27 @@ type CmdConfig struct {
 	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
+func (c *CmdConfig) load(jsonBytes []byte) error {
+	c.AppConfig.Load(jsonBytes)
+	err := json.Unmarshal(jsonBytes, &c)
+	if err != nil {
+		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	}
+	return nil
+}
+
+func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig) {
+	// has backend changed?
+	if !reflect.DeepEqual(c.BackendConfig, oldConfig.BackendConfig) {
+		guerrilla.Bus.Publish("config_change:backend_config", *c)
+	}
+	if c.BackendName != oldConfig.BackendName {
+		guerrilla.Bus.Publish("config_change:backend_config", *c)
+	}
+	// call other emitChangeEvents
+	c.AppConfig.EmitChangeEvents(oldConfig)
+}
+
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
 func readConfig(path string, pidFile string, config *CmdConfig) error {
 	// load in the config.
@@ -139,12 +166,7 @@ func readConfig(path string, pidFile string, config *CmdConfig) error {
 	if err != nil {
 		return fmt.Errorf("Could not read config file: %s", err.Error())
 	}
-
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return fmt.Errorf("Could not parse config file: %s", err.Error())
-	}
-
+	config.load(data)
 	// override config pidFile with with flag from the command line
 	if len(pidFile) > 0 {
 		config.AppConfig.PidFile = pidFile

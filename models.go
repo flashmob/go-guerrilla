@@ -3,13 +3,20 @@ package guerrilla
 import (
 	"bufio"
 	"errors"
+	evbus "github.com/asaskevich/EventBus"
 	"io"
 )
 
 var (
 	LineLimitExceeded   = errors.New("Maximum line length exceeded")
 	MessageSizeExceeded = errors.New("Maximum message size exceeded")
+
+	Bus *evbus.EventBus
 )
+
+func init() {
+	Bus = evbus.New()
+}
 
 // we need to adjust the limit, so we embed io.LimitedReader
 type adjustableLimitedReader struct {

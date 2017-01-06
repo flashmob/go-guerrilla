@@ -127,7 +127,7 @@ func getBackend(backendName string, backendConfig map[string]interface{}) (backe
 
 func setupCerts(c *TestConfig) {
 	for i := range c.Servers {
-		generateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256")
+		GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
 		c.Servers[i].PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
 		c.Servers[i].PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
 	}
