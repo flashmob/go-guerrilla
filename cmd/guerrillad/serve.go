@@ -77,6 +77,24 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
+func subscribeBackendEvent(event string, backend backends.Backend) {
+
+	guerrilla.Bus.Subscribe(event, func(cmdConfig *CmdConfig) {
+		var err error
+		if err = backend.Shutdown(); err != nil {
+			log.WithError(err).Warn("Backend failed to shutdown")
+			return
+		}
+		backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig)
+		if err != nil {
+			log.WithError(err).Fatalf("Error while loading the backend %q",
+				cmdConfig.BackendName)
+		} else {
+			log.Info("Backend started:", cmdConfig.BackendName)
+		}
+	})
+}
+
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 
@@ -100,23 +118,21 @@ func serve(cmd *cobra.Command, args []string) {
 	}
 
 	// Write out our PID
-	if len(pidFile) > 0 {
-		if f, err := os.Create(pidFile); err == nil {
-			defer f.Close()
-			if _, err := f.WriteString(fmt.Sprintf("%d", os.Getpid())); err == nil {
-				f.Sync()
-			} else {
-				log.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
-			}
-		} else {
-			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
-		}
-	}
+	writePid(cmdConfig.PidFile)
+	// ...and write out our pid whenever the file name changes in the config
+	guerrilla.Bus.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
+		writePid(ac.PidFile)
+	})
+
+	// Backend setup
 	var backend backends.Backend
 	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig)
 	if err != nil {
-		log.WithError(err).Fatalf("Exiting")
+		log.WithError(err).Fatalf("Error while loading the backend %q",
+			cmdConfig.BackendName)
 	}
+	subscribeBackendEvent("config_change:backend_config", backend)
+	subscribeBackendEvent("config_change:backend_name", backend)
 
 	if app, err := guerrilla.New(&cmdConfig.AppConfig, backend); err == nil {
 		go app.Start()
@@ -163,7 +179,9 @@ func readConfig(path string, pidFile string, config *CmdConfig) error {
 	if err != nil {
 		return fmt.Errorf("Could not read config file: %s", err.Error())
 	}
-	config.load(data)
+	if err := config.load(data); err != nil {
+		return err
+	}
 	// override config pidFile with with flag from the command line
 	if len(pidFile) > 0 {
 		config.AppConfig.PidFile = pidFile
@@ -189,4 +207,21 @@ func getFileLimit() int {
 		return -1
 	}
 	return limit
+}
+
+func writePid(pidFile string) {
+	if len(pidFile) > 0 {
+		if f, err := os.Create(pidFile); err == nil {
+			defer f.Close()
+			pid := os.Getpid()
+			if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err == nil {
+				f.Sync()
+				log.Infof("pid_file (%s) written with pid:%v", pidFile, pid)
+			} else {
+				log.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
+			}
+		} else {
+			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
+		}
+	}
 }

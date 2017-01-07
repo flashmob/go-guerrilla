@@ -1,12 +1,25 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
+	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/spf13/cobra"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 )
 
 var configJsonA = `
 {
+    "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
       "guerrillamail.com",
       "guerrillamailblock.com",
@@ -23,8 +36,8 @@ var configJsonA = `
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"/path/to/pem/file/test.com.key",
-            "public_key_file":"/path/to/pem/file/test.com.crt",
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
@@ -37,6 +50,7 @@ var configJsonA = `
 
 var configJsonB = `
 {
+"pid_file" : "./pidfile2.pid",
     "allowed_hosts": [
       "guerrillamail.com",
       "guerrillamailblock.com",
@@ -66,6 +80,7 @@ var configJsonB = `
 `
 var configJsonC = `
 {
+"pid_file" : "pidfile.pid",
     "allowed_hosts": [
       "guerrillamail.com",
       "guerrillamailblock.com",
@@ -159,4 +174,81 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestServe(t *testing.T) {
+	// hold the output of logs
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+	test.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(logOut)
+
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
+	cmd := &cobra.Command{}
+	configPath = "configJsonA.json"
+	go func() {
+		serve(cmd, []string{})
+	}()
+	time.Sleep(time.Second)
+
+	data, err := ioutil.ReadFile("pidfile.pid")
+	if err != nil {
+		t.Error("error reading pidfile.pid", err)
+		t.FailNow()
+	}
+	_, err = strconv.Atoi(string(data))
+	if err != nil {
+		t.Error("could not parse pidfile.pid", err)
+		t.FailNow()
+	}
+
+	// change the config file
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonB), 0644)
+
+	// test SIGHUP via the kill command
+	ecmd := exec.Command("kill", "-HUP", string(data))
+	_, err = ecmd.Output()
+	if err != nil {
+		t.Error("could not SIGHUP", err)
+		t.FailNow()
+	}
+	time.Sleep(time.Second) // allow sihgup to do its job
+
+	if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
+		t.Error("pidfile not changed after sighup SIGHUP", err)
+	}
+
+	logOut.Flush()
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "Backend started:dummy"); i < 0 {
+			t.Error("Dummy backend not restared")
+		}
+	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+
+	// cleanup
+	os.Remove("configJsonA.json")
+	os.Remove("./pidfile.pid")
+	os.Remove("./pidfile2.pid")
+
+	// test the SIGTERM kill command
+	/*
+		ecmd = exec.Command("kill",string(data))
+		_, err = ecmd.Output()
+		if err != nil {
+			t.Error("could not kill", err)
+			t.FailNow()
+		}
+	*/
+
 }

@@ -26,7 +26,6 @@ import (
 
 	"bytes"
 	"crypto/tls"
-	//	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
