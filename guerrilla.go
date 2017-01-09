@@ -32,7 +32,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 		}
 		// Add relevant app-wide config options to each server
 		sc.AllowedHosts = ac.AllowedHosts
-		server, err := newServer(sc, b)
+		server, err := newServer(&sc, b)
 		if err != nil {
 			log.WithError(err).Error("Failed to create server")
 		} else {

@@ -56,14 +56,14 @@ type allowedHosts struct {
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc ServerConfig, b backends.Backend) (*server, error) {
+func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
 	server := &server{
 		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 	}
-	server.configStore.Store(sc)
+	server.configStore.Store(*sc)
 	server.setTimeout(sc.Timeout)
 	server.setAllowedHosts(sc.AllowedHosts)
 	if err := server.configureSSL(); err != nil {
