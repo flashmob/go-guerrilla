@@ -317,6 +317,7 @@ func TestShutDown(t *testing.T) {
 
 			// do a shutdown while the client is connected & in client state
 			go app.Shutdown()
+			time.Sleep(time.Millisecond * 150) // let server to Shutdown
 
 			// issue a command while shutting down
 			response, err := command(conn, bufin, "HELP")
