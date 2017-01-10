@@ -208,9 +208,9 @@ func TestConfigChangeEvents(t *testing.T) {
 	expectedEvents := map[string]bool{
 		"config_change:pid_file":                       false,
 		"config_change:allowed_hosts":                  false,
-		"server_change:start_server":                   false, // 127.0.0.1:4654 will be added
-		"server_change:127.0.0.1:9999:stop_server":     false, // server removed
-		"server_change:127.0.0.1:3333:stop_server":     false, // server disabled
+		"server_change:new_server":                     false, // 127.0.0.1:4654 will be added
+		"server_change:remove_server":                  false, // 127.0.0.1:9999 server removed
+		"server_change:stop_server":                    false, // 127.0.0.1:3333: server (disabled)
 		"server_change:127.0.0.1:2526:new_log_file":    false,
 		"server_change:127.0.0.1:2527:reopen_log_file": false,
 		"server_change:127.0.0.1:2526:timeout":         false,

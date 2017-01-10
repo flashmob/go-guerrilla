@@ -33,6 +33,17 @@ const (
 	RFC2821LimitRecipients = 100
 )
 
+const (
+	// server has just been created
+	ServerStateNew = iota
+	// Server has just been stopped
+	ServerStateStopped
+	// Server has been started and is running
+	ServerStateRunning
+	// Server could not start due to an error
+	ServerStateStartError
+)
+
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
 	//mainConfigStore  atomic.Value // stores guerrilla.Config
@@ -48,6 +59,7 @@ type server struct {
 	listener        net.Listener
 	closedListener  chan (bool)
 	hosts           allowedHosts // stores map[string]bool for faster lookup
+	state           int
 }
 
 type allowedHosts struct {
@@ -62,8 +74,9 @@ func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
+		state:           ServerStateNew,
 	}
-	server.configStore.Store(*sc)
+	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
 	server.setAllowedHosts(sc.AllowedHosts)
 	if err := server.configureSSL(); err != nil {
@@ -97,6 +110,17 @@ func (server *server) setTimeout(seconds int) {
 	server.timeout.Store(duration)
 }
 
+// goroutine safe config store
+func (server *server) setConfig(sc *ServerConfig) {
+	server.configStore.Store(*sc)
+}
+
+// goroutine safe
+func (server *server) isEnabled() bool {
+	sc := server.configStore.Load().(ServerConfig)
+	return sc.IsEnabled
+}
+
 // Set the allowed hosts for the server
 func (server *server) setAllowedHosts(allowedHosts []string) {
 	defer server.hosts.m.Unlock()
@@ -115,10 +139,12 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 	listener, err := net.Listen("tcp", server.listenInterface)
 	server.listener = listener
 	if err != nil {
+		server.state = ServerStateStartError
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.listenInterface, err.Error())
 	}
 
 	log.Infof("Listening on TCP %s", server.listenInterface)
+	server.state = ServerStateRunning
 	startWG.Done() // start successful
 
 	for {
@@ -130,7 +156,9 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 				log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
 				// the listener has been closed, wait for clients to exit
 				log.Infof("shutting down pool [%s]", server.listenInterface)
+				server.clientPool.ShutdownState()
 				server.clientPool.ShutdownWait()
+				server.state = ServerStateStopped
 				server.closedListener <- true
 				return nil
 			}
@@ -156,15 +184,17 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 }
 
 func (server *server) Shutdown() {
-	server.clientPool.ShutdownState()
 	if server.listener != nil {
+		// This will cause Start function to return, by causing an error on listener.Accept
 		server.listener.Close()
-		// wait for the listener to close.
+		// wait for the listener to listener.Accept
 		<-server.closedListener
 		// At this point Start will exit and close down the pool
 	} else {
+		server.clientPool.ShutdownState()
 		// listener already closed, wait for clients to exit
 		server.clientPool.ShutdownWait()
+		server.state = ServerStateStopped
 	}
 }
 

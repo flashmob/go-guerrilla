@@ -75,14 +75,14 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig) {
 			newServer.emitChangeEvents(oldServer)
 		} else {
 			// start new server
-			Bus.Publish("server_change:start_server", newServer)
+			Bus.Publish("server_change:new_server", newServer)
 		}
 
 	}
-	// stop any servers that don't exist anymore
+	// remove any servers that don't exist anymore
 	for _, oldserver := range oldServers {
 		log.Infof("Server [%s] removed from config, stopping", oldserver.ListenInterface)
-		Bus.Publish("server_change:"+oldserver.ListenInterface+":stop_server", oldserver)
+		Bus.Publish("server_change:remove_server", oldserver)
 	}
 }
 
@@ -108,7 +108,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 		if sc.IsEnabled {
 			Bus.Publish("server_change:start_server", sc)
 		} else {
-			Bus.Publish("server_change:"+sc.ListenInterface+":stop_server", sc)
+			Bus.Publish("server_change:stop_server", sc)
 		}
 		// do not emit any more events when IsEnabled changed
 		return
@@ -125,7 +125,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 		Bus.Publish("server_change:"+sc.ListenInterface+":timeout", sc)
 	}
 	// max_clients changed
-	if _, ok := changes["Timeout"]; ok {
+	if _, ok := changes["MaxClients"]; ok {
 		Bus.Publish("server_change:"+sc.ListenInterface+":max_clients", sc)
 	}
 
