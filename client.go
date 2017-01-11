@@ -81,7 +81,7 @@ func (c *client) resetTransaction() {
 }
 
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := *c.MailFrom == (EmailAddress{})
+	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (EmailAddress{}))
 	if isMailFromEmpty {
 		return false
 	}
