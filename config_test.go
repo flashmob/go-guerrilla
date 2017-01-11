@@ -1,7 +1,7 @@
 package guerrilla
 
 import (
-	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	test.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/")
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/")
 }
 
 // a configuration file with a dummy backend

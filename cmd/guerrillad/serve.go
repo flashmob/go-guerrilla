@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	log "github.com/Sirupsen/logrus"
+	evbus "github.com/asaskevich/EventBus"
+	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -12,9 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	log "github.com/Sirupsen/logrus"
-	"github.com/spf13/cobra"
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
@@ -63,7 +63,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 				log.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
 				cmdConfig = newConfig
-				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
+				log.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
 				cmdConfig.emitChangeEvents(&oldConfig)
 			}
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
@@ -116,7 +116,7 @@ func serve(cmd *cobra.Command, args []string) {
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}
-
+	guerrilla.Bus = evbus.New()
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config

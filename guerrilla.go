@@ -22,7 +22,7 @@ type Guerrilla interface {
 }
 
 type guerrilla struct {
-	Config  *AppConfig
+	Config  AppConfig
 	servers map[string]*server
 	backend backends.Backend
 	// guard controls access to g.servers
@@ -33,7 +33,7 @@ type guerrilla struct {
 // Returns a new instance of Guerrilla with the given config, not yet running.
 func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 	g := &guerrilla{
-		Config:  ac,
+		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 		backend: b,
 	}
@@ -71,14 +71,15 @@ func (g *guerrilla) makeNewServers() error {
 func (g *guerrilla) findServer(iface string) (int, *server) {
 	g.guard.Lock()
 	defer g.guard.Unlock()
-	i := -1
-	for i = range g.Config.Servers {
+	ret := -1
+	for i := range g.Config.Servers {
 		if g.Config.Servers[i].ListenInterface == iface {
 			server := g.servers[iface]
-			return i, server
+			ret = i
+			return ret, server
 		}
 	}
-	return i, nil
+	return ret, nil
 }
 
 func (g *guerrilla) removeServer(serverConfigIndex int, iface string) {
@@ -104,11 +105,13 @@ func (g *guerrilla) setConfig(i int, sc *ServerConfig) {
 }
 
 func (g *guerrilla) subscribeEvents() {
+
 	// add a new server to the config & start
 	Bus.Subscribe("server_change:new_server", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i == -1 {
 			// not found, lets add it
 			g.addServer(sc)
+			log.Infof("New server added [%s]", sc.ListenInterface)
 			if g.state == GuerrillaStateStarted {
 				g.Start()
 			}
@@ -171,7 +174,7 @@ func (g *guerrilla) Start() (startErrors []error) {
 			}
 		}(g.servers[ListenInterface])
 	}
-	// wait for all servers to start
+	// wait for all servers to start (or fail)
 	startWG.Wait()
 
 	// close, then read any errors

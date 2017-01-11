@@ -131,7 +131,7 @@ func (server *server) setAllowedHosts(allowedHosts []string) {
 	}
 }
 
-// Begin accepting SMTP clients
+// Begin accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
 func (server *server) Start(startWG *sync.WaitGroup) error {
 	var clientID uint64
 	clientID = 0
@@ -139,13 +139,14 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 	listener, err := net.Listen("tcp", server.listenInterface)
 	server.listener = listener
 	if err != nil {
+		startWG.Done() // don't wait for me
 		server.state = ServerStateStartError
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.listenInterface, err.Error())
 	}
 
 	log.Infof("Listening on TCP %s", server.listenInterface)
 	server.state = ServerStateRunning
-	startWG.Done() // start successful
+	startWG.Done() // start successful, don't wait for me
 
 	for {
 		log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
