@@ -213,31 +213,6 @@ func (server *server) allowsHost(host string) bool {
 	return false
 }
 
-// Upgrades a client connection to TLS
-func (server *server) upgradeToTLS(client *client) bool {
-	var tlsConn *tls.Conn
-	// load the config thread-safely
-	tlsConfig := server.tlsConfigStore.Load().(*tls.Config)
-	tlsConn = tls.Server(client.conn, tlsConfig)
-	err := tlsConn.Handshake()
-	if err != nil {
-		log.WithError(err).Warn("[%s] Failed TLS handshake", client.RemoteAddress)
-		return false
-	}
-	client.conn = net.Conn(tlsConn)
-	client.bufout.Reset(client.conn)
-	client.bufin.Reset(client.conn)
-	client.TLS = true
-
-	return true
-}
-
-// Closes a client connection
-func (server *server) closeConn(client *client) {
-	client.conn.Close()
-	client.conn = nil
-}
-
 // Reads from the client until a terminating sequence is encountered,
 // or until a timeout occurs.
 func (server *server) read(client *client, maxSize int64) (string, error) {
@@ -297,7 +272,7 @@ func (server *server) isShuttingDown() bool {
 
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
-	defer server.closeConn(client)
+	defer client.closeConn()
 	sc := server.configStore.Load().(ServerConfig)
 	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
@@ -316,7 +291,7 @@ func (server *server) handleClient(client *client) {
 	help := "250 HELP"
 
 	if sc.TLSAlwaysOn {
-		success := server.upgradeToTLS(client)
+		success := client.upgradeToTLS(server.tlsConfigStore.Load().(*tls.Config))
 		if !success {
 			client.kill()
 		}
@@ -480,7 +455,7 @@ func (server *server) handleClient(client *client) {
 
 		case ClientStartTLS:
 			if !client.TLS && sc.StartTLSOn {
-				if server.upgradeToTLS(client) {
+				if client.upgradeToTLS(server.tlsConfigStore.Load().(*tls.Config)) {
 					advertiseTLS = ""
 					client.resetTransaction()
 				}
