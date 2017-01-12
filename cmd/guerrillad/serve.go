@@ -134,12 +134,15 @@ func serve(cmd *cobra.Command, args []string) {
 	subscribeBackendEvent("config_change:backend_config", backend)
 	subscribeBackendEvent("config_change:backend_name", backend)
 
-	if app, err := guerrilla.New(&cmdConfig.AppConfig, backend); err == nil {
-		go app.Start()
-		sigHandler(app)
-	} else {
-		log.WithError(err).Fatalf("Exiting")
+	app, err := guerrilla.New(&cmdConfig.AppConfig, backend)
+	if err != nil {
+		log.WithError(err).Error("Error(s) when creating new server(s)")
 	}
+	err = app.Start()
+	if err != nil {
+		log.WithError(err).Error("Error(s) when starting server(s)")
+	}
+	sigHandler(app)
 
 }
 

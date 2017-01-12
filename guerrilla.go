@@ -16,8 +16,23 @@ const (
 	GuerrillaStateStopped
 )
 
+type Errors []error
+
+// implement the Error interface
+func (e Errors) Error() string {
+	if len(e) == 1 {
+		return e[0].Error()
+	}
+	// multiple errors
+	msg := ""
+	for _, err := range e {
+		msg += "\n" + err.Error()
+	}
+	return msg
+}
+
 type Guerrilla interface {
-	Start() (startErrors []error)
+	Start() (startErrors Errors)
 	Shutdown()
 }
 
@@ -31,21 +46,24 @@ type guerrilla struct {
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
+func New(ac *AppConfig, b backends.Backend) (Guerrilla, Errors) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 		backend: b,
 	}
 	g.state = GuerrillaStateNew
-	err := g.makeNewServers()
+	err := g.makeServers()
+
 	// subscribe for any events that may come in while running
 	g.subscribeEvents()
 	return g, err
 }
 
 // Instantiate servers
-func (g *guerrilla) makeNewServers() error {
+func (g *guerrilla) makeServers() Errors {
+	log.Info("making servers")
+	var errs Errors
 	for _, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
 			// server already instantiated
@@ -56,15 +74,17 @@ func (g *guerrilla) makeNewServers() error {
 		server, err := newServer(&sc, g.backend)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
-		} else {
-			// all good.
+			errs = append(errs, err)
+		}
+		if server != nil {
 			g.servers[sc.ListenInterface] = server
 		}
+
 	}
 	if len(g.servers) == 0 {
-		return errors.New("There are no servers that can start, please check your config")
+		errs = append(errs, errors.New("There are no servers that can start, please check your config"))
 	}
-	return nil
+	return errs
 }
 
 // find a server by interface, retuning the index of the config and instance of server
@@ -94,7 +114,7 @@ func (g *guerrilla) addServer(sc *ServerConfig) {
 	g.guard.Lock()
 	defer g.guard.Unlock()
 	g.Config.Servers = append(g.Config.Servers, *sc)
-	g.makeNewServers()
+	g.makeServers()
 }
 
 func (g *guerrilla) setConfig(i int, sc *ServerConfig) {
@@ -113,16 +133,23 @@ func (g *guerrilla) subscribeEvents() {
 			g.addServer(sc)
 			log.Infof("New server added [%s]", sc.ListenInterface)
 			if g.state == GuerrillaStateStarted {
-				g.Start()
+				err := g.Start()
+				if err != nil {
+					log.WithError(err).Info("Event server_change:new_server returned errors when starting")
+				}
 			}
 		}
 	})
 	// start a server that already exists in config and has been instantiated
 	Bus.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			if server.state == ServerStateStopped {
+			if server.state == ServerStateStopped || server.state == ServerStateNew {
 				g.setConfig(i, sc)
-				g.Start()
+				log.Infof("Starting server [%s]", server.listenInterface)
+				err := g.Start()
+				if err != nil {
+					log.WithError(err).Info("Event server_change:start_server returned errors when starting")
+				}
 			}
 		}
 	})
@@ -139,12 +166,13 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			server.Shutdown()
 			g.removeServer(i, sc.ListenInterface)
+			log.Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
 		}
 	})
 }
 
 // Entry point for the application. Starts all servers.
-func (g *guerrilla) Start() (startErrors []error) {
+func (g *guerrilla) Start() (startErrors Errors) {
 	g.guard.Lock()
 	defer func() {
 		g.state = GuerrillaStateStarted

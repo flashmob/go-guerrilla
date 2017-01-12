@@ -1,7 +1,6 @@
 // adopted from https://golang.org/src/crypto/tls/generate_cert.go?m=text
 
-// Generate a self-signed X.509 certificate for a TLS server. Outputs to
-// 'cert.pem' and 'key.pem' and will overwrite existing files.
+// Generate a self-signed X.509 certificate for a TLS server.
 
 package testcert
 

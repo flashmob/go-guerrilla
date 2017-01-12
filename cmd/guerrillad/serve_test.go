@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	test "github.com/flashmob/go-guerrilla/tests"
@@ -41,6 +42,18 @@ var configJsonA = `
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
+            "start_tls_on":true,
+            "tls_always_on":false,
+            "max_clients": 1000
+        },
+        {
+            "is_enabled" : false,
+            "host_name":"enable.test.com",
+            "max_size": 1000000,
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:2228",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000
@@ -216,6 +229,7 @@ func TestServe(t *testing.T) {
 	logOut = bufio.NewWriter(&logBuffer)
 	logIn = bufio.NewReader(&logBuffer)
 	log.SetLevel(log.DebugLevel)
+	//log.SetOutput(os.Stdout)
 	log.SetOutput(logOut)
 
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
@@ -257,7 +271,7 @@ func TestServe(t *testing.T) {
 	// did backend started as expected?
 	if read, err := ioutil.ReadAll(logIn); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
+		fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Backend started:dummy"); i < 0 {
 			t.Error("Dummy backend not restared")
 		}
@@ -332,6 +346,78 @@ func TestServerAddEvent(t *testing.T) {
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "New server added [127.0.0.1:2526]"); i < 0 {
 			t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
+		}
+	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+
+	// cleanup
+	os.Remove("configJsonA.json")
+	os.Remove("./pidfile.pid")
+
+}
+
+// enable a server
+func TestServerStartEvent(t *testing.T) {
+	// hold the output of logs
+
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(logOut)
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
+	cmd := &cobra.Command{}
+	configPath = "configJsonA.json"
+	go func() {
+		serve(cmd, []string{})
+	}()
+	time.Sleep(time.Second)
+	// now change the config by adding a server
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonA)) // load configJsonA
+	//newServer := conf.Servers[1]                         // copy the first server config
+	//newServer.IsEnabled = true        // change it
+	newConf := conf // copy the cmdConfg
+	//newConf.Servers = append(newConf.Servers, newServer) // add the new server
+	newConf.Servers[1].IsEnabled = true
+	if jsonbytes, err := json.Marshal(newConf); err == nil {
+		//fmt.Println(string(jsonbytes))
+		ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644)
+	} else {
+		t.Error(err)
+	}
+	// send a sighup signal to the server
+	sigHup()
+	time.Sleep(time.Second * 1) // pause for config to reload
+
+	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
+		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 enable.test.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		} else {
+			t.Error(err)
+		}
+	}
+
+	logOut.Flush()
+	// did backend started as expected?
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "Starting server [127.0.0.1:2228]"); i < 0 {
+			t.Error("Did not add [127.0.0.1:2228], most likely because Bus.Subscribe(\"server_change:start_server\" didnt fire")
 		}
 	}
 	// don't forget to reset
