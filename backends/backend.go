@@ -91,6 +91,27 @@ func NewBackendResult(message string) BackendResult {
 	return backendResult(message)
 }
 
+// A backend gateway is a proxy that implements the Backend interface.
+// It is used to start multiple goroutine workers for saving mail, and then distribute email saving to the workers
+// via a channel. Shutting down via Shutdown() will stop all workers.
+// The rest of this program always talks to the backend via this gateway.
+type BackendGateway struct {
+	AbstractBackend
+	saveMailChan chan *savePayload
+	// waits for backend workers to start/stop
+	wg sync.WaitGroup
+	b  Backend
+	// controls access to state
+	stateGuard sync.Mutex
+	state      int
+}
+
+// possible values for state
+const (
+	BackendStateProcessing = iota
+	BackendStateShutdown
+)
+
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
 func New(backendName string, backendConfig BackendConfig) (Backend, error) {
@@ -103,25 +124,19 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
+	p.state = BackendStateProcessing
 	return p, nil
 }
 
-type BackendGateway struct {
-	AbstractBackend
-	saveMailChan chan *savePayload
-	wg           sync.WaitGroup
-	b            Backend
-}
-
 // Distributes an envelope to one of the backend workers
-func (p *BackendGateway) Process(e *envelope.Envelope) BackendResult {
+func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	to := e.RcptTo
 	from := e.MailFrom
 
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
 	savedNotify := make(chan *saveStatus)
-	p.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
+	gw.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
@@ -135,33 +150,38 @@ func (p *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 		return NewBackendResult("554 Error: transaction timeout")
 	}
 }
-func (p *BackendGateway) Shutdown() error {
-	err := p.b.Shutdown()
-	if err == nil {
-		close(p.saveMailChan) // workers will stop
-		p.wg.Wait()
+func (gw *BackendGateway) Shutdown() error {
+	gw.stateGuard.Lock()
+	defer gw.stateGuard.Unlock()
+	if gw.state != BackendStateShutdown {
+		err := gw.b.Shutdown()
+		if err == nil {
+			close(gw.saveMailChan) // workers will stop
+			gw.wg.Wait()
+			gw.state = BackendStateShutdown
+		}
+		return err
 	}
-	return err
-
+	return nil
 }
 
-func (p *BackendGateway) Initialize(cfg BackendConfig) error {
-	err := p.b.Initialize(cfg)
+func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
+	err := gw.b.Initialize(cfg)
 	if err == nil {
-		workersSize := p.b.getNumberOfWorkers()
+		workersSize := gw.b.getNumberOfWorkers()
 		if workersSize < 1 {
 			return errors.New("Must have at least 1 worker")
 		}
-		if err := p.b.testSettings(); err != nil {
+		if err := gw.b.testSettings(); err != nil {
 			return err
 		}
-		p.saveMailChan = make(chan *savePayload, workersSize)
+		gw.saveMailChan = make(chan *savePayload, workersSize)
 		// start our savemail workers
-		p.wg.Add(workersSize)
+		gw.wg.Add(workersSize)
 		for i := 0; i < workersSize; i++ {
 			go func() {
-				p.b.saveMailWorker(p.saveMailChan)
-				p.wg.Done()
+				gw.b.saveMailWorker(gw.saveMailChan)
+				gw.wg.Done()
 			}()
 		}
 	}

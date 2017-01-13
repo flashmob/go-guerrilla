@@ -65,7 +65,7 @@ func init() {
 		initErr = errors.New("Could not unmartial config," + err.Error())
 	} else {
 		setupCerts(config)
-		backend := getDummyBackend(config.BackendConfig)
+		backend, _ := getBackend("dummy", config.BackendConfig) //getDummyBackend(config.BackendConfig)
 		app, _ = guerrilla.New(&config.AppConfig, backend)
 	}
 
@@ -140,9 +140,7 @@ func TestStart(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors != nil {
-		for _, err := range startErrors {
-			t.Error(err)
-		}
+		t.Error(startErrors)
 		t.FailNow()
 	}
 	time.Sleep(time.Second)
@@ -248,9 +246,7 @@ func TestGreeting(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			t.FailNow()
 		}
 	}
@@ -310,9 +306,7 @@ func TestShutDown(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -371,9 +365,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -430,9 +422,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -487,9 +477,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -541,9 +529,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -620,9 +606,7 @@ func TestNestedMailCmd(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -667,9 +651,7 @@ func TestCommandLineMaxLength(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
@@ -731,9 +713,7 @@ func TestDataMaxLength(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}

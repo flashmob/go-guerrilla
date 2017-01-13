@@ -32,7 +32,7 @@ func (e Errors) Error() string {
 }
 
 type Guerrilla interface {
-	Start() (startErrors Errors)
+	Start() error
 	Shutdown()
 }
 
@@ -46,7 +46,7 @@ type guerrilla struct {
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig, b backends.Backend) (Guerrilla, Errors) {
+func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
@@ -61,7 +61,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, Errors) {
 }
 
 // Instantiate servers
-func (g *guerrilla) makeServers() Errors {
+func (g *guerrilla) makeServers() error {
 	log.Info("making servers")
 	var errs Errors
 	for _, sc := range g.Config.Servers {
@@ -83,6 +83,9 @@ func (g *guerrilla) makeServers() Errors {
 	}
 	if len(g.servers) == 0 {
 		errs = append(errs, errors.New("There are no servers that can start, please check your config"))
+	}
+	if len(errs) == 0 {
+		return nil
 	}
 	return errs
 }
@@ -156,7 +159,10 @@ func (g *guerrilla) subscribeEvents() {
 	// stop running a server
 	Bus.Subscribe("server_change:stop_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			g.setConfig(i, sc)
+			log.Info(server.state == ServerStateStartError, server.isEnabled())
 			if server.state == ServerStateRunning {
+				log.Info("stop sercer STAHP!")
 				server.Shutdown()
 			}
 		}
@@ -172,7 +178,8 @@ func (g *guerrilla) subscribeEvents() {
 }
 
 // Entry point for the application. Starts all servers.
-func (g *guerrilla) Start() (startErrors Errors) {
+func (g *guerrilla) Start() error {
+	var startErrors Errors
 	g.guard.Lock()
 	defer func() {
 		g.state = GuerrillaStateStarted
@@ -212,7 +219,10 @@ func (g *guerrilla) Start() (startErrors Errors) {
 			startErrors = append(startErrors, err)
 		}
 	}
-	return startErrors
+	if len(startErrors) > 0 {
+		return startErrors
+	}
+	return nil
 }
 
 func (g *guerrilla) Shutdown() {

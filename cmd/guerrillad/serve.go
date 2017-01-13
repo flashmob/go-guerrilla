@@ -70,9 +70,10 @@ func sigHandler(app guerrilla.Guerrilla) {
 			log.Infof("Shutdown signal caught")
 			app.Shutdown()
 			log.Infof("Shutdown completd, exiting.")
-			os.Exit(0)
+			return
 		} else {
-			os.Exit(0)
+			log.Infof("Shutdown, unknown signal caught")
+			return
 		}
 	}
 }
