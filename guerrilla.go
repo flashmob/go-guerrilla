@@ -128,6 +128,16 @@ func (g *guerrilla) setConfig(i int, sc *ServerConfig) {
 
 func (g *guerrilla) subscribeEvents() {
 
+	// allowed_hosts changed, set for all servers
+	Bus.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
+		g.guard.Lock()
+		defer g.guard.Unlock()
+		for _, server := range g.servers {
+			g.servers[server.listenInterface].setAllowedHosts(c.AllowedHosts)
+		}
+		log.Infof("allowed_hosts config changed, a new list was set")
+	})
+
 	// server was removed from config
 	Bus.Subscribe("server_change:update_config", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i != -1 {
@@ -180,15 +190,17 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 
-	// allowed_hosts changed, set for all servers
-	Bus.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
-		g.guard.Lock()
-		defer g.guard.Unlock()
-		for _, server := range g.servers {
-			g.servers[server.listenInterface].setAllowedHosts(c.AllowedHosts)
+	// TLS changes
+	Bus.Subscribe("server_change:tls_config", func(sc *ServerConfig) {
+		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			if err := server.configureSSL(); err == nil {
+				log.Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
+			} else {
+				log.WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
+			}
 		}
-		log.Infof("allowed_hosts config changed, a new list was set")
 	})
+
 }
 
 // Entry point for the application. Starts all servers.

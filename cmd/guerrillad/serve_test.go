@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	test "github.com/flashmob/go-guerrilla/tests"
@@ -170,7 +172,7 @@ var configJsonD = `
             "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
-            "listen_interface":"127.0.0.1:25",
+            "listen_interface":"127.0.0.1:2552",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000
@@ -612,7 +614,7 @@ func TestServerStopEvent(t *testing.T) {
 
 }
 
-// Start with configJsonC.json,
+// Start with configJsonD.json,
 // then connect to 127.0.0.1:4655 & HELO & try RCPT TO with an invalid host [grr.la]
 // then change the config to enable add new host [grr.la] to allowed_hosts
 // then write the new config,
@@ -717,7 +719,209 @@ func TestAllowedHostsEvent(t *testing.T) {
 	logIn.Reset(&logBuffer)
 
 	// cleanup
-	os.Remove("configJsonA.json")
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+
+}
+
+// Test TLS config change event
+// start with configJsonD
+// should be able to STARTTLS to 127.0.0.1:2525 with no problems
+// generate new certs & reload config
+// should get a new tls event & able to STARTTLS with no problem
+
+func TestTLSConfigEvent(t *testing.T) {
+	// hold the output of logs
+
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(logOut)
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonD)) // load configJsonD
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+	time.Sleep(time.Second)
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(time.Second)
+
+	// Test STARTTLS handshake
+	testTlsHandshake := func() {
+		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+		} else {
+			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+				expect := "250 mail.test.com Hello"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected", expect, "but got", result)
+				} else {
+					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
+						expect := "220 Ready to start TLS"
+						if strings.Index(result, expect) != 0 {
+							t.Error("Expected:", expect, "but got:", result)
+						} else {
+							tlsConn := tls.Client(conn, &tls.Config{
+								InsecureSkipVerify: true,
+								ServerName:         "127.0.0.1",
+							})
+							if err := tlsConn.Handshake(); err != nil {
+								t.Error("Failed to handshake", conf.AppConfig.Servers[0].ListenInterface)
+							} else {
+								conn = tlsConn
+								log.Info("TLS Handshake succeeded")
+							}
+
+						}
+					}
+				}
+			}
+			conn.Close()
+		}
+	}
+	testTlsHandshake()
+
+	// generate a new cert
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	sigHup()
+
+	time.Sleep(time.Second) // pause for config to reload
+	testTlsHandshake()
+
+	time.Sleep(time.Second)
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+	logOut.Flush()
+	// did backend started as expected?
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		//fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "Server [127.0.0.1:2552] new TLS configuration loaded"); i < 0 {
+			t.Error("did not change tls, most likely because Bus.Subscribe(\"server_change:tls_config\" didnt fire")
+		}
+	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+
+	// cleanup
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+
+}
+
+// Test for missing TLS certificate, when starting or config reload
+
+func TestBadTLS(t *testing.T) {
+	// hold the output of logs
+
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+
+	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	//log.SetLevel(log.DebugLevel) // it will trash std out of debug
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(logOut)
+	if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+		log.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
+	} else {
+		log.Info("removed ./../../tests/mail2.guerrillamail.com.cert.pem")
+	}
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonD)) // load configJsonD
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+	time.Sleep(time.Second)
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(time.Second)
+
+	// Test STARTTLS handshake
+	testTlsHandshake := func() {
+		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+		} else {
+			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+				expect := "250 mail.test.com Hello"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected", expect, "but got", result)
+				} else {
+					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
+						expect := "220 Ready to start TLS"
+						if strings.Index(result, expect) != 0 {
+							t.Error("Expected:", expect, "but got:", result)
+						} else {
+							tlsConn := tls.Client(conn, &tls.Config{
+								InsecureSkipVerify: true,
+								ServerName:         "127.0.0.1",
+							})
+							if err := tlsConn.Handshake(); err != nil {
+								log.Info("TLS Handshake failed")
+							} else {
+								t.Error("Handshake succeeded, expected it to fail", conf.AppConfig.Servers[0].ListenInterface)
+								conn = tlsConn
+
+							}
+
+						}
+					}
+				}
+			}
+			conn.Close()
+		}
+	}
+	testTlsHandshake()
+
+	// generate a new cert
+	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
+	sigHup()
+
+	time.Sleep(time.Second) // pause for config to reload
+	testTlsHandshake()
+
+	time.Sleep(time.Second)
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+	logOut.Flush()
+	// did backend started as expected?
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		//fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "failed to load the new TLS configuration"); i < 0 {
+			t.Error("did not detect TLS load failure")
+		}
+	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+
+	// cleanup
+	os.Remove("configJsonD.json")
 	os.Remove("./pidfile.pid")
 
 }

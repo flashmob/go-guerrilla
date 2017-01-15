@@ -147,7 +147,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 		}
 		return false
 	}(); ok {
-		Bus.Publish("server_change:"+sc.ListenInterface+":tls_config", sc)
+		Bus.Publish("server_change:tls_config", sc)
 	}
 }
 

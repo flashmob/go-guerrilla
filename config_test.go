@@ -214,9 +214,9 @@ func TestConfigChangeEvents(t *testing.T) {
 		"server_change:127.0.0.1:2526:new_log_file":    false,
 		"server_change:127.0.0.1:2527:reopen_log_file": false,
 		"server_change:127.0.0.1:2526:timeout":         false,
-		"server_change:127.0.0.1:2526:tls_config":      false,
-		"server_change:127.0.0.1:2526:max_clients":     false,
-		"server_change:127.0.0.1:2527:tls_config":      false, // timestamp changed on certificates
+		//"server_change:tls_config":      false, // 127.0.0.1:2526
+		"server_change:127.0.0.1:2526:max_clients": false,
+		"server_change:tls_config":                 false, // 127.0.0.1:2527 timestamp changed on certificates
 	}
 	toUnsubscribe := map[string]func(c *AppConfig){}
 	toUnsubscribeS := map[string]func(c *ServerConfig){}

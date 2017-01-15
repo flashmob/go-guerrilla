@@ -290,11 +290,13 @@ func (server *server) handleClient(client *client) {
 	help := "250 HELP"
 
 	if sc.TLSAlwaysOn {
-		success := client.upgradeToTLS(server.tlsConfigStore.Load().(*tls.Config))
-		if !success {
+		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
+		if ok && client.upgradeToTLS(tlsConfig) {
+			advertiseTLS = ""
+		} else {
+			// server requires TLS, but can't handshake
 			client.kill()
 		}
-		advertiseTLS = ""
 	}
 	if !sc.StartTLSOn {
 		// STARTTLS turned off, don't advertise it
@@ -454,7 +456,8 @@ func (server *server) handleClient(client *client) {
 
 		case ClientStartTLS:
 			if !client.TLS && sc.StartTLSOn {
-				if client.upgradeToTLS(server.tlsConfigStore.Load().(*tls.Config)) {
+				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
+				if ok && client.upgradeToTLS(tlsConfig) {
 					advertiseTLS = ""
 					client.resetTransaction()
 				}
