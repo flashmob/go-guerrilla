@@ -146,7 +146,7 @@ func (client *client) upgradeToTLS(tlsConfig *tls.Config) bool {
 	tlsConn = tls.Server(client.conn, tlsConfig)
 	err := tlsConn.Handshake()
 	if err != nil {
-		log.WithError(err).Warn("[%s] Failed TLS handshake", client.RemoteAddress)
+		log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
 		return false
 	}
 	client.conn = net.Conn(tlsConn)
