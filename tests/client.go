@@ -2,6 +2,7 @@ package test
 
 import (
 	"bufio"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla"
@@ -11,8 +12,18 @@ import (
 
 func Connect(serverConfig guerrilla.ServerConfig, deadline time.Duration) (net.Conn, *bufio.Reader, error) {
 	var bufin *bufio.Reader
+	var conn net.Conn
+	var err error
+	if serverConfig.TLSAlwaysOn {
+		// start tls automatically
+		conn, err = tls.Dial("tcp", serverConfig.ListenInterface, &tls.Config{
+			InsecureSkipVerify: true,
+			ServerName:         "127.0.0.1",
+		})
+	} else {
+		conn, err = net.Dial("tcp", serverConfig.ListenInterface)
+	}
 
-	conn, err := net.Dial("tcp", serverConfig.ListenInterface)
 	if err != nil {
 		// handle error
 		//t.Error("Cannot dial server", config.Servers[0].ListenInterface)
