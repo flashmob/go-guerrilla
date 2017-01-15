@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	test "github.com/flashmob/go-guerrilla/tests"
