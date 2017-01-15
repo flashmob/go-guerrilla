@@ -18,18 +18,17 @@ type AppConfig struct {
 
 // ServerConfig specifies config options for a single server
 type ServerConfig struct {
-	IsEnabled       bool     `json:"is_enabled"`
-	Hostname        string   `json:"host_name"`
-	AllowedHosts    []string `json:"allowed_hosts"`
-	MaxSize         int64    `json:"max_size"`
-	PrivateKeyFile  string   `json:"private_key_file"`
-	PublicKeyFile   string   `json:"public_key_file"`
-	Timeout         int      `json:"timeout"`
-	ListenInterface string   `json:"listen_interface"`
-	StartTLSOn      bool     `json:"start_tls_on,omitempty"`
-	TLSAlwaysOn     bool     `json:"tls_always_on,omitempty"`
-	MaxClients      int      `json:"max_clients"`
-	LogFile         string   `json:"log_file,omitempty"`
+	IsEnabled       bool   `json:"is_enabled"`
+	Hostname        string `json:"host_name"`
+	MaxSize         int64  `json:"max_size"`
+	PrivateKeyFile  string `json:"private_key_file"`
+	PublicKeyFile   string `json:"public_key_file"`
+	Timeout         int    `json:"timeout"`
+	ListenInterface string `json:"listen_interface"`
+	StartTLSOn      bool   `json:"start_tls_on,omitempty"`
+	TLSAlwaysOn     bool   `json:"tls_always_on,omitempty"`
+	MaxClients      int    `json:"max_clients"`
+	LogFile         string `json:"log_file,omitempty"`
 
 	_privateKeyFile_mtime int
 	_publicKeyFile_mtime  int
@@ -93,13 +92,18 @@ func (c *AppConfig) getServers() map[string]*ServerConfig {
 	return servers
 }
 
-// Emits any configuration change events on the server
+// Emits any configuration change events on the server.
+// All events are fired and run synchronously
 func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 	// get a list of changes
 	changes := getDiff(
 		*oldServer,
 		*sc,
 	)
+	if len(changes) > 0 {
+		// something changed in the server config
+		Bus.Publish("server_change:update_config", sc)
+	}
 
 	// enable or disable?
 	if _, ok := changes["IsEnabled"]; ok {

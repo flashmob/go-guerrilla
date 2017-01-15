@@ -69,8 +69,6 @@ func (g *guerrilla) makeServers() error {
 			// server already instantiated
 			continue
 		}
-		// Add relevant app-wide config options to each server
-		sc.AllowedHosts = g.Config.AllowedHosts
 		server, err := newServer(&sc, g.backend)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
@@ -78,6 +76,7 @@ func (g *guerrilla) makeServers() error {
 		}
 		if server != nil {
 			g.servers[sc.ListenInterface] = server
+			server.setAllowedHosts(g.Config.AllowedHosts)
 		}
 
 	}
@@ -129,6 +128,13 @@ func (g *guerrilla) setConfig(i int, sc *ServerConfig) {
 
 func (g *guerrilla) subscribeEvents() {
 
+	// server was removed from config
+	Bus.Subscribe("server_change:update_config", func(sc *ServerConfig) {
+		if i, _ := g.findServer(sc.ListenInterface); i != -1 {
+			g.setConfig(i, sc)
+		}
+	})
+
 	// add a new server to the config & start
 	Bus.Subscribe("server_change:new_server", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i == -1 {
@@ -147,7 +153,6 @@ func (g *guerrilla) subscribeEvents() {
 	Bus.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
-				g.setConfig(i, sc)
 				log.Infof("Starting server [%s]", server.listenInterface)
 				err := g.Start()
 				if err != nil {
@@ -159,7 +164,6 @@ func (g *guerrilla) subscribeEvents() {
 	// stop running a server
 	Bus.Subscribe("server_change:stop_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			g.setConfig(i, sc)
 			log.Info(server.state == ServerStateStartError, server.isEnabled())
 			if server.state == ServerStateRunning {
 				log.Info("stop sercer STAHP!")
@@ -174,6 +178,16 @@ func (g *guerrilla) subscribeEvents() {
 			g.removeServer(i, sc.ListenInterface)
 			log.Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
 		}
+	})
+
+	// allowed_hosts changed, set for all servers
+	Bus.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
+		g.guard.Lock()
+		defer g.guard.Unlock()
+		for _, server := range g.servers {
+			g.servers[server.listenInterface].setAllowedHosts(c.AllowedHosts)
+		}
+		log.Infof("allowed_hosts config changed, a new list was set")
 	})
 }
 

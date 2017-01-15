@@ -78,7 +78,6 @@ func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
 	}
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
-	server.setAllowedHosts(sc.AllowedHosts)
 	if err := server.configureSSL(); err != nil {
 		return server, err
 	}
