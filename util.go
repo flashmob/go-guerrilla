@@ -2,14 +2,15 @@ package guerrilla
 
 import (
 	"errors"
+	"github.com/flashmob/go-guerrilla/envelope"
 	"regexp"
 	"strings"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (*EmailAddress, error) {
-	email := &EmailAddress{}
+func extractEmail(str string) (*envelope.EmailAddress, error) {
+	email := &envelope.EmailAddress{}
 	var err error
 	if len(str) > RFC2821LimitPath {
 		return email, errors.New("501 Path too long")

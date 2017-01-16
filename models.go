@@ -3,73 +3,13 @@ package guerrilla
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
-	"strconv"
-	"strings"
 )
 
 var (
 	LineLimitExceeded   = errors.New("Maximum line length exceeded")
 	MessageSizeExceeded = errors.New("Maximum message size exceeded")
 )
-
-// Backends process received mail. Depending on the implementation, that can
-// be storing in a database, retransmitting to another server, etc.
-// Must return an SMTP message (i.e. "250 OK") and a boolean indicating
-// whether the message was processed successfully.
-type Backend interface {
-	Process(*Envelope) BackendResult
-	Shutdown() error
-}
-
-// BackendResult represents a response to an SMTP client after receiving DATA.
-// The String method should return an SMTP message ready to send back to the
-// client, for example `250 OK: Message received`.
-type BackendResult interface {
-	fmt.Stringer
-	// Code should return the SMTP code associated with this response, ie. `250`
-	Code() int
-}
-
-// Internal implementation of BackendResult for use by backend implementations.
-type backendResult string
-
-func (br backendResult) String() string {
-	return string(br)
-}
-
-// Parses the SMTP code from the first 3 characters of the SMTP message.
-// Returns 554 if code cannot be parsed.
-func (br backendResult) Code() int {
-	trimmed := strings.TrimSpace(string(br))
-	if len(trimmed) < 3 {
-		return 554
-	}
-	code, err := strconv.Atoi(trimmed[:3])
-	if err != nil {
-		return 554
-	}
-	return code
-}
-
-func NewBackendResult(message string) BackendResult {
-	return backendResult(message)
-}
-
-// EmailAddress encodes an email address of the form `<user@host>`
-type EmailAddress struct {
-	User string
-	Host string
-}
-
-func (ep *EmailAddress) String() string {
-	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
-}
-
-func (ep *EmailAddress) isEmpty() bool {
-	return ep.User == "" && ep.Host == ""
-}
 
 // we need to adjust the limit, so we embed io.LimitedReader
 type adjustableLimitedReader struct {

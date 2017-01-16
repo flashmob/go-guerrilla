@@ -1,6 +1,8 @@
-hash: d96dd7a4b78faacec2eb40ef44e4e6598abf0be703021cae6dacd8080b6f4f54
-updated: 2016-12-16T15:58:00.591876692-08:00
+hash: 9d5e16555ee2b6363588a60d63b9ba42952cf8a77907b4629aca810f774e3f7b
+updated: 2017-01-06T01:17:48.317018392+11:00
 imports:
+- name: github.com/asaskevich/EventBus
+  version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
 - name: github.com/garyburd/redigo
   version: 8873b2f1995f59d4bcdd2b0dc9858e2cb9bf0c13
   subpackages:

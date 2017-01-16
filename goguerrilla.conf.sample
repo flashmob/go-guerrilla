@@ -6,7 +6,7 @@
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "primary_mail_host": "sharklasers.com",
+    "pid_file" : "/var/run/go-guerrilla.pid",
     "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": true

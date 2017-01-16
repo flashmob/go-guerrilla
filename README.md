@@ -49,12 +49,20 @@ including the number of clients, memory usage, graph the number of
 connections/bytes/memory used for the last 24h.
 Show the top source clients by: IP, by domain & by HELO message.
 Using websocket via https & password protected.
+Update: Currently WIP, see branch https://github.com/flashmob/go-guerrilla/tree/dashboard.
 (1 BTC for a successful merge)
 
-- Testing: Automated test that can start the server and test end-to-end
-a few common cases, some unit tests would be good too. Automate to
- run when code is pushed to github
-(0.25 BTC for a successful merge)
+- Fuzz Testing: Using https://github.com/dvyukov/go-fuzz
+Implement a fuzzing client that will send input to the
+server's connection. 
+Maybe another area to fuzz would be the config file, 
+fuzz the config file and then send a sighup to the server to see if it 
+can crash? Please open an issue before to discuss scope
+(0.25 BTC for a successful merge / bugs found.)
+
+- Testing: Add some automated more tests to increase coverage.
+(0.1 BTC for a successful merge, judged to be a satisfactory increase
+in coverage. Please open an issue before to discuss scope)
 
 - Profiling: Simulate a configurable number of simultaneous clients 
 (eg 5000) which send commands at random speeds with messages of various 
@@ -62,7 +70,8 @@ lengths. Some connections to use TLS. Some connections may produce
 errors, eg. disconnect randomly after a few commands, issue unexpected
 input or timeout. Provide a report of all the bottlenecks and setup so 
 that the report can be run automatically run when code is pushed to 
-github.
+github. (Flame graph maybe? https://github.com/uber/go-torch 
+Please open an issue before to discuss scope)
 (0.25 BTC)
 
 - Looking for someone to do a code review & possibly fix any tidbits,
@@ -178,13 +187,13 @@ config := &guerrilla.AppConfig{
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}
-app := guerrilla.New(config, backend)
+app, err := guerrilla.New(config, backend)
 ```
 
 ## Start the app.
 `Start` is non-blocking, so make sure the main goroutine is kept busy
 ```go
-app.Start() (startErrors []error)
+startErrors := app.Start()
 ```
 
 ## Shutting down.
@@ -276,6 +285,8 @@ Large refactoring of the code.
 - Logging functionality: logrus is now used for logging. Currently output is going to stdout
 - Incompatible change: Config's allowed_hosts is now an array
 - Incompatible change: The server's command is now a command called `guerrillad`
+- Config re-loading via SIGHUP: reload TLS, add/remove/enable/disable servers, change allowed hosts, timeout.
+- Begin writing automated tests
  
 
 1.5.1 - 4nd Nov 2016 (Latest tagged release)

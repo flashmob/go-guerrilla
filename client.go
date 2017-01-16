@@ -2,6 +2,9 @@ package guerrilla
 
 import (
 	"bufio"
+	"crypto/tls"
+	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
 	"strings"
 	"sync"
@@ -25,7 +28,7 @@ const (
 )
 
 type client struct {
-	*Envelope
+	*envelope.Envelope
 	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
@@ -34,32 +37,18 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response  string
-	conn      net.Conn
-	bufin     *smtpBufferedReader
-	bufout    *bufio.Writer
-	timeoutMu sync.Mutex
-}
-
-// Email represents a single SMTP message.
-type Envelope struct {
-	// Remote IP address
-	RemoteAddress string
-	// Message sent in EHLO command
-	Helo string
-	// Sender
-	MailFrom *EmailAddress
-	// Recipients
-	RcptTo  []EmailAddress
-	Data    string
-	Subject string
-	TLS     bool
+	response string
+	conn     net.Conn
+	bufin    *smtpBufferedReader
+	bufout   *bufio.Writer
+	// guards access to conn
+	connGuard sync.Mutex
 }
 
 func NewClient(conn net.Conn, clientID uint64) *client {
 	return &client{
 		conn: conn,
-		Envelope: &Envelope{
+		Envelope: &envelope.Envelope{
 			RemoteAddress: conn.RemoteAddr().String(),
 		},
 		ConnectedAt: time.Now(),
@@ -74,14 +63,14 @@ func (c *client) responseAdd(r string) {
 }
 
 func (c *client) resetTransaction() {
-	c.MailFrom = &EmailAddress{}
-	c.RcptTo = []EmailAddress{}
+	c.MailFrom = &envelope.EmailAddress{}
+	c.RcptTo = []envelope.EmailAddress{}
 	c.Data = ""
 	c.Subject = ""
 }
 
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (EmailAddress{}))
+	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (envelope.EmailAddress{}))
 	if isMailFromEmpty {
 		return false
 	}
@@ -113,13 +102,21 @@ func (c *client) scanSubject(reply string) {
 	}
 }
 
+// setTimeout adjust the timeout on the connection, goroutine safe
 func (c *client) setTimeout(t time.Duration) {
-	defer c.timeoutMu.Unlock()
-	c.timeoutMu.Lock()
+	defer c.connGuard.Unlock()
+	c.connGuard.Lock()
 	if c.conn != nil {
 		c.conn.SetDeadline(time.Now().Add(t * time.Second))
 	}
+}
 
+// Closes a client connection, , goroutine safe
+func (c *client) closeConn() {
+	defer c.connGuard.Unlock()
+	c.connGuard.Lock()
+	c.conn.Close()
+	c.conn = nil
 }
 
 func (c *client) init(conn net.Conn, clientID uint64) {
@@ -140,4 +137,22 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 
 func (c *client) getID() uint64 {
 	return c.ID
+}
+
+// Upgrades a client connection to TLS
+func (client *client) upgradeToTLS(tlsConfig *tls.Config) bool {
+	var tlsConn *tls.Conn
+	// load the config thread-safely
+	tlsConn = tls.Server(client.conn, tlsConfig)
+	err := tlsConn.Handshake()
+	if err != nil {
+		log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+		return false
+	}
+	client.conn = net.Conn(tlsConn)
+	client.bufout.Reset(client.conn)
+	client.bufin.Reset(client.conn)
+	client.TLS = true
+
+	return true
 }
