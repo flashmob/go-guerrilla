@@ -126,15 +126,24 @@ func (g *guerrilla) setConfig(i int, sc *ServerConfig) {
 	g.servers[sc.ListenInterface].setConfig(sc)
 }
 
+// mapServers calls a callback on each server in g.servers map
+// It locks the g.servers map before mapping
+func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
+	defer g.guard.Unlock()
+	g.guard.Lock()
+	for _, server := range g.servers {
+		callback(server)
+	}
+	return g.servers
+}
+
 func (g *guerrilla) subscribeEvents() {
 
 	// allowed_hosts changed, set for all servers
 	Bus.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
-		g.guard.Lock()
-		defer g.guard.Unlock()
-		for _, server := range g.servers {
-			g.servers[server.listenInterface].setAllowedHosts(c.AllowedHosts)
-		}
+		g.mapServers(func(server *server) {
+			server.setAllowedHosts(c.AllowedHosts)
+		})
 		log.Infof("allowed_hosts config changed, a new list was set")
 	})
 
@@ -199,6 +208,12 @@ func (g *guerrilla) subscribeEvents() {
 				log.WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
 			}
 		}
+	})
+
+	Bus.Subscribe("server_change:timeout", func(sc *ServerConfig) {
+		g.mapServers(func(server *server) {
+			server.setTimeout(sc.Timeout)
+		})
 	})
 
 }

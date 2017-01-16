@@ -213,7 +213,7 @@ func TestConfigChangeEvents(t *testing.T) {
 		"server_change:stop_server":                    false, // 127.0.0.1:3333: server (disabled)
 		"server_change:127.0.0.1:2526:new_log_file":    false,
 		"server_change:127.0.0.1:2527:reopen_log_file": false,
-		"server_change:127.0.0.1:2526:timeout":         false,
+		"server_change:timeout":                        false, // 127.0.0.1:2526 timeout
 		//"server_change:tls_config":      false, // 127.0.0.1:2526
 		"server_change:127.0.0.1:2526:max_clients": false,
 		"server_change:tls_config":                 false, // 127.0.0.1:2527 timestamp changed on certificates

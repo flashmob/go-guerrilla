@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	test "github.com/flashmob/go-guerrilla/tests"
@@ -913,6 +914,86 @@ func TestBadTLS(t *testing.T) {
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "failed to load the new TLS configuration"); i < 0 {
 			t.Error("did not detect TLS load failure")
+		}
+	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+
+	// cleanup
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+
+}
+
+// Test for when the server config Timeout value changes
+// Start with configJsonD.json
+
+func TestSetTimeoutEvent(t *testing.T) {
+	// hold the output of logs
+
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(logOut)
+
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonD)) // load configJsonD
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+	time.Sleep(time.Second)
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(time.Second)
+
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mail.test.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		}
+	}
+	// set the timeout to 1 second
+
+	newConf := conf // copy the cmdConfg
+	newConf.Servers[0].Timeout = 1
+	if jsonbytes, err := json.Marshal(newConf); err == nil {
+		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
+	} else {
+		t.Error(err)
+	}
+	// send a sighup signal to the server to reload config
+	sigHup()
+	time.Sleep(time.Millisecond * 1200) // pause for connection to timeout
+
+	// so the connection we have opened should timeout by now
+
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+	logOut.Flush()
+	// did backend started as expected?
+	if read, err := ioutil.ReadAll(logIn); err == nil {
+		logOutput := string(read)
+		fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
+			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
 		}
 	}
 	// don't forget to reset

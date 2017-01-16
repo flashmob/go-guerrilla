@@ -124,7 +124,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 	}
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {
-		Bus.Publish("server_change:"+sc.ListenInterface+":timeout", sc)
+		Bus.Publish("server_change:timeout", sc)
 	}
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
