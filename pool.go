@@ -41,6 +41,22 @@ type lentClients struct {
 	wg sync.WaitGroup
 }
 
+// maps the callback on all lentClients
+func (c *lentClients) mapAll(callback func(p Poolable)) {
+	defer c.mu.Unlock()
+	c.mu.Lock()
+	for _, item := range c.m {
+		callback(item)
+	}
+}
+
+// operation performs an operation on a Poolable item using the callback
+func (c *lentClients) operation(callback func(p Poolable), item Poolable) {
+	defer c.mu.Unlock()
+	c.mu.Lock()
+	callback(item)
+}
+
 // NewPool creates a new pool of Clients.
 func NewPool(poolSize int) *Pool {
 	return &Pool{
@@ -65,10 +81,9 @@ func (p *Pool) ShutdownState() {
 	p.ShutdownChan <- 1             // release any waiting p.sem
 
 	// set a low timeout
-	var c Poolable
-	for _, c = range p.activeClients.m {
-		c.setTimeout(time.Duration(int64(aVeryLowTimeout)))
-	}
+	p.activeClients.mapAll(func(p Poolable) {
+		p.setTimeout(time.Duration(int64(aVeryLowTimeout)))
+	})
 
 }
 
@@ -93,12 +108,9 @@ func (p *Pool) IsShuttingDown() bool {
 
 // set a timeout for all lent clients
 func (p *Pool) SetTimeout(duration time.Duration) {
-	var client Poolable
-	p.activeClients.mu.Lock()
-	defer p.activeClients.mu.Unlock()
-	for _, client = range p.activeClients.m {
-		client.setTimeout(duration)
-	}
+	p.activeClients.mapAll(func(p Poolable) {
+		p.setTimeout(duration)
+	})
 }
 
 // Gets the number of active clients that are currently
@@ -146,15 +158,15 @@ func (p *Pool) Return(c Poolable) {
 }
 
 func (p *Pool) activeClientsAdd(c Poolable) {
-	p.activeClients.mu.Lock()
-	p.activeClients.wg.Add(1)
-	p.activeClients.m[c.getID()] = c
-	p.activeClients.mu.Unlock()
+	p.activeClients.operation(func(item Poolable) {
+		p.activeClients.wg.Add(1)
+		p.activeClients.m[c.getID()] = item
+	}, c)
 }
 
 func (p *Pool) activeClientsRemove(c Poolable) {
-	p.activeClients.mu.Lock()
-	p.activeClients.wg.Done()
-	delete(p.activeClients.m, c.getID())
-	p.activeClients.mu.Unlock()
+	p.activeClients.operation(func(item Poolable) {
+		delete(p.activeClients.m, item.getID())
+		p.activeClients.wg.Done()
+	}, c)
 }
