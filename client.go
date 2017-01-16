@@ -69,8 +69,8 @@ func (c *client) resetTransaction() {
 	c.Subject = ""
 }
 
-func (c *client) isInTransaction() bool {
-	isMailFromEmpty := *c.MailFrom == (envelope.EmailAddress{})
+func (c *client) isInTransaction() bool 
+	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (envelope.EmailAddress{}))
 	if isMailFromEmpty {
 		return false
 	}
