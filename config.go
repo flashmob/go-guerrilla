@@ -128,7 +128,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 	}
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
-		Bus.Publish("server_change:"+sc.ListenInterface+":max_clients", sc)
+		Bus.Publish("server_change:max_clients", sc)
 	}
 
 	// tls changed

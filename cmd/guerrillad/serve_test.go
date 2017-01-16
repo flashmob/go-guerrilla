@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	test "github.com/flashmob/go-guerrilla/tests"
@@ -991,7 +990,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	// did backend started as expected?
 	if read, err := ioutil.ReadAll(logIn); err == nil {
 		logOutput := string(read)
-		fmt.Println(logOutput)
+		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
 			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
 		}

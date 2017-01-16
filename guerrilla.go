@@ -209,10 +209,16 @@ func (g *guerrilla) subscribeEvents() {
 			}
 		}
 	})
-
+	// when server's timeout change.
 	Bus.Subscribe("server_change:timeout", func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			server.setTimeout(sc.Timeout)
+		})
+	})
+	// when server's max clients change.
+	Bus.Subscribe("server_change:max_clients", func(sc *ServerConfig) {
+		g.mapServers(func(server *server) {
+			// TODO resize the pool somehow
 		})
 	})
 
