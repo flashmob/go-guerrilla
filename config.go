@@ -54,14 +54,14 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 }
 
 // Emits any configuration change events onto the event bus.
-func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig) {
+func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has 'allowed hosts' changed?
 	if !reflect.DeepEqual(oldConfig.AllowedHosts, c.AllowedHosts) {
-		Bus.Publish("config_change:allowed_hosts", c)
+		app.Publish("config_change:allowed_hosts", c)
 	}
 	// has pid file changed?
 	if strings.Compare(oldConfig.PidFile, c.PidFile) != 0 {
-		Bus.Publish("config_change:pid_file", c)
+		app.Publish("config_change:pid_file", c)
 	}
 	// server config changes
 	oldServers := oldConfig.getServers()
@@ -70,16 +70,16 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig) {
 		if oldServer, ok := oldServers[iface]; ok {
 			// since old server exists in the new config, we do not track it anymore
 			delete(oldServers, iface)
-			newServer.emitChangeEvents(oldServer)
+			newServer.emitChangeEvents(oldServer, app)
 		} else {
 			// start new server
-			Bus.Publish("server_change:new_server", newServer)
+			app.Publish("server_change:new_server", newServer)
 		}
 
 	}
 	// remove any servers that don't exist anymore
 	for _, oldserver := range oldServers {
-		Bus.Publish("server_change:remove_server", oldserver)
+		app.Publish("server_change:remove_server", oldserver)
 	}
 }
 
@@ -94,7 +94,7 @@ func (c *AppConfig) getServers() map[string]*ServerConfig {
 
 // Emits any configuration change events on the server.
 // All events are fired and run synchronously
-func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
+func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla) {
 	// get a list of changes
 	changes := getDiff(
 		*oldServer,
@@ -102,33 +102,33 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 	)
 	if len(changes) > 0 {
 		// something changed in the server config
-		Bus.Publish("server_change:update_config", sc)
+		app.Publish("server_change:update_config", sc)
 	}
 
 	// enable or disable?
 	if _, ok := changes["IsEnabled"]; ok {
 		if sc.IsEnabled {
-			Bus.Publish("server_change:start_server", sc)
+			app.Publish("server_change:start_server", sc)
 		} else {
-			Bus.Publish("server_change:stop_server", sc)
+			app.Publish("server_change:stop_server", sc)
 		}
 		// do not emit any more events when IsEnabled changed
 		return
 	}
 	// log file change?
 	if _, ok := changes["LogFile"]; ok {
-		Bus.Publish("server_change:"+sc.ListenInterface+":new_log_file", sc)
+		app.Publish("server_change:"+sc.ListenInterface+":new_log_file", sc)
 	} else {
 		// since config file has not changed, we reload it
-		Bus.Publish("server_change:"+sc.ListenInterface+":reopen_log_file", sc)
+		app.Publish("server_change:"+sc.ListenInterface+":reopen_log_file", sc)
 	}
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {
-		Bus.Publish("server_change:timeout", sc)
+		app.Publish("server_change:timeout", sc)
 	}
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
-		Bus.Publish("server_change:max_clients", sc)
+		app.Publish("server_change:max_clients", sc)
 	}
 
 	// tls changed
@@ -147,7 +147,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig) {
 		}
 		return false
 	}(); ok {
-		Bus.Publish("server_change:tls_config", sc)
+		app.Publish("server_change:tls_config", sc)
 	}
 }
 

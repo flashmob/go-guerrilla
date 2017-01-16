@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
-	evbus "github.com/asaskevich/EventBus"
 	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
@@ -64,7 +63,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 			} else {
 				cmdConfig = newConfig
 				log.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
-				cmdConfig.emitChangeEvents(&oldConfig)
+				cmdConfig.emitChangeEvents(&oldConfig, app)
 			}
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			log.Infof("Shutdown signal caught")
@@ -78,9 +77,9 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
-func subscribeBackendEvent(event string, backend backends.Backend) {
+func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
 
-	guerrilla.Bus.Subscribe(event, func(cmdConfig *CmdConfig) {
+	app.Subscribe(event, func(cmdConfig *CmdConfig) {
 		var err error
 		if err = backend.Shutdown(); err != nil {
 			log.WithError(err).Warn("Backend failed to shutdown")
@@ -117,13 +116,6 @@ func serve(cmd *cobra.Command, args []string) {
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}
-	guerrilla.Bus = evbus.New()
-	// Write out our PID
-	writePid(cmdConfig.PidFile)
-	// ...and write out our pid whenever the file name changes in the config
-	guerrilla.Bus.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
-		writePid(ac.PidFile)
-	})
 
 	// Backend setup
 	var backend backends.Backend
@@ -132,8 +124,6 @@ func serve(cmd *cobra.Command, args []string) {
 		log.WithError(err).Fatalf("Error while loading the backend %q",
 			cmdConfig.BackendName)
 	}
-	subscribeBackendEvent("config_change:backend_config", backend)
-	subscribeBackendEvent("config_change:backend_name", backend)
 
 	app, err := guerrilla.New(&cmdConfig.AppConfig, backend)
 	if err != nil {
@@ -143,6 +133,14 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.WithError(err).Error("Error(s) when starting server(s)")
 	}
+	subscribeBackendEvent("config_change:backend_config", backend, app)
+	subscribeBackendEvent("config_change:backend_name", backend, app)
+	// Write out our PID
+	writePid(cmdConfig.PidFile)
+	// ...and write out our pid whenever the file name changes in the config
+	app.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
+		writePid(ac.PidFile)
+	})
 	sigHandler(app)
 
 }
@@ -164,16 +162,16 @@ func (c *CmdConfig) load(jsonBytes []byte) error {
 	return nil
 }
 
-func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig) {
+func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
 	// has backend changed?
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
-		guerrilla.Bus.Publish("config_change:backend_config", c)
+		app.Publish("config_change:backend_config", c)
 	}
 	if c.BackendName != oldConfig.BackendName {
-		guerrilla.Bus.Publish("config_change:backend_name", c)
+		app.Publish("config_change:backend_name", c)
 	}
 	// call other emitChangeEvents
-	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig)
+	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught

@@ -65,7 +65,7 @@ func init() {
 		initErr = errors.New("Could not unmartial config," + err.Error())
 	} else {
 		setupCerts(config)
-		backend, _ := getBackend("dummy", config.BackendConfig) //getDummyBackend(config.BackendConfig)
+		backend, _ := getBackend("dummy", config.BackendConfig)
 		app, _ = guerrilla.New(&config.AppConfig, backend)
 	}
 
@@ -112,14 +112,6 @@ var configJson = `
     ]
 }
 `
-
-func getDummyBackend(backendConfig map[string]interface{}) backends.Backend {
-	var backend backends.Backend
-	b := &backends.AbstractBackend{}
-	b.Initialize(backendConfig)
-	backend = backends.Backend(b)
-	return backend
-}
 
 func getBackend(backendName string, backendConfig map[string]interface{}) (backends.Backend, error) {
 	return backends.New(backendName, backendConfig)

@@ -3,6 +3,7 @@ package guerrilla
 import (
 	"errors"
 	log "github.com/Sirupsen/logrus"
+	evbus "github.com/asaskevich/EventBus"
 	"github.com/flashmob/go-guerrilla/backends"
 	"sync"
 )
@@ -34,6 +35,9 @@ func (e Errors) Error() string {
 type Guerrilla interface {
 	Start() error
 	Shutdown()
+	Subscribe(topic string, fn interface{}) error
+	Publish(topic string, args ...interface{})
+	Unsubscribe(topic string, handler interface{}) error
 }
 
 type guerrilla struct {
@@ -43,6 +47,7 @@ type guerrilla struct {
 	// guard controls access to g.servers
 	guard sync.Mutex
 	state int8
+	bus   *evbus.EventBus
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
@@ -51,6 +56,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 		backend: b,
+		bus:     evbus.New(),
 	}
 	g.state = GuerrillaStateNew
 	err := g.makeServers()
@@ -62,7 +68,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 
 // Instantiate servers
 func (g *guerrilla) makeServers() error {
-	log.Info("making servers")
+	log.Debug("making servers")
 	var errs Errors
 	for _, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
@@ -140,7 +146,7 @@ func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
 func (g *guerrilla) subscribeEvents() {
 
 	// allowed_hosts changed, set for all servers
-	Bus.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
+	g.Subscribe("config_change:allowed_hosts", func(c *AppConfig) {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
 		})
@@ -148,14 +154,14 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// server was removed from config
-	Bus.Subscribe("server_change:update_config", func(sc *ServerConfig) {
+	g.Subscribe("server_change:update_config", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i != -1 {
 			g.setConfig(i, sc)
 		}
 	})
 
 	// add a new server to the config & start
-	Bus.Subscribe("server_change:new_server", func(sc *ServerConfig) {
+	g.Subscribe("server_change:new_server", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i == -1 {
 			// not found, lets add it
 			g.addServer(sc)
@@ -169,7 +175,7 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// start a server that already exists in config and has been instantiated
-	Bus.Subscribe("server_change:start_server", func(sc *ServerConfig) {
+	g.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
 				log.Infof("Starting server [%s]", server.listenInterface)
@@ -181,17 +187,16 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// stop running a server
-	Bus.Subscribe("server_change:stop_server", func(sc *ServerConfig) {
+	g.Subscribe("server_change:stop_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			log.Info(server.state == ServerStateStartError, server.isEnabled())
 			if server.state == ServerStateRunning {
-				log.Info("stop sercer STAHP!")
 				server.Shutdown()
+				log.Infof("Server [%s] stopped.", sc.ListenInterface)
 			}
 		}
 	})
 	// server was removed from config
-	Bus.Subscribe("server_change:remove_server", func(sc *ServerConfig) {
+	g.Subscribe("server_change:remove_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			server.Shutdown()
 			g.removeServer(i, sc.ListenInterface)
@@ -200,7 +205,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// TLS changes
-	Bus.Subscribe("server_change:tls_config", func(sc *ServerConfig) {
+	g.Subscribe("server_change:tls_config", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if err := server.configureSSL(); err == nil {
 				log.Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
@@ -210,13 +215,13 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// when server's timeout change.
-	Bus.Subscribe("server_change:timeout", func(sc *ServerConfig) {
+	g.Subscribe("server_change:timeout", func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			server.setTimeout(sc.Timeout)
 		})
 	})
 	// when server's max clients change.
-	Bus.Subscribe("server_change:max_clients", func(sc *ServerConfig) {
+	g.Subscribe("server_change:max_clients", func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			// TODO resize the pool somehow
 		})
@@ -289,4 +294,16 @@ func (g *guerrilla) Shutdown() {
 	} else {
 		log.Infof("Backend shutdown completed")
 	}
+}
+
+func (g *guerrilla) Subscribe(topic string, fn interface{}) error {
+	return g.bus.Subscribe(topic, fn)
+}
+
+func (g *guerrilla) Publish(topic string, args ...interface{}) {
+	g.bus.Publish(topic, args...)
+}
+
+func (g *guerrilla) Unsubscribe(topic string, handler interface{}) error {
+	return g.bus.Unsubscribe(topic, handler)
 }

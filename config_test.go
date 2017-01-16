@@ -1,6 +1,10 @@
 package guerrilla
 
 import (
+	"bufio"
+	"bytes"
+	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"io/ioutil"
 	"os"
@@ -197,8 +201,23 @@ func TestSampleConfig(t *testing.T) {
 // make sure that we get all the config change events
 func TestConfigChangeEvents(t *testing.T) {
 
+	// hold the output of logs
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	//log.SetOutput(os.Stdout)
+	log.SetOutput(logOut)
+
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
+	bcfg := backends.BackendConfig{"log_received_mails": true}
+	backend, _ := backends.New("dummy", bcfg)
+	app, _ := New(oldconf, backend)
 	// simulate timestamp change
 	time.Sleep(time.Second + time.Millisecond*500)
 	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
@@ -228,14 +247,14 @@ func TestConfigChangeEvents(t *testing.T) {
 				f := func(c *AppConfig) {
 					expectedEvents[e] = true
 				}
-				Bus.Subscribe(event, f)
+				app.Subscribe(event, f)
 				toUnsubscribe[event] = f
 			} else {
 				// must be a server config change then
 				f := func(c *ServerConfig) {
 					expectedEvents[e] = true
 				}
-				Bus.Subscribe(event, f)
+				app.Subscribe(event, f)
 				toUnsubscribeS[event] = f
 			}
 
@@ -243,13 +262,13 @@ func TestConfigChangeEvents(t *testing.T) {
 	}
 
 	// emit events
-	newconf.EmitChangeEvents(oldconf)
+	newconf.EmitChangeEvents(oldconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
-		Bus.Unsubscribe(unevent, unfun)
+		app.Unsubscribe(unevent, unfun)
 	}
 	for unevent, unfun := range toUnsubscribeS {
-		Bus.Unsubscribe(unevent, unfun)
+		app.Unsubscribe(unevent, unfun)
 	}
 	for event, val := range expectedEvents {
 		if val == false {
@@ -258,4 +277,8 @@ func TestConfigChangeEvents(t *testing.T) {
 			break
 		}
 	}
+
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
 	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
@@ -224,6 +225,19 @@ func sigKill() {
 
 // make sure that we get all the config change events
 func TestCmdConfigChangeEvents(t *testing.T) {
+
+	// hold the output of logs
+	var logBuffer bytes.Buffer
+	// logs redirected to this writer
+	var logOut *bufio.Writer
+	// read the logs
+	var logIn *bufio.Reader
+	logOut = bufio.NewWriter(&logBuffer)
+	logIn = bufio.NewReader(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	//log.SetOutput(os.Stdout)
+	log.SetOutput(logOut)
+
 	oldconf := &CmdConfig{}
 	oldconf.load([]byte(configJsonA))
 
@@ -238,6 +252,12 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		"config_change:backend_name":   false,
 		"server_change:new_server":     false,
 	}
+	bcfg := backends.BackendConfig{"log_received_mails": true}
+	backend, err := backends.New("dummy", bcfg)
+	app, err := guerrilla.New(&oldconf.AppConfig, backend)
+	if err != nil {
+		//log.Info("Failed to create new app", err)
+	}
 	toUnsubscribe := map[string]func(c *CmdConfig){}
 	toUnsubscribeS := map[string]func(c *guerrilla.ServerConfig){}
 
@@ -249,13 +269,13 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
-				guerrilla.Bus.Subscribe(event, f)
+				app.Subscribe(event, f)
 				toUnsubscribeS[event] = f
 			} else {
 				f := func(c *CmdConfig) {
 					expectedEvents[e] = true
 				}
-				guerrilla.Bus.Subscribe(event, f)
+				app.Subscribe(event, f)
 				toUnsubscribe[event] = f
 			}
 
@@ -263,11 +283,11 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	// emit events
-	newconf.emitChangeEvents(oldconf)
-	newerconf.emitChangeEvents(newconf)
+	newconf.emitChangeEvents(oldconf, app)
+	newerconf.emitChangeEvents(newconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
-		guerrilla.Bus.Unsubscribe(unevent, unfun)
+		app.Unsubscribe(unevent, unfun)
 	}
 
 	for event, val := range expectedEvents {
@@ -277,6 +297,9 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 			break
 		}
 	}
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
 }
 
 // start server, chnage config, send SIG HUP, confirm that the pidfile changed & backend reloaded
@@ -839,6 +862,7 @@ func TestBadTLS(t *testing.T) {
 	//log.SetLevel(log.DebugLevel) // it will trash std out of debug
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(logOut)
+	//log.SetOutput(os.Stdout)
 	if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
 		log.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
 	} else {
@@ -894,6 +918,10 @@ func TestBadTLS(t *testing.T) {
 		}
 	}
 	testTlsHandshake()
+
+	// write some trash data
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.cert.pem", []byte("trash data"), 0664)
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.key.pem", []byte("trash data"), 0664)
 
 	// generate a new cert
 	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
