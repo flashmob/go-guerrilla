@@ -7,7 +7,6 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
 	"net/textproto"
-	"strings"
 	"sync"
 	"time"
 )
@@ -48,6 +47,7 @@ type client struct {
 	connGuard sync.Mutex
 }
 
+// Allocate a new client
 func NewClient(conn net.Conn, clientID uint64) *client {
 	c := &client{
 		conn: conn,
@@ -59,22 +59,32 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
 	}
-
+	// used for reading the DATA state
 	c.smtpReader = textproto.NewReader(c.bufin.Reader)
 	return c
 }
 
+// Add a response to be written on the next turn
 func (c *client) responseAdd(r string) {
 	c.response = c.response + r + "\r\n"
 }
 
+// resetTransaction resets the SMTP transaction, ready for the next email (doesn't disconnect)
+// Transaction ends on:
+// -HELO/EHLO/REST command
+// -End of DATA command
+// TLS handhsake
 func (c *client) resetTransaction() {
 	c.MailFrom = &envelope.EmailAddress{}
 	c.RcptTo = []envelope.EmailAddress{}
 	c.Data.Reset()
 	c.Subject = ""
+	c.Header = nil
 }
 
+// isInTransaction returns true if the connection is inside a transaction.
+// A transaction starts after a MAIL command gets issued by the client.
+// Call resetTransaction to end the transaction
 func (c *client) isInTransaction() bool {
 	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (envelope.EmailAddress{}))
 	if isMailFromEmpty {
@@ -83,29 +93,14 @@ func (c *client) isInTransaction() bool {
 	return true
 }
 
+// kill flags the connection to close on the next turn
 func (c *client) kill() {
 	c.KilledAt = time.Now()
 }
 
+// isAlive returns true if the client is to close on the next turn
 func (c *client) isAlive() bool {
 	return c.KilledAt.IsZero()
-}
-
-func (c *client) scanSubject(reply string) {
-	if c.Subject == "" && (len(reply) > 8) {
-		test := strings.ToUpper(reply[0:9])
-		if i := strings.Index(test, "SUBJECT: "); i == 0 {
-			// first line with \r\n
-			c.Subject = reply[9:]
-		}
-	} else if strings.HasSuffix(c.Subject, "\r\n") {
-		// chop off the \r\n
-		c.Subject = c.Subject[0 : len(c.Subject)-2]
-		if (strings.HasPrefix(reply, " ")) || (strings.HasPrefix(reply, "\t")) {
-			// subject is multi-line
-			c.Subject = c.Subject + reply[1:]
-		}
-	}
 }
 
 // setTimeout adjust the timeout on the connection, goroutine safe
@@ -125,15 +120,14 @@ func (c *client) closeConn() {
 	c.conn = nil
 }
 
+// init is called after the client is borrowed from the pool, to get it ready for the connection
 func (c *client) init(conn net.Conn, clientID uint64) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)
 	c.bufin.Reset(conn)
+	// reset the data buffer, keep it allocated
 	c.Data.Reset()
-
-	//br := bufio.NewReader(newAdjustableLimitedReader(conn, 267))
-	//c.smtpReader = textproto.NewReader(br)
 	// reset session data
 	c.state = 0
 	c.KilledAt = time.Time{}
@@ -143,8 +137,10 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.errors = 0
 	c.response = ""
 	c.Helo = ""
+	c.Header = nil
 }
 
+// getId returns the client's unique ID
 func (c *client) getID() uint64 {
 	return c.ID
 }

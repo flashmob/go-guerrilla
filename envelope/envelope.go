@@ -37,18 +37,26 @@ type Envelope struct {
 	// Sender
 	MailFrom *EmailAddress
 	// Recipients
-	RcptTo  []EmailAddress
-	Data    bytes.Buffer
+	RcptTo []EmailAddress
+	// Data stores the header and message body
+	Data bytes.Buffer
+	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
 	Subject string
-	TLS     bool
-	Header  textproto.MIMEHeader
+	// TLS is true if the email was received using a TLS connection
+	TLS bool
+	// Header stores the results from ParseHeaders()
+	Header textproto.MIMEHeader
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
+// Data buffer must be full before calling.
 // It assumes that at most 30kb of email data can be a header
 // Decoding of encoding to UTF is only done on the Subject, where the result is assigned to the Subject field
 func (e *Envelope) ParseHeaders() error {
 	var err error
+	if e.Header != nil {
+		return errors.New("Headers already parsed")
+	}
 	all := e.Data.Bytes()
 
 	// find where the header ends, assuming that over 30 kb would be max
