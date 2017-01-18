@@ -52,10 +52,6 @@ type savePayload struct {
 	recipient   *envelope.EmailAddress
 	savedNotify chan *saveStatus
 }
-type helper struct {
-	saveMailChan chan *savePayload
-	wg           sync.WaitGroup
-}
 
 // BackendResult represents a response to an SMTP client after receiving DATA.
 // The String method should return an SMTP message ready to send back to the
@@ -108,8 +104,9 @@ type BackendGateway struct {
 
 // possible values for state
 const (
-	BackendStateProcessing = iota
+	BackendStateRunning = iota
 	BackendStateShutdown
+	BackendStateError
 )
 
 // New retrieve a backend specified by the backendName, and initialize it using
@@ -124,12 +121,16 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
-	p.state = BackendStateProcessing
+	p.state = BackendStateRunning
 	return p, nil
 }
 
 // Distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
+	if gw.state != BackendStateRunning {
+		return NewBackendResult("554 Transaction failed - backend not running")
+	}
+
 	to := e.RcptTo
 	from := e.MailFrom
 
@@ -170,9 +171,11 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	if err == nil {
 		workersSize := gw.b.getNumberOfWorkers()
 		if workersSize < 1 {
+			gw.state = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
 		if err := gw.b.testSettings(); err != nil {
+			gw.state = BackendStateError
 			return err
 		}
 		gw.saveMailChan = make(chan *savePayload, workersSize)
@@ -184,6 +187,8 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 				gw.wg.Done()
 			}()
 		}
+	} else {
+		gw.state = BackendStateError
 	}
 	return err
 }

@@ -9,9 +9,12 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 
+	"bytes"
+	"compress/zlib"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
+	"io"
 )
 
 func init() {
@@ -73,6 +76,32 @@ type redisClient struct {
 	time        int
 }
 
+// compressedData struct will be compressed using zlib when printed via fmt
+type compressedData struct {
+	extraHeaders []byte
+	data         *bytes.Buffer
+}
+
+// implement Stringer interface
+func (c *compressedData) String() string {
+	if c.data == nil {
+		return ""
+	}
+	var b bytes.Buffer
+	var r *bytes.Reader
+	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
+	r = bytes.NewReader(c.extraHeaders)
+	io.Copy(w, r)
+	io.Copy(w, c.data)
+	w.Close()
+	return b.String()
+}
+
+func (c *compressedData) clear() {
+	c.extraHeaders = []byte{}
+	c.data = nil
+}
+
 func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
 	var err error
@@ -122,7 +151,8 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
-		length = len(payload.mail.Data)
+		length = payload.mail.Data.Len()
+
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
 		payload.mail.Subject = MimeHeaderDecode(payload.mail.Subject)
 		hash := MD5Hex(
@@ -136,26 +166,30 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
 		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
-		// compress to save space
-		payload.mail.Data = Compress(addHead, payload.mail.Data)
-		body = "gzencode"
+
+		// data will be compressed when printed, with addHead added to beginning
+		data := compressedData{[]byte(addHead), &payload.mail.Data}
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {
 			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, payload.mail.Data)
 			if doErr == nil {
-				payload.mail.Data = ""
+				//payload.mail.Data = ""
+				payload.mail.Data.Reset()
 				body = "redis"
+				data.clear() // blank
 			}
 		} else {
 			log.WithError(redisErr).Warn("Error while SETEX on redis")
 		}
+
+		body = "gzencode"
 		// bind data to cursor
 		ins.Bind(
 			to,
 			payload.mail.MailFrom.String(),
 			payload.mail.Subject,
 			body,
-			payload.mail.Data,
+			data.String(),
 			hash,
 			to,
 			payload.mail.RemoteAddress,

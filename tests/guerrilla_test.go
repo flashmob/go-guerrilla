@@ -692,7 +692,7 @@ func TestDataMaxLength(t *testing.T) {
 				conn,
 				bufin,
 				fmt.Sprintf("Subject:test\r\n\r\nHello %s\r\n.\r\n",
-					strings.Repeat("n", int(config.Servers[0].MaxSize-26))))
+					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 
 			//expected := "500 Line too long"
 			expected := "451 Error: Maximum DATA size exceeded"

@@ -18,8 +18,6 @@ type DummyBackend struct {
 	config dummyConfig
 	// embed functions form AbstractBackend so that DummyBackend satisfies the Backend interface
 	AbstractBackend
-	// helps with worker management
-	helper
 }
 
 // Backends should implement this method and set b.config field with a custom config struct

@@ -1,6 +1,9 @@
 package envelope
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // EmailAddress encodes an email address of the form `<user@host>`
 type EmailAddress struct {
@@ -26,7 +29,7 @@ type Envelope struct {
 	MailFrom *EmailAddress
 	// Recipients
 	RcptTo  []EmailAddress
-	Data    string
+	Data    bytes.Buffer
 	Subject string
 	TLS     bool
 }

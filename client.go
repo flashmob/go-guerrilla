@@ -6,6 +6,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
+	"net/textproto"
 	"strings"
 	"sync"
 	"time"
@@ -37,16 +38,18 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response string
-	conn     net.Conn
-	bufin    *smtpBufferedReader
-	bufout   *bufio.Writer
+	response   string
+	conn       net.Conn
+	bufin      *smtpBufferedReader
+	bufout     *bufio.Writer
+	smtpReader *Reader
+	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
 }
 
 func NewClient(conn net.Conn, clientID uint64) *client {
-	return &client{
+	c := &client{
 		conn: conn,
 		Envelope: &envelope.Envelope{
 			RemoteAddress: conn.RemoteAddr().String(),
@@ -56,6 +59,14 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
 	}
+	//c.Data = bytes.NewBuffer(make([]byte, 0, 1024 * 25))
+	//var r *bufio.Reader
+	//r = c.bufin
+	//br := bufio.NewReader(newAdjustableLimitedReader(conn, 267))
+	textproto.NewReader(c.bufin.Reader)
+
+	c.smtpReader = NewReader(c.bufin)
+	return c
 }
 
 func (c *client) responseAdd(r string) {
@@ -65,7 +76,7 @@ func (c *client) responseAdd(r string) {
 func (c *client) resetTransaction() {
 	c.MailFrom = &envelope.EmailAddress{}
 	c.RcptTo = []envelope.EmailAddress{}
-	c.Data = ""
+	c.Data.Reset()
 	c.Subject = ""
 }
 
@@ -124,6 +135,10 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	// reset our reader & writer
 	c.bufout.Reset(conn)
 	c.bufin.Reset(conn)
+	c.Data.Reset()
+
+	//br := bufio.NewReader(newAdjustableLimitedReader(conn, 267))
+	//c.smtpReader = textproto.NewReader(br)
 	// reset session data
 	c.state = 0
 	c.KilledAt = time.Time{}

@@ -423,11 +423,17 @@ func (server *server) handleClient(client *client) {
 			}
 
 		case ClientData:
-			var err error
+			//var err error
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
 			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
-			client.Data, err = server.read(client, sc.MaxSize)
+			//client.bufin.setLimit(int64(5))
+			//client.Data, err = server.read(client, sc.MaxSize)
+			//r := client.smtpReader.DotReader()
+			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
+			if n > sc.MaxSize {
+				err = fmt.Errorf("Maximum DATA size exceeded (%d)", sc.MaxSize)
+			}
 			if err != nil {
 				if err == LineLimitExceeded {
 					client.responseAdd("550 Error: " + LineLimitExceeded.Error())
