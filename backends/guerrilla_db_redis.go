@@ -154,7 +154,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		length = payload.mail.Data.Len()
 
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.mail.Subject = MimeHeaderDecode(payload.mail.Subject)
+		payload.mail.ParseHeaders()
 		hash := MD5Hex(
 			to,
 			payload.mail.MailFrom.String(),
@@ -169,20 +169,24 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 
 		// data will be compressed when printed, with addHead added to beginning
 		data := compressedData{[]byte(addHead), &payload.mail.Data}
+		body = "gzencode"
+
+		// data will be written to redis - it implements the Stringer interface, redigo uses fmt to
+		// print the data to redis.
+
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {
-			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, payload.mail.Data)
+			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, data)
 			if doErr == nil {
 				//payload.mail.Data = ""
-				payload.mail.Data.Reset()
-				body = "redis"
-				data.clear() // blank
+				//payload.mail.Data.Reset()
+				body = "redis" // the backend system will know to look in redis for the message data
+				data.clear()   // blank
 			}
 		} else {
 			log.WithError(redisErr).Warn("Error while SETEX on redis")
 		}
 
-		body = "gzencode"
 		// bind data to cursor
 		ins.Bind(
 			to,

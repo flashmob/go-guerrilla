@@ -42,7 +42,7 @@ type client struct {
 	conn       net.Conn
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
-	smtpReader *Reader
+	smtpReader *textproto.Reader
 	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
@@ -59,13 +59,8 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
 	}
-	//c.Data = bytes.NewBuffer(make([]byte, 0, 1024 * 25))
-	//var r *bufio.Reader
-	//r = c.bufin
-	//br := bufio.NewReader(newAdjustableLimitedReader(conn, 267))
-	textproto.NewReader(c.bufin.Reader)
 
-	c.smtpReader = NewReader(c.bufin)
+	c.smtpReader = textproto.NewReader(c.bufin.Reader)
 	return c
 }
 

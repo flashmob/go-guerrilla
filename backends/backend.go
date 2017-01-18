@@ -99,13 +99,14 @@ type BackendGateway struct {
 	b  Backend
 	// controls access to state
 	stateGuard sync.Mutex
-	state      int
+	State      int
+	config     BackendConfig
 }
 
 // possible values for state
 const (
 	BackendStateRunning = iota
-	BackendStateShutdown
+	BackendStateShuttered
 	BackendStateError
 )
 
@@ -116,19 +117,19 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 	if !found {
 		return nil, fmt.Errorf("backend %q not found", backendName)
 	}
-	p := &BackendGateway{b: backend}
-	err := p.Initialize(backendConfig)
+	gateway := &BackendGateway{b: backend, config: backendConfig}
+	err := gateway.Initialize(backendConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
-	p.state = BackendStateRunning
-	return p, nil
+	gateway.State = BackendStateRunning
+	return gateway, nil
 }
 
 // Distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
-	if gw.state != BackendStateRunning {
-		return NewBackendResult("554 Transaction failed - backend not running")
+	if gw.State != BackendStateRunning {
+		return NewBackendResult("554 Transaction failed - backend not running" + strconv.Itoa(gw.State))
 	}
 
 	to := e.RcptTo
@@ -154,16 +155,30 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 func (gw *BackendGateway) Shutdown() error {
 	gw.stateGuard.Lock()
 	defer gw.stateGuard.Unlock()
-	if gw.state != BackendStateShutdown {
+	if gw.State != BackendStateShuttered {
 		err := gw.b.Shutdown()
 		if err == nil {
 			close(gw.saveMailChan) // workers will stop
 			gw.wg.Wait()
-			gw.state = BackendStateShutdown
+			gw.State = BackendStateShuttered
 		}
 		return err
 	}
 	return nil
+}
+
+// Reinitialize starts up a backend gateway that was shutdown before
+func (gw *BackendGateway) Reinitialize() error {
+	if gw.State != BackendStateShuttered {
+		return errors.New("backend must be in BackendStateshuttered state to Reinitialize")
+	}
+	err := gw.Initialize(gw.config)
+	if err != nil {
+		return fmt.Errorf("error while initializing the backend: %s", err)
+	} else {
+		gw.State = BackendStateRunning
+	}
+	return err
 }
 
 func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
@@ -171,11 +186,11 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	if err == nil {
 		workersSize := gw.b.getNumberOfWorkers()
 		if workersSize < 1 {
-			gw.state = BackendStateError
+			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
 		if err := gw.b.testSettings(); err != nil {
-			gw.state = BackendStateError
+			gw.State = BackendStateError
 			return err
 		}
 		gw.saveMailChan = make(chan *savePayload, workersSize)
@@ -188,7 +203,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			}()
 		}
 	} else {
-		gw.state = BackendStateError
+		gw.State = BackendStateError
 	}
 	return err
 }

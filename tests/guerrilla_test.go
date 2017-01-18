@@ -715,3 +715,101 @@ func TestDataMaxLength(t *testing.T) {
 	logBuffer.Reset()
 	logIn.Reset(&logBuffer)
 }
+
+func TestDataCommand(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	testHeader :=
+		"Subject: =?Shift_JIS?B?W4NYg06DRYNGg0GBRYNHg2qDYoNOg1ggg0GDSoNFg5ODZ12DQYNKg0WDk4Nn?=\r\n" +
+			"\t=?Shift_JIS?B?k2+YXoqul7mCzIKokm2C54K5?=\r\n"
+
+	email :=
+		"Delivered-To: test@sharklasers.com\r\n" +
+			"\tReceived: from mail.guerrillamail.com (mail.guerrillamail.com  [104.218.55.28:44246])\r\n" +
+			"\tby grr.la with SMTP id 2ab4220fdd6a7b877ae81241cd5a406a@grr.la;\r\n" +
+			"\tWed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"Received: by 192.99.19.220 with HTTP; Wed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"MIME-Version: 1.0\r\n" +
+			"Message-ID: <230b4719d1e4513654536bf00b90cfc18c33@guerrillamail.com>\r\n" +
+			"Date: Wed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"To: \"test@grr.la\" <test@grr.la>\r\n" +
+			"From: <62vk44+nziwnkw@guerrillamail.com>\r\n" +
+			"Subject: test\r\n" +
+			"X-Originating-IP: [60.241.160.150]\r\n" +
+			"Content-Type: text/plain; charset=\"utf-8\"\r\n" +
+			"Content-Transfer-Encoding: quoted-printable\r\n" +
+			"X-Domain-Signer: PHP mailDomainSigner 0.2-20110415 <http://code.google.com/p/php-mail-domain-signer/>\r\n" +
+			"DKIM-Signature: v=1; a=rsa-sha256; s=highgrade; d=guerrillamail.com; l=182;\r\n" +
+			"\tt=1484754209; c=relaxed/relaxed; h=to:from:subject;\r\n" +
+			"\tbh=GHSgjHpBp5QjNn9tzfug681+RcWMOUgpwAuTzppM5wY=;\r\n" +
+			"\tb=R7FxWgACnT+pKXqEg15qgzH4ywMFRx5pDlIFCnSt1BfwmLvZPZK7oOLrbiRoGGR2OJnSfyCxeASH\r\n" +
+			"\t019LNeLB/B8o+fMRX87m/tBpqIZ2vgXdT9rUCIbSDJnYoCHXakGcF+zGtTE3SEksMbeJQ76aGj6M\r\n" +
+			"\tG80p76IT2Xu3iDJLYYWxcAeX+7z4M/bbYNeqxMQcXYZp1wNYlSlHahL6RDUYdcqikDqKoXmzMNVd\r\n" +
+			"\tDr0EbH9iiu1DQtfUDzVE5LLus1yn36WU/2KJvEak45gJvm9s9J+Xrcb882CaYkxlAbgQDz1KeQLf\r\n" +
+			"\teUyNspyAabkh2yTg7kOvNZSOJtbMSQS6/GMxsg==\r\n" +
+			"\r\n" +
+			"test=0A.mooo=0A..mooo=0Atest=0A.=0A=0A=0A=0A=0A=0A----=0ASent using Guerril=\r\n" +
+			"lamail.com=0ABlock or report abuse: https://www.guerrillamail.com//abuse/?a=\r\n" +
+			"=3DVURnES0HUaZbhA8%3D=0A\r\n.\r\n"
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+
+			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = Command(conn, bufin, "DATA")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			/*
+				response, err = Command(
+					conn,
+					bufin,
+					testHeader+"\r\nHello World\r\n.\r\n")
+			*/
+			_ = testHeader
+			response, err = Command(
+				conn,
+				bufin,
+				email+"\r\n.\r\n")
+			//expected := "500 Line too long"
+			expected := "250 OK : queued as s0m3l337Ha5hva1u3LOL"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
