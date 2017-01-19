@@ -273,6 +273,12 @@ func (g *guerrilla) Start() error {
 	}
 	if len(startErrors) > 0 {
 		return startErrors
+	} else {
+		if gw, ok := g.backend.(*backends.BackendGateway); ok {
+			if gw.State == backends.BackendStateShuttered {
+				_ = gw.Reinitialize()
+			}
+		}
 	}
 	return nil
 }

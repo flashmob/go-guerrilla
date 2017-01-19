@@ -9,9 +9,13 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 
+	"bytes"
+	"compress/zlib"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
+	"io"
+	"sync"
 )
 
 func init() {
@@ -73,6 +77,60 @@ type redisClient struct {
 	time        int
 }
 
+// compressedData struct will be compressed using zlib when printed via fmt
+type compressedData struct {
+	extraHeaders []byte
+	data         *bytes.Buffer
+	pool         sync.Pool
+}
+
+// newCompressedData returns a new CompressedData
+func newCompressedData() *compressedData {
+	var p = sync.Pool{
+		New: func() interface{} {
+			var b bytes.Buffer
+			return &b
+		},
+	}
+	return &compressedData{
+		pool: p,
+	}
+}
+
+// Set the extraheaders and buffer of data to compress
+func (c *compressedData) set(b []byte, d *bytes.Buffer) {
+	c.extraHeaders = b
+	c.data = d
+}
+
+// implement Stringer interface
+func (c *compressedData) String() string {
+	if c.data == nil {
+		return ""
+	}
+	//borrow a buffer form the pool
+	b := c.pool.Get().(*bytes.Buffer)
+	// put back in the pool
+	defer func() {
+		b.Reset()
+		c.pool.Put(b)
+	}()
+
+	var r *bytes.Reader
+	w, _ := zlib.NewWriterLevel(b, zlib.BestSpeed)
+	r = bytes.NewReader(c.extraHeaders)
+	io.Copy(w, r)
+	io.Copy(w, c.data)
+	w.Close()
+	return b.String()
+}
+
+// clear it, without clearing the pool
+func (c *compressedData) clear() {
+	c.extraHeaders = []byte{}
+	c.data = nil
+}
+
 func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
 	var err error
@@ -114,6 +172,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		}
 	}()
 
+	data := newCompressedData()
 	//  receives values from the channel repeatedly until it is closed.
 	for {
 		payload := <-saveMailChan
@@ -122,9 +181,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
-		length = len(payload.mail.Data)
+		length = payload.mail.Data.Len()
+
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.mail.Subject = MimeHeaderDecode(payload.mail.Subject)
+		payload.mail.ParseHeaders()
 		hash := MD5Hex(
 			to,
 			payload.mail.MailFrom.String(),
@@ -136,26 +196,35 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
 		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
-		// compress to save space
-		payload.mail.Data = Compress(addHead, payload.mail.Data)
+
+		// data will be compressed when printed, with addHead added to beginning
+
+		data.set([]byte(addHead), &payload.mail.Data)
 		body = "gzencode"
+
+		// data will be written to redis - it implements the Stringer interface, redigo uses fmt to
+		// print the data to redis.
+
 		redisErr = redisClient.redisConnection(g.config.RedisInterface)
 		if redisErr == nil {
-			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, payload.mail.Data)
+			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, data)
 			if doErr == nil {
-				payload.mail.Data = ""
-				body = "redis"
+				//payload.mail.Data = ""
+				//payload.mail.Data.Reset()
+				body = "redis" // the backend system will know to look in redis for the message data
+				data.clear()   // blank
 			}
 		} else {
 			log.WithError(redisErr).Warn("Error while SETEX on redis")
 		}
+
 		// bind data to cursor
 		ins.Bind(
 			to,
 			payload.mail.MailFrom.String(),
 			payload.mail.Subject,
 			body,
-			payload.mail.Data,
+			data.String(),
 			hash,
 			to,
 			payload.mail.RemoteAddress,

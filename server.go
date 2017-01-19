@@ -215,30 +215,15 @@ func (server *server) allowsHost(host string) bool {
 
 // Reads from the client until a terminating sequence is encountered,
 // or until a timeout occurs.
-func (server *server) read(client *client, maxSize int64) (string, error) {
+func (server *server) readCommand(client *client, maxSize int64) (string, error) {
 	var input, reply string
 	var err error
-
 	// In command state, stop reading at line breaks
 	suffix := "\r\n"
-	if client.state == ClientData {
-		// In data state, stop reading at solo periods
-		suffix = "\r\n.\r\n"
-	}
-
 	for {
 		client.setTimeout(server.timeout.Load().(time.Duration))
 		reply, err = client.bufin.ReadString('\n')
 		input = input + reply
-		if err == nil && client.state == ClientData {
-			if reply != "" {
-				// Extract the subject while we're at it
-				client.scanSubject(reply)
-			}
-			if int64(len(input)) > maxSize {
-				return input, fmt.Errorf("Maximum DATA size exceeded (%d)", maxSize)
-			}
-		}
 		if err != nil {
 			break
 		}
@@ -313,7 +298,7 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
-			input, err := server.read(client, sc.MaxSize)
+			input, err := server.readCommand(client, sc.MaxSize)
 			log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
 				log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
@@ -426,11 +411,15 @@ func (server *server) handleClient(client *client) {
 			}
 
 		case ClientData:
-			var err error
+
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
 			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
-			client.Data, err = server.read(client, sc.MaxSize)
+
+			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
+			if n > sc.MaxSize {
+				err = fmt.Errorf("Maximum DATA size exceeded (%d)", sc.MaxSize)
+			}
 			if err != nil {
 				if err == LineLimitExceeded {
 					client.responseAdd("550 Error: " + LineLimitExceeded.Error())

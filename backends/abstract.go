@@ -57,8 +57,12 @@ func (b *AbstractBackend) Process(mail *envelope.Envelope) BackendResult {
 	if b.extend != nil {
 		return b.extend.Process(mail)
 	}
+	mail.ParseHeaders()
+
 	if b.config.LogReceivedMails {
 		log.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
+		log.Info("Headers are: %s", mail.Header)
+
 	}
 	return NewBackendResult("250 OK")
 }
