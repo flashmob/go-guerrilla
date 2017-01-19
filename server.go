@@ -281,13 +281,15 @@ func (server *server) handleClient(client *client) {
 		sc.Hostname, Version, client.ID,
 		server.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
 
-	helo := fmt.Sprintf("250 %s Hello\r\n", sc.Hostname)
+	helo := fmt.Sprintf("250 %s Hello", sc.Hostname)
+	// ehlo is a multi-line reply and need additional \r\n at the end
 	ehlo := fmt.Sprintf("250-%s Hello\r\n", sc.Hostname)
 
 	// Extended feature advertisements
 	messageSize := fmt.Sprintf("250-SIZE %d\r\n", sc.MaxSize)
 	pipelining := "250-PIPELINING\r\n"
 	advertiseTLS := "250-STARTTLS\r\n"
+	// the last line doesn't need \r\n since string will be printed as a new line
 	help := "250 HELP"
 
 	if sc.TLSAlwaysOn {
