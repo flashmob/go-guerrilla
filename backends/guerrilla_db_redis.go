@@ -15,6 +15,7 @@ import (
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 	"io"
+	"sync"
 )
 
 func init() {
@@ -80,6 +81,26 @@ type redisClient struct {
 type compressedData struct {
 	extraHeaders []byte
 	data         *bytes.Buffer
+	pool         sync.Pool
+}
+
+// newCompressedData returns a new CompressedData
+func newCompressedData() *compressedData {
+	var p = sync.Pool{
+		New: func() interface{} {
+			var b bytes.Buffer
+			return &b
+		},
+	}
+	return &compressedData{
+		pool: p,
+	}
+}
+
+// Set the extraheaders and buffer of data to compress
+func (c *compressedData) set(b []byte, d *bytes.Buffer) {
+	c.extraHeaders = b
+	c.data = d
 }
 
 // implement Stringer interface
@@ -87,9 +108,16 @@ func (c *compressedData) String() string {
 	if c.data == nil {
 		return ""
 	}
-	var b bytes.Buffer
+	//borrow a buffer form the pool
+	b := c.pool.Get().(*bytes.Buffer)
+	// put back in the pool
+	defer func() {
+		b.Reset()
+		c.pool.Put(b)
+	}()
+
 	var r *bytes.Reader
-	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
+	w, _ := zlib.NewWriterLevel(b, zlib.BestSpeed)
 	r = bytes.NewReader(c.extraHeaders)
 	io.Copy(w, r)
 	io.Copy(w, c.data)
@@ -97,6 +125,7 @@ func (c *compressedData) String() string {
 	return b.String()
 }
 
+// clear it, without clearing the pool
 func (c *compressedData) clear() {
 	c.extraHeaders = []byte{}
 	c.data = nil
@@ -143,6 +172,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		}
 	}()
 
+	data := newCompressedData()
 	//  receives values from the channel repeatedly until it is closed.
 	for {
 		payload := <-saveMailChan
@@ -168,7 +198,8 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
 		// data will be compressed when printed, with addHead added to beginning
-		data := compressedData{[]byte(addHead), &payload.mail.Data}
+
+		data.set([]byte(addHead), &payload.mail.Data)
 		body = "gzencode"
 
 		// data will be written to redis - it implements the Stringer interface, redigo uses fmt to
