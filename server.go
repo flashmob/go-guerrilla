@@ -13,9 +13,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	"github.com/flashmob/go-guerrilla/backends"
 	"sync"
 	"sync/atomic"
+
+	"github.com/flashmob/go-guerrilla/backends"
 )
 
 const (
@@ -280,8 +281,8 @@ func (server *server) handleClient(client *client) {
 		sc.Hostname, Version, client.ID,
 		server.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
 
-	helo := fmt.Sprintf("250 %s Hello", sc.Hostname)
-	ehlo := fmt.Sprintf("250-%s Hello", sc.Hostname)
+	helo := fmt.Sprintf("250 %s Hello\r\n", sc.Hostname)
+	ehlo := fmt.Sprintf("250-%s Hello\r\n", sc.Hostname)
 
 	// Extended feature advertisements
 	messageSize := fmt.Sprintf("250-SIZE %d\r\n", sc.MaxSize)
