@@ -47,9 +47,7 @@ const (
 
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
-	//mainConfigStore  atomic.Value // stores guerrilla.Config
-	configStore atomic.Value // stores guerrilla.ServerConfig
-	//config         *ServerConfig
+	configStore     atomic.Value // stores guerrilla.ServerConfig
 	backend         backends.Backend
 	tlsConfig       *tls.Config
 	tlsConfigStore  atomic.Value
