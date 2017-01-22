@@ -1,7 +1,19 @@
 package backends
 
+// This backend is presented here as an example only, please modify it to your needs.
+// The backend stores the email data in Redis.
+// Other meta-information is stored in MySQL to be joined later.
+// A lot of email gets discarded without viewing on Guerrilla Mail,
+// so it's much faster to put in Redis, where other programs can
+// process it later, without touching the disk.
+// Short history:
+// Started with issuing an insert query for each single email and another query to update the tally
+// Then applied the following optimizations:
+// - Moved tally updates to another background process which does the tallying in a single query
+// - Changed the MySQL queries to insert in batch
+// - Made a Compressor that recycles buffers using sync.Pool
+// The result was around 400% speed improvement. If you know of any more improvements, please share!
 import (
-	"errors"
 	"fmt"
 
 	"time"
@@ -18,6 +30,12 @@ import (
 	"sync"
 )
 
+// how many rows to batch at a time
+const GuerrillaDBAndRedisBatchMax = 500
+
+// tick on every...
+const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
+
 func init() {
 	backends["guerrilla-db-redis"] = &AbstractBackend{
 		extend: &GuerrillaDBAndRedisBackend{}}
@@ -25,8 +43,14 @@ func init() {
 
 type GuerrillaDBAndRedisBackend struct {
 	AbstractBackend
-	config guerrillaDBAndRedisConfig
+	config    guerrillaDBAndRedisConfig
+	batcherWg sync.WaitGroup
+	// cache prepared queries
+	cache stmtCache
 }
+
+// statement cache. It's an array, not slice
+type stmtCache [GuerrillaDBAndRedisBatchMax]*autorc.Stmt
 
 type guerrillaDBAndRedisConfig struct {
 	NumberOfWorkers    int    `json:"save_workers_size"`
@@ -131,12 +155,111 @@ func (c *compressedData) clear() {
 	c.data = nil
 }
 
+// prepares the sql query with the number of rows that can be batched with it
+func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *autorc.Conn) *autorc.Stmt {
+	if rows == 0 {
+		panic("rows argument cannot be 0")
+	}
+	if g.cache[rows-1] != nil {
+		return g.cache[rows-1]
+	}
+	sql := "INSERT INTO " + g.config.MysqlTable + " "
+	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
+	sql += " values "
+	values := "(NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
+	// add more rows
+	comma := ""
+	for i := 0; i < rows; i++ {
+		sql += comma + values
+		if comma == "" {
+			comma = ","
+		}
+	}
+	//log.Debug("Prepared SQL", rows, sql)
+	stmt, sqlErr := db.Prepare(sql)
+	if sqlErr != nil {
+		log.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+	}
+	// cache it
+	g.cache[rows-1] = stmt
+	return stmt
+}
+
+// Batches the rows from the feeder chan in to a single INSERT statement.
+// Execute the batches query when:
+// - number of batched rows reaches a threshold, i.e. count n = threshold
+// - or, no new rows within a certain time, i.e. times out
+func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{}, db *autorc.Conn) {
+	// controls shutdown
+	defer g.batcherWg.Done()
+	g.batcherWg.Add(1)
+	// vals is where values are batched to
+	var vals []interface{}
+	// how many rows were batched
+	count := 0
+	// The timer will tick every second.
+	// Interrupting the select clause when there's no data on the feeder channel
+	t := time.NewTimer(GuerrillaDBAndRedisBatchTimeout)
+	// prepare the query used to insert when rows reaches batchMax
+	insertStmt := g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
+	// inserts executes a batched insert query, clears the vals and resets the count
+	insert := func(c int) {
+		if c > 0 {
+			insertStmt = g.prepareInsertQuery(c, db)
+			insertStmt.Bind(vals...)
+			_, _, err := insertStmt.Exec()
+			if err != nil {
+				log.WithError(err).Error("There was a problem the insert")
+			} else {
+				//log.Debugf("Inserted %d rows ", count)
+			}
+		}
+		vals = nil
+		count = 0
+	}
+	// Keep getting values from feeder and add to batch.
+	// if feeder times out, execute the batched query
+	// otherwise, execute the batched query once it reaches the GuerrillaDBAndRedisBatchMax threshold
+	for {
+		select {
+		case row := <-feeder:
+			log.Info("row form chan is", row, "cols:", len(row))
+			if row == nil {
+				log.Debug("Query batchaer exiting")
+				// Insert any remaining rows
+				insert(count)
+				return
+			}
+			vals = append(vals, row...)
+			count++
+			//log.Debug("apend vals", count, vals)
+			if count == GuerrillaDBAndRedisBatchMax {
+				insert(GuerrillaDBAndRedisBatchMax)
+			}
+			// stop timer from firing (reset the interrupt)
+			if !t.Stop() {
+				<-t.C
+			}
+			t.Reset(GuerrillaDBAndRedisBatchTimeout)
+		case <-t.C:
+			//log.Debugf("Query batcher timer fired! [%d]", len(vals))
+			//log.Debug("Contents:", count, vals)
+			// anything to insert?
+			if n := len(vals); n > 0 {
+				insert(count)
+			}
+			t.Reset(GuerrillaDBAndRedisBatchTimeout)
+		}
+	}
+}
+
 func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
-	var err error
+	//var length int
+	//var err error
 
 	var redisErr error
-	var length int
+
 	redisClient := &redisClient{}
 	db := autorc.New(
 		"tcp",
@@ -146,18 +269,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		g.config.MysqlPass,
 		g.config.MysqlDB)
 	db.Register("set names utf8")
-	sql := "INSERT INTO " + g.config.MysqlTable + " "
-	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
-	sql += " values (NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
-	ins, sqlErr := db.Prepare(sql)
-	if sqlErr != nil {
-		log.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
-	}
-	sql = "UPDATE gm2_setting SET `setting_value` = `setting_value`+1 WHERE `setting_name`='received_emails' LIMIT 1"
-	incr, sqlErr := db.Prepare(sql)
-	if sqlErr != nil {
-		log.WithError(sqlErr).Fatalf("failed while db.Prepare(UPDATE...)")
-	}
+	// start the query SQL batching where we will send data via the feeder channel
+	feeder := make(chan []interface{}, 1)
+	go g.insertQueryBatcher(feeder, db)
+
 	defer func() {
 		if r := recover(); r != nil {
 			//recover form closed channel
@@ -170,10 +285,15 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			log.Infof("closed redis")
 			redisClient.conn.Close()
 		}
-	}()
+		// close the feeder & wait for query batcher to exit.
+		close(feeder)
+		g.batcherWg.Wait()
 
+	}()
+	var vals []interface{}
 	data := newCompressedData()
 	//  receives values from the channel repeatedly until it is closed.
+
 	for {
 		payload := <-saveMailChan
 		if payload == nil {
@@ -181,7 +301,6 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
-		length = payload.mail.Data.Len()
 
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
 		payload.mail.ParseHeaders()
@@ -218,8 +337,8 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			log.WithError(redisErr).Warn("Error while SETEX on redis")
 		}
 
-		// bind data to cursor
-		ins.Bind(
+		vals = []interface{}{} // clear the vals
+		vals = append(vals,
 			to,
 			payload.mail.MailFrom.String(),
 			payload.mail.Subject,
@@ -229,22 +348,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			to,
 			payload.mail.RemoteAddress,
 			payload.mail.MailFrom.String(),
-			payload.mail.TLS,
-		)
-		// save, discard result
-		_, _, err = ins.Exec()
-		if err != nil {
-			errMsg := "Database error while inserting"
-			log.WithError(err).Warn(errMsg)
-			payload.savedNotify <- &saveStatus{errors.New(errMsg), hash}
-		} else {
-			log.Debugf("Email saved %s (len=%d)", hash, length)
-			_, _, err = incr.Exec()
-			if err != nil {
-				log.WithError(err).Warn("Database error while incr count")
-			}
-			payload.savedNotify <- &saveStatus{nil, hash}
-		}
+			payload.mail.TLS)
+		feeder <- vals
+		payload.savedNotify <- &saveStatus{nil, hash}
+
 	}
 }
 
