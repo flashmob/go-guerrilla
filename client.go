@@ -138,6 +138,7 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.response = ""
 	c.Helo = ""
 	c.Header = nil
+	c.RemoteAddress = conn.RemoteAddr().String()
 }
 
 // getId returns the client's unique ID
