@@ -123,7 +123,7 @@ If you want to build on the sample `guerrilla-db-redis` module, setup the follow
 in MySQL:
 
 	CREATE TABLE IF NOT EXISTS `new_mail` (
-	  `mail_id` int(11) NOT NULL auto_increment,
+	  `mail_id` BIGINT(20) unsigned NOT NULL AUTO_INCREMENT,
 	  `date` datetime NOT NULL,
 	  `from` varchar(128) character set latin1 NOT NULL,
 	  `to` varchar(128) character set latin1 NOT NULL,
@@ -137,9 +137,8 @@ in MySQL:
 	  `recipient` varchar(128) character set latin1 NOT NULL,
 	  `has_attach` int(11) NOT NULL,
 	  `ip_addr` varchar(15) NOT NULL,
-	  `delivered` bit(1) NOT NULL default b'0',
-	  `attach_info` text NOT NULL,
-	  `dkim_valid` tinyint(4) default NULL,
+	  `return_path` VARCHAR(255) NOT NULL,
+	  `is_tls` BIT(1) DEFAULT b'0' NOT NULL,
 	  PRIMARY KEY  (`mail_id`),
 	  KEY `to` (`to`),
 	  KEY `hash` (`hash`),
@@ -148,7 +147,9 @@ in MySQL:
 
 The above table does not store the body of the email which makes it quick
 to query and join, while the body of the email is fetched from Redis
-if needed.
+for future processing. The `mail` field can contain data in case Redis is down.
+Otherwise, if data is in Redis, the `mail` will be blank, and
+the `body` field will contain the word 'redis'.
 
 You can implement your own saveMail function to use whatever storage /
 backend fits for you. Please share them ^_^, in particular, we would 
