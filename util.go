@@ -2,9 +2,11 @@ package guerrilla
 
 import (
 	"errors"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"regexp"
 	"strings"
+
+	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
@@ -13,7 +15,7 @@ func extractEmail(str string) (*envelope.EmailAddress, error) {
 	email := &envelope.EmailAddress{}
 	var err error
 	if len(str) > RFC2821LimitPath {
-		return email, errors.New("501 Path too long")
+		return email, errors.New(response.CustomString(response.InvalidCommandArguments, 550, response.ClassPermanentFailure, "Path too long"))
 	}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
@@ -24,11 +26,11 @@ func extractEmail(str string) (*envelope.EmailAddress, error) {
 	}
 	err = nil
 	if email.User == "" || email.Host == "" {
-		err = errors.New("501 Invalid address")
+		err = errors.New(response.CustomString(response.InvalidCommandArguments, 501, response.ClassPermanentFailure, "Invalid address"))
 	} else if len(email.User) > RFC2832LimitLocalPart {
-		err = errors.New("501 Local part too long, cannot exceed 64 characters")
+		err = errors.New(response.CustomString(response.InvalidCommandArguments, 550, response.ClassPermanentFailure, "Local part too long, cannot exceed 64 characters"))
 	} else if len(email.Host) > RFC2821LimitDomain {
-		err = errors.New("501 Domain cannot exceed 255 characters")
+		err = errors.New(response.CustomString(response.InvalidCommandArguments, 501, response.ClassPermanentFailure, "Domain cannot exceed 255 characters"))
 	}
 	return email, err
 }

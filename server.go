@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 const (
@@ -272,6 +273,7 @@ func (server *server) handleClient(client *client) {
 	messageSize := fmt.Sprintf("250-SIZE %d\r\n", sc.MaxSize)
 	pipelining := "250-PIPELINING\r\n"
 	advertiseTLS := "250-STARTTLS\r\n"
+	advertiseEnhancedStatusCodes := "250-ENHANCEDSTATUSCODES\r\n"
 	// the last line doesn't need \r\n since string will be printed as a new line
 	help := "250 HELP"
 
@@ -305,7 +307,7 @@ func (server *server) handleClient(client *client) {
 				log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				client.responseAdd("500 Line too long.")
+				client.responseAdd(response.CustomString(response.InvalidCommand, 554, response.ClassPermanentFailure, "Line too long."))
 				client.kill()
 				break
 			} else if err != nil {
@@ -334,14 +336,14 @@ func (server *server) handleClient(client *client) {
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + help)
+				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + advertiseEnhancedStatusCodes + help)
 
 			case strings.Index(cmd, "HELP") == 0:
 				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					client.responseAdd("503 Error: nested MAIL command")
+					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: nested MAIL command"))
 					break
 				}
 				from, err := extractEmail(input[10:])
@@ -349,12 +351,12 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd(err.Error())
 				} else {
 					client.MailFrom = from
-					client.responseAdd("250 OK")
+					client.responseAdd(response.CustomString(response.OtherAddressStatus, 250, response.ClassSuccess, "OK"))
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					client.responseAdd("452 Too many recipients")
+					client.responseAdd(response.CustomString(response.TooManyRecipients, 452, response.ClassTransientFailure, "Too many recipients"))
 					break
 				}
 				to, err := extractEmail(input[8:])
@@ -362,48 +364,48 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						client.responseAdd("454 Error: Relay access denied: " + to.Host)
+						client.responseAdd(response.CustomString(response.BadDestinationMailboxAddress, 454, response.ClassTransientFailure, "Error: Relay access denied: "+to.Host))
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						client.responseAdd("250 OK")
+						client.responseAdd(response.String(response.DestinationMailboxAddressValid, response.ClassSuccess))
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				client.responseAdd("250 OK")
+				client.responseAdd(response.CustomString(response.OtherAddressStatus, 250, response.ClassSuccess, "OK"))
 
 			case strings.Index(cmd, "VRFY") == 0:
-				client.responseAdd("252 Cannot verify user")
+				client.responseAdd(response.CustomString(response.OtherOrUndefinedProtocolStatus, 252, response.ClassSuccess, "Cannot verify user"))
 
 			case strings.Index(cmd, "NOOP") == 0:
-				client.responseAdd("250 OK")
+				client.responseAdd(response.String(response.DestinationMailboxAddressValid, response.ClassSuccess))
 
 			case strings.Index(cmd, "QUIT") == 0:
-				client.responseAdd("221 Bye")
+				client.responseAdd(response.CustomString(response.OtherStatus, 221, response.ClassSuccess, "Bye"))
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					client.responseAdd("503 Error: No sender")
+					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: No sender"))
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					client.responseAdd("503 Error: No recipients")
+					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: No recipients"))
 					break
 				}
 				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
-				client.responseAdd("220 Ready to start TLS")
+				client.responseAdd(response.CustomString(response.OtherStatus, 220, response.ClassSuccess, "Ready to start TLS"))
 				client.state = ClientStartTLS
 			default:
 
-				client.responseAdd("500 Unrecognized command: " + cmd)
+				client.responseAdd(response.CustomString(response.SyntaxError, 500, response.ClassPermanentFailure, "Unrecognized command: "+cmd))
 				client.errors++
 				if client.errors > MaxUnrecognizedCommands {
-					client.responseAdd("554 Too many unrecognized commands")
+					client.responseAdd(response.CustomString(response.InvalidCommand, 554, response.ClassPermanentFailure, "Too many unrecognized commands"))
 					client.kill()
 				}
 			}
@@ -420,14 +422,14 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					client.responseAdd("550 Error: " + LineLimitExceeded.Error())
+					client.responseAdd(response.CustomString(response.SyntaxError, 550, response.ClassPermanentFailure, "Error: "+LineLimitExceeded.Error()))
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					client.responseAdd("550 Error: " + MessageSizeExceeded.Error())
+					client.responseAdd(response.CustomString(response.SyntaxError, 550, response.ClassPermanentFailure, "Error: "+MessageSizeExceeded.Error()))
 					client.kill()
 				} else {
 					client.kill()
-					client.responseAdd("451 Error: " + err.Error())
+					client.responseAdd(response.CustomString(response.OtherOrUndefinedMailSystemStatus, 451, response.ClassTransientFailure, "Error: "+err.Error()))
 				}
 				log.WithError(err).Warn("Error reading data")
 				break
@@ -456,7 +458,7 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			client.responseAdd("421 Server is shutting down. Please try again later. Sayonara!")
+			client.responseAdd(response.CustomString(response.OtherOrUndefinedMailSystemStatus, 421, response.ClassTransientFailure, "Server is shutting down. Please try again later. Sayonara!"))
 			client.kill()
 		}
 

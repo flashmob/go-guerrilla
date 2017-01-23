@@ -5,20 +5,22 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-	"sync"
-	"testing"
-	"time"
 )
 
 var configJsonA = `
@@ -343,16 +345,20 @@ func TestServe(t *testing.T) {
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonB), 0644)
 
 	// test SIGHUP via the kill command
-	ecmd := exec.Command("kill", "-HUP", string(data))
-	_, err = ecmd.Output()
-	if err != nil {
-		t.Error("could not SIGHUP", err)
-		t.FailNow()
-	}
-	time.Sleep(time.Second) // allow sighup to do its job
-	// did the pidfile change as expected?
-	if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
-		t.Error("pidfile not changed after sighup SIGHUP", err)
+	// Would not work on windows as kill is not available.
+	// TODO: Implement an alternative test for windows.
+	if runtime.GOOS != "windows" {
+		ecmd := exec.Command("kill", "-HUP", string(data))
+		_, err = ecmd.Output()
+		if err != nil {
+			t.Error("could not SIGHUP", err)
+			t.FailNow()
+		}
+		time.Sleep(time.Second) // allow sighup to do its job
+		// did the pidfile change as expected?
+		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
+			t.Error("pidfile not changed after sighup SIGHUP", err)
+		}
 	}
 	// send kill signal and wait for exit
 	sigKill()
@@ -681,7 +687,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 				t.Error("Expected", expect, "but got", result)
 			} else {
 				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
-					expect := "454 Error: Relay access denied: grr.la"
+					expect := "454 4.1.1 Error: Relay access denied: grr.la"
 					if strings.Index(result, expect) != 0 {
 						t.Error("Expected:", expect, "but got:", result)
 					}
@@ -714,7 +720,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 				t.Error("Expected", expect, "but got", result)
 			} else {
 				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
-					expect := "250 OK"
+					expect := "250 2.1.5 OK"
 					if strings.Index(result, expect) != 0 {
 						t.Error("Expected:", expect, "but got:", result)
 					}
@@ -791,7 +797,7 @@ func TestTLSConfigEvent(t *testing.T) {
 					t.Error("Expected", expect, "but got", result)
 				} else {
 					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 Ready to start TLS"
+						expect := "220 2.0.0 Ready to start TLS"
 						if strings.Index(result, expect) != 0 {
 							t.Error("Expected:", expect, "but got:", result)
 						} else {
@@ -894,7 +900,7 @@ func TestBadTLS(t *testing.T) {
 					t.Error("Expected", expect, "but got", result)
 				} else {
 					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 Ready to start TLS"
+						expect := "220 2.0.0 Ready to start TLS"
 						if strings.Index(result, expect) != 0 {
 							t.Error("Expected:", expect, "but got:", result)
 						} else {
