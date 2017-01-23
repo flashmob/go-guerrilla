@@ -5,11 +5,12 @@ import (
 
 	"bufio"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/mocks"
 	"net/textproto"
 	"strings"
 	"sync"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mocks"
 )
 
 // getMockServerConfig gets a mock ServerConfig struct used for creating a new server
@@ -72,7 +73,7 @@ func TestHandleClient(t *testing.T) {
 	w.PrintfLine("QUIT")
 	line, _ = r.ReadLine()
 	fmt.Println("line is:", line)
-	expected := "221 Bye"
+	expected := "221 2.0.0 Bye"
 	if strings.Index(line, expected) != 0 {
 		t.Error("expected", expected, "but got:", line)
 	}

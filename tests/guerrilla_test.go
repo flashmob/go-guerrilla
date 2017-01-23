@@ -15,12 +15,14 @@ package test
 
 import (
 	"encoding/json"
-	log "github.com/Sirupsen/logrus"
 	"testing"
+
+	log "github.com/Sirupsen/logrus"
+
+	"time"
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	"time"
 
 	"bufio"
 
@@ -28,10 +30,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"io/ioutil"
 	"net"
 	"strings"
+
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 )
 
 type TestConfig struct {
@@ -287,7 +290,7 @@ func TestShutDown(t *testing.T) {
 			if err != nil {
 				t.Error("Help command failed", err.Error())
 			}
-			expected := "421 Server is shutting down. Please try again later. Sayonara!"
+			expected := "421 4.3.0 Server is shutting down. Please try again later. Sayonara!"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not shut down with", expected, ", it said:"+response)
 			}
@@ -346,7 +349,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "452 Too many recipients"
+			expected := "452 4.5.3 Too many recipients"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -393,7 +396,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "501 Local part too long"
+			expected := "550 5.5.4 Local part too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -403,7 +406,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.5 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -450,7 +453,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "501 Path too long"
+			expected := "550 5.5.4 Path too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -460,7 +463,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected = "454 Error: Relay access denied"
+			expected = "454 4.1.1 Error: Relay access denied"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -502,7 +505,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected := "501 Path too long"
+			expected := "550 5.5.4 Path too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -512,7 +515,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "454 Error: Relay access denied"
+			expected = "454 4.1.1 Error: Relay access denied"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -558,7 +561,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected := "503 Error: nested MAIL command"
+			expected := "503 5.5.1 Error: nested MAIL command"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -570,7 +573,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -579,7 +582,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -588,7 +591,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -633,7 +636,7 @@ func TestCommandLineMaxLength(t *testing.T) {
 				t.Error("command failed", err.Error())
 			}
 
-			expected := "500 Line too long"
+			expected := "554 5.5.1 Line too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -695,7 +698,7 @@ func TestDataMaxLength(t *testing.T) {
 					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 
 			//expected := "500 Line too long"
-			expected := "451 Error: Maximum DATA size exceeded"
+			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}
