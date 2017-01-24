@@ -3,12 +3,14 @@ package backends
 import (
 	"errors"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
@@ -129,7 +131,7 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 // Distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	if gw.State != BackendStateRunning {
-		return NewBackendResult("554 Transaction failed - backend not running" + strconv.Itoa(gw.State))
+		return NewBackendResult(response.CustomString(response.OtherOrUndefinedProtocolStatus, 554, response.ClassPermanentFailure, "Transaction failed - backend not running "+strconv.Itoa(gw.State)))
 	}
 
 	to := e.RcptTo
@@ -144,12 +146,12 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	select {
 	case status := <-savedNotify:
 		if status.err != nil {
-			return NewBackendResult("554 Error: " + status.err.Error())
+			return NewBackendResult(response.CustomString(response.OtherOrUndefinedProtocolStatus, 554, response.ClassPermanentFailure, "Error: "+status.err.Error()))
 		}
-		return NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
+		return NewBackendResult(response.CustomString(response.OtherStatus, 250, response.ClassSuccess, fmt.Sprintf("OK : queued as %s", status.hash)))
 	case <-time.After(time.Second * 30):
 		log.Infof("Backend has timed out")
-		return NewBackendResult("554 Error: transaction timeout")
+		return NewBackendResult(response.CustomString(response.OtherOrUndefinedProtocolStatus, 554, response.ClassPermanentFailure, "Error: transaction timeout"))
 	}
 }
 func (gw *BackendGateway) Shutdown() error {
