@@ -18,3 +18,4 @@ script:
   - go test ./tests
   - go test
   - go test ./cmd/guerrillad
+  - go test ./response
