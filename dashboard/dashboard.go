@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
+	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/rakyll/statik/fs"
 )
 
 const (
@@ -33,11 +36,12 @@ type Config struct {
 }
 
 func Run(c *Config) {
+	statikFS, _ := fs.New()
 	config = c
 	sessions = map[string]*session{}
 	r := mux.NewRouter()
-	r.HandleFunc("/", indexHandler)
 	r.HandleFunc("/ws", webSocketHandler)
+	r.PathPrefix("/").Handler(http.FileServer(statikFS))
 
 	rand.Seed(time.Now().UnixNano())
 
@@ -57,61 +61,19 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	templates.ExecuteTemplate(w, dashboard, nil)
 }
 
-// func loginHandler(w http.ResponseWriter, r *http.Request) {
-// 	switch r.Method {
-// 	case "GET":
-// 		if isLoggedIn(r) {
-// 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-// 		} else {
-// 			templates.ExecuteTemplate(w, login, nil)
-// 		}
-//
-// 	case "POST":
-// 		user := r.FormValue("username")
-// 		pass := r.FormValue("password")
-//
-// 		if user == config.Username && pass == config.Password {
-// 			err := startSession(w, r)
-// 			if err != nil {
-// 				w.WriteHeader(http.StatusInternalServerError)
-// 				// TODO Internal error
-// 				return
-// 			}
-// 			http.Redirect(w, r, "/", http.StatusSeeOther)
-// 		} else {
-// 			templates.ExecuteTemplate(w, login, nil) // TODO info about failed login
-// 		}
-//
-// 	default:
-// 		w.WriteHeader(http.StatusMethodNotAllowed)
-// 	}
-// }
-//
-// func logoutHandler(w http.ResponseWriter, r *http.Request) {
-// 	switch r.Method {
-// 	case "POST":
-// 		sess := getSession(r)
-// 		if sess == nil {
-// 			w.WriteHeader(http.StatusForbidden)
-// 			return
-// 		}
-//
-// 		store.unsubscribe(sess.id)
-// 		sess.expires = time.Now()
-// 		http.Redirect(w, r, "/", http.StatusSeeOther)
-//
-// 	default:
-// 		w.WriteHeader(http.StatusMethodNotAllowed)
-// 	}
-// }
-
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
-	sess := getSession(r)
-	if sess == nil {
+	log.Info("dashboard:112")
+	cookie, err := r.Cookie("SID")
+	if err != nil {
+		// TODO error
 		w.WriteHeader(http.StatusInternalServerError)
-		// TODO Internal error
-		return
 	}
+	sess, sidExists := sessions[cookie.Value]
+	if !sidExists {
+		// No SID cookie
+		sess = startSession(w, r)
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -127,7 +89,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	go sess.transmit()
 }
 
-func startSession(w http.ResponseWriter, r *http.Request) {
+func startSession(w http.ResponseWriter, r *http.Request) *session {
 	sessionID := newSessionID()
 
 	cookie := &http.Cookie{
@@ -143,6 +105,7 @@ func startSession(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, cookie)
 	sessions[sessionID] = sess
+	return sess
 }
 
 func getSession(r *http.Request) *session {
