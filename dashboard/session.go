@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"encoding/json"
 	"math/rand"
 	"time"
 
@@ -17,18 +18,12 @@ const (
 
 var idCharset = []byte("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890")
 
+// Represents an active session with a client
 type session struct {
-	start, expires time.Time
-	id             string
-	// Whether we have a valid
-	alive bool
-	ws    *websocket.Conn
+	id string
+	ws *websocket.Conn
 	// Messages to send over the websocket are received on this channel
-	send <-chan *point
-}
-
-func (s *session) valid() bool {
-	return s.expires.After(time.Now())
+	send <-chan *dataFrame
 }
 
 // Receives messages from the websocket connection associated with a session
@@ -59,49 +54,33 @@ func (s *session) transmit() {
 	defer s.ws.Close()
 	defer ticker.Stop()
 
+	// Label for loop to allow breaking from within switch statement
+transmit:
 	for {
 		select {
 		case p, ok := <-s.send:
+			data, err := json.Marshal(p)
+			log.Info("session:61", string(data), err)
+			log.Info("session:59", p.NClients, p.Ram)
 			s.ws.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok || !s.valid() {
+			if !ok {
 				s.ws.WriteMessage(websocket.CloseMessage, []byte{})
-				break
+				break transmit
 			}
 
-			err := s.ws.WriteJSON(p)
+			err = s.ws.WriteJSON(p)
+			log.Info("session:67", err)
 			if err != nil {
 				log.WithError(err).Debug("Failed to write next websocket message. Closing connection")
-				break
+				break transmit
 			}
 		case <-ticker.C:
 			s.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := s.ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				log.WithError(err).Debug("Failed to write next websocket message. Closing connection")
-				break
+				break transmit
 			}
 		}
-	}
-}
-
-type sessionStore map[string]*session
-
-// Remove expired sessions
-func (ss sessionStore) clean() {
-	now := time.Now()
-	for id, sess := range ss {
-		if sess.expires.Before(now) {
-			delete(ss, id)
-		}
-	}
-}
-
-// Cleans the store on each tick
-func (ss sessionStore) cleaner(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		<-ticker.C
-		ss.clean()
 	}
 }
 

@@ -12,18 +12,15 @@ import (
 
 const (
 	dashboard      = "index.html"
-	login          = "login.html"
 	dashboardPath  = "dashboard/html/index.html"
-	loginPath      = "dashboard/html/login.html"
 	sessionTimeout = time.Hour * 24 // TODO replace with config
 )
 
 var (
 	// Cache of HTML templates
-	templates = template.Must(template.ParseFiles(dashboardPath, loginPath))
+	templates = template.Must(template.ParseFiles(dashboardPath))
 	config    *Config
-	sessions  sessionStore
-	store     *dataStore
+	sessions  map[string]*session
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,93 +29,89 @@ var upgrader = websocket.Upgrader{
 }
 
 type Config struct {
-	Username        string
-	Password        string
 	ListenInterface string
 }
 
 func Run(c *Config) {
 	config = c
+	sessions = map[string]*session{}
 	r := mux.NewRouter()
 	r.HandleFunc("/", indexHandler)
-	r.HandleFunc("/login", loginHandler)
-	r.HandleFunc("/logout", logoutHandler)
 	r.HandleFunc("/ws", webSocketHandler)
 
 	rand.Seed(time.Now().UnixNano())
 
-	sessions = make(sessionStore)
-	go sessions.cleaner(sessionTimeout)
-	store = newDataStore()
-	go ramListener(tickInterval, store)
+	go dataListener(tickInterval)
 
 	http.ListenAndServe(c.ListenInterface, r)
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	if isLoggedIn(r) {
-		w.WriteHeader(http.StatusOK)
-		templates.ExecuteTemplate(w, dashboard, nil)
-	} else {
-		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+	c, err := r.Cookie("SID")
+	_, sidExists := sessions[c.Value]
+	if err != nil || !sidExists {
+		// No SID cookie
+		startSession(w, r)
 	}
+	w.WriteHeader(http.StatusOK)
+	templates.ExecuteTemplate(w, dashboard, nil)
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		if isLoggedIn(r) {
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		} else {
-			templates.ExecuteTemplate(w, login, nil)
-		}
-
-	case "POST":
-		user := r.FormValue("username")
-		pass := r.FormValue("password")
-
-		if user == config.Username && pass == config.Password {
-			err := startSession(w, r)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				// TODO Internal error
-				return
-			}
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-		} else {
-			templates.ExecuteTemplate(w, login, nil) // TODO info about failed login
-		}
-
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-		sess := getSession(r)
-		if sess == nil {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		store.unsubscribe(sess.id)
-		sess.expires = time.Now()
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
+// func loginHandler(w http.ResponseWriter, r *http.Request) {
+// 	switch r.Method {
+// 	case "GET":
+// 		if isLoggedIn(r) {
+// 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+// 		} else {
+// 			templates.ExecuteTemplate(w, login, nil)
+// 		}
+//
+// 	case "POST":
+// 		user := r.FormValue("username")
+// 		pass := r.FormValue("password")
+//
+// 		if user == config.Username && pass == config.Password {
+// 			err := startSession(w, r)
+// 			if err != nil {
+// 				w.WriteHeader(http.StatusInternalServerError)
+// 				// TODO Internal error
+// 				return
+// 			}
+// 			http.Redirect(w, r, "/", http.StatusSeeOther)
+// 		} else {
+// 			templates.ExecuteTemplate(w, login, nil) // TODO info about failed login
+// 		}
+//
+// 	default:
+// 		w.WriteHeader(http.StatusMethodNotAllowed)
+// 	}
+// }
+//
+// func logoutHandler(w http.ResponseWriter, r *http.Request) {
+// 	switch r.Method {
+// 	case "POST":
+// 		sess := getSession(r)
+// 		if sess == nil {
+// 			w.WriteHeader(http.StatusForbidden)
+// 			return
+// 		}
+//
+// 		store.unsubscribe(sess.id)
+// 		sess.expires = time.Now()
+// 		http.Redirect(w, r, "/", http.StatusSeeOther)
+//
+// 	default:
+// 		w.WriteHeader(http.StatusMethodNotAllowed)
+// 	}
+// }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
-	if !isLoggedIn(r) {
-		w.WriteHeader(http.StatusForbidden)
+	sess := getSession(r)
+	if sess == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		// TODO Internal error
 		return
 	}
-
-	sess := getSession(r)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -126,14 +119,15 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.ws = conn
-	c := make(chan *point)
+	c := make(chan *dataFrame)
 	sess.send = c
+	// TODO send store contents at connection time
 	store.subscribe(sess.id, c)
 	go sess.receive()
 	go sess.transmit()
 }
 
-func startSession(w http.ResponseWriter, r *http.Request) error {
+func startSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := newSessionID()
 
 	cookie := &http.Cookie{
@@ -144,14 +138,11 @@ func startSession(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	sess := &session{
-		start:   time.Now(),
-		expires: time.Now().Add(sessionTimeout), // TODO config for this
-		id:      sessionID,
+		id: sessionID,
 	}
 
 	http.SetCookie(w, cookie)
 	sessions[sessionID] = sess
-	return nil
 }
 
 func getSession(r *http.Request) *session {
@@ -167,17 +158,4 @@ func getSession(r *http.Request) *session {
 	}
 
 	return sess
-}
-
-func isLoggedIn(r *http.Request) bool {
-	sess := getSession(r)
-	if sess == nil {
-		return false
-	}
-
-	if !sess.valid() {
-		return false
-	}
-
-	return true
 }

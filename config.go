@@ -2,8 +2,14 @@ package guerrilla
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	Servers      []ServerConfig `json:"servers"`
-	AllowedHosts []string       `json:"allowed_hosts"`
+	Dashboard    DashboardConfig `json:"dashboard"`
+	Servers      []ServerConfig  `json:"servers"`
+	AllowedHosts []string        `json:"allowed_hosts"`
+}
+
+type DashboardConfig struct {
+	Enabled         bool   `json:"enabled"`
+	ListenInterface string `json:"listen_interface"`
 }
 
 // ServerConfig specifies config options for a single server

@@ -2,9 +2,15 @@ package guerrilla
 
 import (
 	"errors"
-	log "github.com/Sirupsen/logrus"
 	"sync"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla/dashboard"
 )
+
+func init() {
+	log.AddHook(dashboard.LogHook)
+}
 
 type Guerrilla interface {
 	Start() (startErrors []error)
@@ -57,6 +63,12 @@ func (g *guerrilla) Start() (startErrors []error) {
 	}
 	// wait for all servers to start
 	startWG.Wait()
+
+	if g.Config.Dashboard.Enabled {
+		go dashboard.Run(&dashboard.Config{
+			ListenInterface: g.Config.Dashboard.ListenInterface,
+		})
+	}
 
 	// close, then read any errors
 	close(errs)

@@ -164,6 +164,12 @@ func (server *server) upgradeToTLS(client *client) bool {
 func (server *server) closeConn(client *client) {
 	client.conn.Close()
 	client.conn = nil
+	log.WithFields(map[string]interface{}{
+		"event":   "disconnect",
+		"address": client.RemoteAddress,
+		"helo":    client.Helo,
+		"id":      client.ID,
+	}).Info("Close client")
 }
 
 // Reads from the client until a terminating sequence is encountered,
@@ -224,8 +230,12 @@ func (server *server) isShuttingDown() bool {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer server.closeConn(client)
-
-	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
+	log.WithFields(map[string]interface{}{
+		"event":   "connect",
+		"address": client.RemoteAddress,
+		"helo":    client.Helo,
+		"id":      client.ID,
+	}).Info("Handle client")
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",

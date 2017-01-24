@@ -18,8 +18,6 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/dashboard"
-	// "github.com/flashmob/go-guerrilla/dashboard"
 )
 
 var (
@@ -44,8 +42,6 @@ func init() {
 		"/var/run/go-guerrilla.pid", "Path to the pid file")
 
 	rootCmd.AddCommand(serveCmd)
-
-	log.AddHook(dashboard.NewLogHook())
 }
 
 func sigHandler(app guerrilla.Guerrilla) {
