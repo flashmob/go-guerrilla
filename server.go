@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -346,7 +347,14 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: nested MAIL command"))
 					break
 				}
-				from, err := extractEmail(input[10:])
+				// Fix for issue #53 - MAIL FROM may only be <> if it is a bounce
+				mail := input[10:]
+				from := &envelope.EmailAddress{}
+				if mail[0:2] != "<>" {
+					// Not Bounce, extract mail.
+					from, err = extractEmail(mail)
+				}
+
 				if err != nil {
 					client.responseAdd(err.Error())
 				} else {
