@@ -2,11 +2,12 @@ package guerrilla
 
 import (
 	"errors"
-	log "github.com/Sirupsen/logrus"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/flashmob/go-guerrilla/backends"
 	"sync"
 )
+
+var mainlog Logger
 
 const (
 	// server has just been created
@@ -58,6 +59,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 		backend: b,
 		bus:     evbus.New(),
 	}
+	mainlog = NewLogger(ac.LogFile)
 	g.state = GuerrillaStateNew
 	err := g.makeServers()
 
@@ -68,7 +70,7 @@ func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
 
 // Instantiate servers
 func (g *guerrilla) makeServers() error {
-	log.Debug("making servers")
+	mainlog.Debug("making servers")
 	var errs Errors
 	for _, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
@@ -77,7 +79,7 @@ func (g *guerrilla) makeServers() error {
 		}
 		server, err := newServer(&sc, g.backend)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
+			mainlog.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
 			errs = append(errs, err)
 		}
 		if server != nil {
@@ -150,7 +152,7 @@ func (g *guerrilla) subscribeEvents() {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
 		})
-		log.Infof("allowed_hosts config changed, a new list was set")
+		mainlog.Infof("allowed_hosts config changed, a new list was set")
 	})
 
 	// server was removed from config
@@ -165,11 +167,11 @@ func (g *guerrilla) subscribeEvents() {
 		if i, _ := g.findServer(sc.ListenInterface); i == -1 {
 			// not found, lets add it
 			g.addServer(sc)
-			log.Infof("New server added [%s]", sc.ListenInterface)
+			mainlog.Infof("New server added [%s]", sc.ListenInterface)
 			if g.state == GuerrillaStateStarted {
 				err := g.Start()
 				if err != nil {
-					log.WithError(err).Info("Event server_change:new_server returned errors when starting")
+					mainlog.WithError(err).Info("Event server_change:new_server returned errors when starting")
 				}
 			}
 		}
@@ -178,10 +180,10 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
-				log.Infof("Starting server [%s]", server.listenInterface)
+				mainlog.Infof("Starting server [%s]", server.listenInterface)
 				err := g.Start()
 				if err != nil {
-					log.WithError(err).Info("Event server_change:start_server returned errors when starting")
+					mainlog.WithError(err).Info("Event server_change:start_server returned errors when starting")
 				}
 			}
 		}
@@ -191,7 +193,7 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateRunning {
 				server.Shutdown()
-				log.Infof("Server [%s] stopped.", sc.ListenInterface)
+				mainlog.Infof("Server [%s] stopped.", sc.ListenInterface)
 			}
 		}
 	})
@@ -200,7 +202,7 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			server.Shutdown()
 			g.removeServer(i, sc.ListenInterface)
-			log.Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
+			mainlog.Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
 		}
 	})
 
@@ -208,9 +210,9 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe("server_change:tls_config", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if err := server.configureSSL(); err == nil {
-				log.Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
+				mainlog.Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
 			} else {
-				log.WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
+				mainlog.WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
 			}
 		}
 	})
@@ -292,13 +294,13 @@ func (g *guerrilla) Shutdown() {
 	for ListenInterface, s := range g.servers {
 		if s.state == ServerStateRunning {
 			s.Shutdown()
-			log.Infof("shutdown completed for [%s]", ListenInterface)
+			mainlog.Infof("shutdown completed for [%s]", ListenInterface)
 		}
 	}
 	if err := g.backend.Shutdown(); err != nil {
-		log.WithError(err).Warn("Backend failed to shutdown")
+		mainlog.WithError(err).Warn("Backend failed to shutdown")
 	} else {
-		log.Infof("Backend shutdown completed")
+		mainlog.Infof("Backend shutdown completed")
 	}
 }
 

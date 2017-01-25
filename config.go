@@ -14,6 +14,7 @@ type AppConfig struct {
 	Servers      []ServerConfig `json:"servers"`
 	AllowedHosts []string       `json:"allowed_hosts"`
 	PidFile      string         `json:"pid_file"`
+	LogFile      string         `json:"logfile,omitempty"`
 }
 
 // ServerConfig specifies config options for a single server
@@ -28,7 +29,7 @@ type ServerConfig struct {
 	StartTLSOn      bool   `json:"start_tls_on,omitempty"`
 	TLSAlwaysOn     bool   `json:"tls_always_on,omitempty"`
 	MaxClients      int    `json:"max_clients"`
-	LogFile         string `json:"log_file,omitempty"`
+	LogFile         string `json:"logfile,omitempty"`
 
 	_privateKeyFile_mtime int
 	_publicKeyFile_mtime  int
