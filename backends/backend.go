@@ -31,10 +31,6 @@ type Backend interface {
 	loadConfig(BackendConfig) error
 }
 
-type configLoader interface {
-	loadConfig(backendConfig BackendConfig) (err error)
-}
-
 type BackendConfig map[string]interface{}
 
 var backends = map[string]Backend{}
