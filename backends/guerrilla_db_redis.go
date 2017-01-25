@@ -23,7 +23,6 @@ import (
 
 	"bytes"
 	"compress/zlib"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 	"io"
@@ -84,15 +83,6 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (er
 
 func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
 	return g.config.NumberOfWorkers
-}
-
-func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) BackendResult {
-	to := mail.RcptTo
-	log.Info("(g *GuerrillaDBAndRedisBackend) Process called")
-	if len(to) == 0 {
-		return NewBackendResult("554 Error: no recipient")
-	}
-	return nil
 }
 
 type redisClient struct {
