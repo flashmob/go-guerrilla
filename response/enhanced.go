@@ -29,6 +29,7 @@ const (
 var codeMap = struct {
 	m map[string]int
 }{m: map[string]int{
+	"2.1.0":  250,
 	"2.1.5":  250,
 	"2.3.0":  250,
 	"2.5.0":  250,
@@ -155,6 +156,41 @@ var defaultTexts = struct {
 	"5.5.1": "Invalid command",
 }}
 
+// Response type for Stringer interface
+type Response struct {
+	EnhancedCode string
+	BasicCode    int
+	Class        int
+	// Comment is optional
+	Comment string
+}
+
+// Custom returns a custom Response Stringer
+func (r *Response) String() string {
+	e := buildEnhancedResponseFromDefaultStatus(r.Class, r.EnhancedCode)
+	basicCode := r.BasicCode
+	comment := r.Comment
+	if len(comment) == 0 {
+		comment = defaultTexts.m[r.EnhancedCode]
+		if len(comment) == 0 {
+			switch r.Class {
+			case 2:
+				comment = "OK"
+			case 4:
+				comment = "Temporary failure."
+			case 5:
+				comment = "Permanent failure."
+			}
+		}
+	}
+	if r.BasicCode == 0 {
+		basicCode = getBasicStatusCode(e)
+	}
+
+	return fmt.Sprintf("%d %s %s", basicCode, e, comment)
+}
+
+/*
 // CustomString builds an enhanced status code string using your custom string and basic code
 func CustomString(enhancedCode string, basicCode, class int, comment string) string {
 	e := buildEnhancedResponseFromDefaultStatus(class, enhancedCode)
@@ -179,7 +215,7 @@ func String(enhancedCode string, class int) string {
 	}
 	return CustomString(enhancedCode, basicCode, class, comment)
 }
-
+*/
 func getBasicStatusCode(enhancedStatusCode string) int {
 	if val, ok := codeMap.m[enhancedStatusCode]; ok {
 		return val
