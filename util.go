@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 
+	"fmt"
+
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/response"
 )
@@ -15,7 +17,13 @@ func extractEmail(str string) (*envelope.EmailAddress, error) {
 	email := &envelope.EmailAddress{}
 	var err error
 	if len(str) > RFC2821LimitPath {
-		return email, errors.New(response.CustomString(response.InvalidCommandArguments, 550, response.ClassPermanentFailure, "Path too long"))
+		resp := &response.Response{
+			EnhancedCode: response.InvalidCommandArguments,
+			BasicCode:    550,
+			Class:        response.ClassPermanentFailure,
+			Comment:      "Path too long",
+		}
+		return email, errors.New(resp.String())
 	}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
@@ -25,12 +33,22 @@ func extractEmail(str string) (*envelope.EmailAddress, error) {
 		email.Host = validHost(res[1])
 	}
 	err = nil
+	resp := &response.Response{
+		EnhancedCode: response.InvalidCommandArguments,
+		BasicCode:    501,
+		Class:        response.ClassPermanentFailure,
+	}
 	if email.User == "" || email.Host == "" {
-		err = errors.New(response.CustomString(response.InvalidCommandArguments, 501, response.ClassPermanentFailure, "Invalid address"))
+		resp.Comment = "Invalid address"
+		err = fmt.Errorf("%s", resp)
 	} else if len(email.User) > RFC2832LimitLocalPart {
-		err = errors.New(response.CustomString(response.InvalidCommandArguments, 550, response.ClassPermanentFailure, "Local part too long, cannot exceed 64 characters"))
+		resp.BasicCode = 550
+		resp.Comment = "Local part too long, cannot exceed 64 characters"
+		err = fmt.Errorf("%s", resp)
 	} else if len(email.Host) > RFC2821LimitDomain {
-		err = errors.New(response.CustomString(response.InvalidCommandArguments, 501, response.ClassPermanentFailure, "Domain cannot exceed 255 characters"))
+		resp.BasicCode = 550
+		resp.Comment = "Domain cannot exceed 255 characters"
+		err = fmt.Errorf("%s", resp)
 	}
 	return email, err
 }
