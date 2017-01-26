@@ -170,7 +170,7 @@ func (r *Response) String() string {
 	e := buildEnhancedResponseFromDefaultStatus(r.Class, r.EnhancedCode)
 	basicCode := r.BasicCode
 	comment := r.Comment
-	if len(comment) == 0 {
+	if len(comment) == 0 && r.BasicCode == 0 {
 		comment = defaultTexts.m[r.EnhancedCode]
 		if len(comment) == 0 {
 			switch r.Class {

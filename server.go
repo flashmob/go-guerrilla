@@ -292,20 +292,10 @@ func (server *server) handleClient(client *client) {
 	}
 
 	for client.isAlive() {
-		// Our default answer is "unknown command".
-		resp := &response.Response{
-			EnhancedCode: response.InvalidCommand,
-			BasicCode:    554,
-			Class:        response.ClassPermanentFailure,
-			Comment:      fmt.Sprintf("Unrecognized command"),
-		}
-		respAlreadySent := false
-
 		switch client.state {
 		case ClientGreeting:
 			client.responseAdd(greeting)
 			client.state = ClientCmd
-			respAlreadySent = true
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := server.readCommand(client, sc.MaxSize)
@@ -317,13 +307,13 @@ func (server *server) handleClient(client *client) {
 				log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.InvalidCommand,
 					BasicCode:    554,
 					Class:        response.ClassPermanentFailure,
 					Comment:      "Line too long.",
 				}
-
+				client.responseAdd(resp.String())
 				client.kill()
 				break
 			} else if err != nil {
@@ -342,33 +332,29 @@ func (server *server) handleClient(client *client) {
 				cmdLen = CommandVerbMaxLength
 			}
 			cmd := strings.ToUpper(input[:cmdLen])
-			// Update the response string now that the command is known
-			resp.Comment = fmt.Sprintf("Unrecognized command %s", cmd)
 			switch {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
 				client.responseAdd(helo)
-				respAlreadySent = true
 
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
 				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + advertiseEnhancedStatusCodes + help)
-				respAlreadySent = true
 
 			case strings.Index(cmd, "HELP") == 0:
 				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
-				respAlreadySent = true
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.InvalidCommand,
 						BasicCode:    503,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Error: nested MAIL command",
 					}
+					client.responseAdd(resp.String())
 					break
 				}
 				from, err := extractEmail(input[10:])
@@ -376,116 +362,133 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd(err.Error())
 				} else {
 					client.MailFrom = from
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.OtherAddressStatus,
 						Class:        response.ClassSuccess,
 					}
+					client.responseAdd(resp.String())
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.TooManyRecipients,
 						BasicCode:    452,
 						Class:        response.ClassTransientFailure,
 						Comment:      "Too many recipients",
 					}
+					client.responseAdd(resp.String())
 					break
 				}
 				to, err := extractEmail(input[8:])
 				if err != nil {
 					client.responseAdd(err.Error())
-					respAlreadySent = true
 				} else {
 					if !server.allowsHost(to.Host) {
-						resp = &response.Response{
+						resp := &response.Response{
 							EnhancedCode: response.BadDestinationMailboxAddress,
 							BasicCode:    454,
 							Class:        response.ClassTransientFailure,
 							Comment:      "Error: Relay access denied: " + to.Host,
 						}
+						client.responseAdd(resp.String())
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						resp = &response.Response{
+						resp := &response.Response{
 							EnhancedCode: response.DestinationMailboxAddressValid,
 							Class:        response.ClassSuccess,
 						}
+						client.responseAdd(resp.String())
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.OtherAddressStatus,
 					Class:        response.ClassSuccess,
 				}
+				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "VRFY") == 0:
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.OtherOrUndefinedProtocolStatus,
 					BasicCode:    252,
 					Class:        response.ClassSuccess,
 					Comment:      "Cannot verify user",
 				}
+				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "NOOP") == 0:
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.OtherStatus,
 					Class:        response.ClassSuccess,
 				}
 				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "QUIT") == 0:
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.OtherStatus,
 					BasicCode:    221,
 					Class:        response.ClassSuccess,
 					Comment:      "Bye",
 				}
+				client.responseAdd(resp.String())
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.InvalidCommand,
 						BasicCode:    503,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Error: No sender",
 					}
+					client.responseAdd(resp.String())
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.InvalidCommand,
 						BasicCode:    503,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Error: No recipients",
 					}
+					client.responseAdd(resp.String())
 					break
 				}
 				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
-				respAlreadySent = true
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
-				resp = &response.Response{
+				resp := &response.Response{
 					EnhancedCode: response.OtherStatus,
 					BasicCode:    220,
 					Class:        response.ClassSuccess,
 					Comment:      "Ready to start TLS",
 				}
+				client.responseAdd(resp.String())
 				client.state = ClientStartTLS
 			default:
+				resp := &response.Response{
+					EnhancedCode: response.InvalidCommand,
+					BasicCode:    554,
+					Class:        response.ClassPermanentFailure,
+					Comment:      fmt.Sprintf("Unrecognized command"),
+				}
+				client.responseAdd(resp.String())
 				client.errors++
 				if client.errors > MaxUnrecognizedCommands {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.InvalidCommand,
 						BasicCode:    554,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Too many unrecognized commands",
 					}
+					client.responseAdd(resp.String())
 					client.kill()
 				}
+
 			}
 
 		case ClientData:
@@ -500,28 +503,31 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.SyntaxError,
 						BasicCode:    550,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Error: " + LineLimitExceeded.Error(),
 					}
+					client.responseAdd(resp.String())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.SyntaxError,
 						BasicCode:    550,
 						Class:        response.ClassPermanentFailure,
 						Comment:      "Error: " + MessageSizeExceeded.Error(),
 					}
+					client.responseAdd(resp.String())
 					client.kill()
 				} else {
-					resp = &response.Response{
+					resp := &response.Response{
 						EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
 						BasicCode:    451,
 						Class:        response.ClassTransientFailure,
 						Comment:      "Error: " + err.Error(),
 					}
+					client.responseAdd(resp.String())
 					client.kill()
 				}
 				log.WithError(err).Warn("Error reading data")
@@ -533,7 +539,6 @@ func (server *server) handleClient(client *client) {
 				client.messagesSent++
 			}
 			client.responseAdd(res.String())
-			respAlreadySent = true
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
@@ -552,17 +557,14 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			resp = &response.Response{
+			resp := &response.Response{
 				EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
 				BasicCode:    421,
 				Class:        response.ClassTransientFailure,
 				Comment:      "Server is shutting down. Please try again later. Sayonara!",
 			}
-			client.kill()
-		}
-
-		if !respAlreadySent {
 			client.responseAdd(resp.String())
+			client.kill()
 		}
 
 		if len(client.response) > 0 {
