@@ -728,6 +728,83 @@ func TestMailFromCmd(t *testing.T) {
 	logIn.Reset(&logBuffer)
 }
 
+// Test several different inputs to MAIL FROM command
+func TestHeloEhlo(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		hostname := config.Servers[0].Hostname
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// Test HELO
+			response, err := Command(conn, bufin, "HELO localtester")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := fmt.Sprintf("250 %s Hello", hostname)
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Test EHLO
+			// This is tricky as it is a multiline response
+			var fullresp string
+			response, err = Command(conn, bufin, "EHLO localtester")
+			fullresp = fullresp + response
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			for err == nil {
+				response, err = bufin.ReadString('\n')
+				fullresp = fullresp + response
+				if strings.HasPrefix(response, "250 ") { // Last response has a whitespace and no "-"
+					break // bail
+				}
+			}
+
+			expected = fmt.Sprintf("250-%s Hello\r\n250-SIZE 100017\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-ENHANCEDSTATUSCODES\r\n250 HELP\r\n", hostname)
+			if fullresp != expected {
+				t.Error("Server did not respond with [" + expected + "], it said [" + fullresp + "]")
+			}
+			// be kind, QUIT. And we are sure that bufin does not contain fragments from the EHLO command.
+			response, err = Command(conn, bufin, "QUIT")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "221 2.0.0 Bye"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	logOut.Flush()
+	// don't forget to reset
+	logBuffer.Reset()
+	logIn.Reset(&logBuffer)
+}
+
 // It should error when MAIL FROM was given twice
 func TestNestedMailCmd(t *testing.T) {
 	if initErr != nil {
