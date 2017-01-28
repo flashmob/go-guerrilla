@@ -703,10 +703,7 @@ func TestMailFromCmd(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
-	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+
 }
 
 // Test several different inputs to MAIL FROM command
@@ -780,10 +777,7 @@ func TestHeloEhlo(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
-	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+
 }
 
 // It should error when MAIL FROM was given twice
