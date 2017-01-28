@@ -77,7 +77,8 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 	if len(sc.LogFile) > 0 && l.Fgetname() != sc.LogFile {
 		// use separate logger for server
 		server.log = log.NewLogger(sc.LogFile)
-		// todo SetLevel
+		// set to same level
+		server.log.SetLevel(mainlog.GetLevel())
 	} else {
 		// use the main log
 		server.log = server.mainlog
@@ -155,7 +156,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 
 	for {
 
-		server.log.SetLevel("debug")
+		server.log.SetLevel(log.DebugLevel)
 		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
 		clientID++

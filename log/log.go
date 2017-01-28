@@ -14,10 +14,11 @@ import (
 type Logger interface {
 	log.FieldLogger
 	WithConn(conn net.Conn) *log.Entry
-	Freopen()
-	Frename(newFile string)
+	Reopen()
+	Rename(newFile string)
 	Fgetname() string
 	SetLevel(level string)
+	GetLevel() string
 }
 
 // Implements the Logger interface
@@ -40,34 +41,56 @@ func NewLogger(dest string) Logger {
 	return l
 }
 
+const (
+	PanicLevel = "panic"
+	ErrorLevel = "error"
+	WarnLevel  = "warnlevel"
+	InfoLevel  = "info"
+	DebugLevel = "debug"
+)
+
+// LogLevels maps to logrus levels
 var LogLevels = map[string]log.Level{
-	"panic": log.PanicLevel,
-	"error": log.ErrorLevel,
-	"warn":  log.WarnLevel,
-	"info":  log.InfoLevel,
-	"debug": log.DebugLevel,
+	PanicLevel: log.PanicLevel,
+	ErrorLevel: log.ErrorLevel,
+	WarnLevel:  log.WarnLevel,
+	InfoLevel:  log.InfoLevel,
+	DebugLevel: log.DebugLevel,
 }
 
+// SetLevel sets a log level, one of the LogLevels
 func (l *LoggerImpl) SetLevel(level string) {
 	if v, ok := LogLevels[level]; ok {
 		l.Level = v
 	}
 }
 
-// Close the log file and re-open it
-func (l *LoggerImpl) Freopen() {
-	l.h.Freopen()
+// GetLevel gets the current log level
+func (l *LoggerImpl) GetLevel() string {
+	for k, v := range LogLevels {
+		if v == l.Level {
+			return k
+		}
+	}
+	return ""
 }
 
-// Close old file, open a new one
-func (l *LoggerImpl) Frename(newFile string) {
-	l.h.Frename(newFile)
+// Reopen closes the log file and re-opens it
+func (l *LoggerImpl) Reopen() {
+	l.h.Reopen()
 }
 
+// Rename closes the old file, open a new one
+func (l *LoggerImpl) Rename(newFile string) {
+	l.h.Rename(newFile)
+}
+
+// Fgetname Gets the file name
 func (l *LoggerImpl) Fgetname() string {
 	return l.h.Fgetname()
 }
 
+// WithConn extends logrus to be able to log with a net.Conn
 func (l *LoggerImpl) WithConn(conn net.Conn) *log.Entry {
 	var addr string = "unknown"
 
@@ -82,8 +105,8 @@ func (l *LoggerImpl) WithConn(conn net.Conn) *log.Entry {
 // LoggerHook extends the log.Hook interface by adding Reopen() and Rename()
 type LoggerHook interface {
 	log.Hook
-	Freopen()
-	Frename(newFile string)
+	Reopen()
+	Rename(newFile string)
 	Fgetname() string
 }
 type LoggerHookImpl struct {
@@ -177,13 +200,13 @@ func (hook *LoggerHookImpl) Levels() []log.Level {
 }
 
 // close and re-open log files, which is a special feature of this hook
-func (hook *LoggerHookImpl) Freopen() {
+func (hook *LoggerHookImpl) Reopen() {
 	defer hook.mu.Unlock()
 	hook.mu.Lock()
 }
 
 // Rename the log file
-func (hook *LoggerHookImpl) Frename(newFile string) {
+func (hook *LoggerHookImpl) Rename(newFile string) {
 	defer hook.mu.Unlock()
 	hook.mu.Lock()
 }

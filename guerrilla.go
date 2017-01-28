@@ -160,7 +160,22 @@ func (g *guerrilla) subscribeEvents() {
 		mainlog.Infof("allowed_hosts config changed, a new list was set")
 	})
 
-	// server was removed from config
+	// the main log file changed
+	g.Subscribe("config_change:log_file", func(c *AppConfig) {
+		mainlog.Rename(c.LogFile)
+		mainlog.Infof("log file renamed to [%s]", c.LogFile)
+	})
+
+	// when log level changes, apply to mainlog and server logs
+	g.Subscribe("config_change:log_level", func(c *AppConfig) {
+		mainlog.SetLevel(c.LogLevel)
+		g.mapServers(func(server *server) {
+			server.log.SetLevel(c.LogLevel)
+		})
+		mainlog.Infof("log level changed [%s]", c.LogFile)
+	})
+
+	// server config was updated
 	g.Subscribe("server_change:update_config", func(sc *ServerConfig) {
 		if i, _ := g.findServer(sc.ListenInterface); i != -1 {
 			g.setConfig(i, sc)
@@ -181,7 +196,7 @@ func (g *guerrilla) subscribeEvents() {
 			}
 		}
 	})
-	// start a server that already exists in config and has been instantiated
+	// start a server that already exists in the config and has been instantiated
 	g.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
@@ -232,6 +247,18 @@ func (g *guerrilla) subscribeEvents() {
 		g.mapServers(func(server *server) {
 			// TODO resize the pool somehow
 		})
+	})
+	// when a server's log file changes
+	g.Subscribe("server_change:new_log_file", func(sc *ServerConfig) {
+		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			server.log.Rename(sc.LogFile)
+		}
+	})
+	// when the daemon caught a sighup
+	g.Subscribe("server_change:reopen_log_file", func(sc *ServerConfig) {
+		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			server.log.Reopen()
+		}
 	})
 
 }
