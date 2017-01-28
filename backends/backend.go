@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
 )
 

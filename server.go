@@ -11,7 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
 )
