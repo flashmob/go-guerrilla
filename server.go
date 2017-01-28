@@ -4,20 +4,16 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/response"
 	"io"
 	"net"
-	"strings"
-	"time"
-
 	"runtime"
-
-	log "github.com/Sirupsen/logrus"
-
+	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/response"
+	"time"
 )
 
 const (
@@ -50,7 +46,6 @@ const (
 type server struct {
 	configStore     atomic.Value // stores guerrilla.ServerConfig
 	backend         backends.Backend
-	tlsConfig       *tls.Config
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
@@ -60,6 +55,8 @@ type server struct {
 	closedListener  chan (bool)
 	hosts           allowedHosts // stores map[string]bool for faster lookup
 	state           int
+	mainlog         log.Logger
+	log             log.Logger
 }
 
 type allowedHosts struct {
@@ -68,13 +65,22 @@ type allowedHosts struct {
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
+func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
 	server := &server{
 		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
+		mainlog:         l,
+	}
+	if len(sc.LogFile) > 0 && l.Fgetname() != sc.LogFile {
+		// use separate logger for server
+		server.log = log.NewLogger(sc.LogFile)
+		// todo SetLevel
+	} else {
+		// use the main log
+		server.log = server.mainlog
 	}
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
@@ -143,26 +149,28 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.listenInterface, err.Error())
 	}
 
-	log.Infof("Listening on TCP %s", server.listenInterface)
+	server.log.Infof("Listening on TCP %s", server.listenInterface)
 	server.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
+
+		server.log.SetLevel("debug")
+		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
+				server.log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
 				// the listener has been closed, wait for clients to exit
-				log.Infof("shutting down pool [%s]", server.listenInterface)
+				server.log.Infof("shutting down pool [%s]", server.listenInterface)
 				server.clientPool.ShutdownState()
 				server.clientPool.ShutdownWait()
 				server.state = ServerStateStopped
 				server.closedListener <- true
 				return nil
 			}
-			log.WithError(err).Info("Temporary error accepting client")
+			mainlog.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrow_err error) {
@@ -171,7 +179,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 				server.handleClient(c)
 				server.clientPool.Return(c)
 			} else {
-				log.WithError(borrow_err).Info("couldn't borrow a new client")
+				server.log.WithError(borrow_err).Info("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				conn.Close()
 
@@ -258,7 +266,7 @@ func (server *server) isShuttingDown() bool {
 func (server *server) handleClient(client *client) {
 	defer client.closeConn()
 	sc := server.configStore.Load().(ServerConfig)
-	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
+	server.log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
@@ -279,9 +287,12 @@ func (server *server) handleClient(client *client) {
 
 	if sc.TLSAlwaysOn {
 		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
-		if ok && client.upgradeToTLS(tlsConfig) {
+		if !ok {
+			mainlog.Error("Failed to load *tls.Config")
+		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
+			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -299,19 +310,19 @@ func (server *server) handleClient(client *client) {
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := server.readCommand(client, sc.MaxSize)
-			log.Debugf("Client sent: %s", input)
+			server.log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
 				client.responseAdd(response.CustomString(response.InvalidCommand, 554, response.ClassPermanentFailure, "Line too long."))
 				client.kill()
 				break
 			} else if err != nil {
-				log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
 				client.kill()
 				break
 			}
@@ -431,7 +442,7 @@ func (server *server) handleClient(client *client) {
 					client.kill()
 					client.responseAdd(response.CustomString(response.OtherOrUndefinedMailSystemStatus, 451, response.ClassTransientFailure, "Error: "+err.Error()))
 				}
-				log.WithError(err).Warn("Error reading data")
+				server.log.WithError(err).Warn("Error reading data")
 				break
 			}
 
@@ -449,9 +460,14 @@ func (server *server) handleClient(client *client) {
 		case ClientStartTLS:
 			if !client.TLS && sc.StartTLSOn {
 				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
-				if ok && client.upgradeToTLS(tlsConfig) {
+				if !ok {
+					mainlog.Error("Failed to load *tls.Config")
+				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()
+				} else {
+					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}
 			// change to command state
@@ -463,10 +479,10 @@ func (server *server) handleClient(client *client) {
 		}
 
 		if len(client.response) > 0 {
-			log.Debugf("Writing response to client: \n%s", client.response)
+			server.log.Debugf("Writing response to client: \n%s", client.response)
 			err := server.writeResponse(client)
 			if err != nil {
-				log.WithError(err).Debug("Error writing response")
+				server.log.WithError(err).Debug("Error writing response")
 				return
 			}
 		}

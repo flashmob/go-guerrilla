@@ -3,13 +3,15 @@ package backends
 import (
 	"errors"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+var mainlog log.Logger
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -108,8 +110,9 @@ const (
 
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
-func New(backendName string, backendConfig BackendConfig) (Backend, error) {
+func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	backend, found := backends[backendName]
+	mainlog = l
 	if !found {
 		return nil, fmt.Errorf("backend %q not found", backendName)
 	}
@@ -144,7 +147,7 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 		}
 		return NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
 	case <-time.After(time.Second * 30):
-		log.Infof("Backend has timed out")
+		mainlog.Infof("Backend has timed out")
 		return NewBackendResult("554 Error: transaction timeout")
 	}
 }

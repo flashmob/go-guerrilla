@@ -4,10 +4,11 @@ import (
 	"errors"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"sync"
 )
 
-var mainlog Logger
+var mainlog log.Logger
 
 const (
 	// server has just been created
@@ -52,14 +53,18 @@ type guerrilla struct {
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
-func New(ac *AppConfig, b backends.Backend) (Guerrilla, error) {
+func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 		backend: b,
 		bus:     evbus.New(),
 	}
-	mainlog = NewLogger(ac.LogFile)
+	mainlog = l
+	if ac.LogLevel != "" {
+		mainlog.SetLevel(ac.LogLevel)
+	}
+
 	g.state = GuerrillaStateNew
 	err := g.makeServers()
 
@@ -77,7 +82,7 @@ func (g *guerrilla) makeServers() error {
 			// server already instantiated
 			continue
 		}
-		server, err := newServer(&sc, g.backend)
+		server, err := newServer(&sc, g.backend, mainlog)
 		if err != nil {
 			mainlog.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
 			errs = append(errs, err)

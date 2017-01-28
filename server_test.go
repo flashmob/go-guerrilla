@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mocks"
 )
 
@@ -26,7 +27,7 @@ func getMockServerConfig() *ServerConfig {
 		StartTLSOn:      true,
 		TLSAlwaysOn:     false,
 		MaxClients:      30, // not tested here
-		LogFile:         "/dev/stdout",
+		LogFile:         "./tests/testlog",
 	}
 	return sc
 }
@@ -36,11 +37,13 @@ func getMockServerConfig() *ServerConfig {
 // RCP TO command only allows test.com host
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true})
+	mainlog = log.NewLogger(sc.LogFile)
+
+	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}
-	server, err := newServer(sc, backend)
+	server, err := newServer(sc, backend, mainlog)
 	if err != nil {
 		t.Error("new server failed because:", err)
 	} else {

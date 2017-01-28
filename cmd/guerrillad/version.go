@@ -1,7 +1,6 @@
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	guerrilla "github.com/flashmob/go-guerrilla"
@@ -21,7 +20,7 @@ func init() {
 }
 
 func logVersion() {
-	log.Infof("guerrillad %s", guerrilla.Version)
-	log.Debugf("Build Time: %s", guerrilla.BuildTime)
-	log.Debugf("Commit:     %s", guerrilla.Commit)
+	mainlog.Infof("guerrillad %s", guerrilla.Version)
+	mainlog.Debugf("Build Time: %s", guerrilla.BuildTime)
+	mainlog.Debugf("Commit:     %s", guerrilla.Commit)
 }

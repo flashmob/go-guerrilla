@@ -3,7 +3,6 @@ package guerrilla
 import (
 	"bufio"
 	"crypto/tls"
-	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
 	"net/textproto"
@@ -112,7 +111,7 @@ func (c *client) setTimeout(t time.Duration) {
 	}
 }
 
-// Closes a client connection, , goroutine safe
+// closeConn closes a client connection, , goroutine safe
 func (c *client) closeConn() {
 	defer c.connGuard.Unlock()
 	c.connGuard.Lock()
@@ -141,25 +140,25 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.RemoteAddress = conn.RemoteAddr().String()
 }
 
-// getId returns the client's unique ID
+// getID returns the client's unique ID
 func (c *client) getID() uint64 {
 	return c.ID
 }
 
-// Upgrades a client connection to TLS
-func (client *client) upgradeToTLS(tlsConfig *tls.Config) bool {
+// UpgradeToTLS upgrades a client connection to TLS
+func (client *client) upgradeToTLS(tlsConfig *tls.Config) error {
 	var tlsConn *tls.Conn
 	// load the config thread-safely
 	tlsConn = tls.Server(client.conn, tlsConfig)
+	// Call handshake here to get any handshake error before reading starts
 	err := tlsConn.Handshake()
 	if err != nil {
-		log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
-		return false
+		return err
 	}
+	// convert tlsConn to net.Conn
 	client.conn = net.Conn(tlsConn)
 	client.bufout.Reset(client.conn)
 	client.bufin.Reset(client.conn)
 	client.TLS = true
-
-	return true
+	return err
 }

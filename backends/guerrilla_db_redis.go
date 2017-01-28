@@ -18,7 +18,6 @@ import (
 
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 
 	"bytes"
@@ -165,10 +164,9 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *autorc.Con
 			comma = ","
 		}
 	}
-	//log.Debug("Prepared SQL", rows, sql)
 	stmt, sqlErr := db.Prepare(sql)
 	if sqlErr != nil {
-		log.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+		mainlog.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
 	}
 	// cache it
 	g.cache[rows-1] = stmt
@@ -199,9 +197,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 			insertStmt.Bind(vals...)
 			_, _, err := insertStmt.Exec()
 			if err != nil {
-				log.WithError(err).Error("There was a problem the insert")
-			} else {
-				//log.Debugf("Inserted %d rows ", count)
+				mainlog.WithError(err).Error("There was a problem the insert")
 			}
 		}
 		vals = nil
@@ -213,16 +209,15 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	for {
 		select {
 		case row := <-feeder:
-			log.Info("row form chan is", row, "cols:", len(row))
+			mainlog.Debug("row form chan is", row, "cols:", len(row))
 			if row == nil {
-				log.Debug("Query batchaer exiting")
+				mainlog.Debug("Query batchaer exiting")
 				// Insert any remaining rows
 				insert(count)
 				return
 			}
 			vals = append(vals, row...)
 			count++
-			//log.Debug("apend vals", count, vals)
 			if count == GuerrillaDBAndRedisBatchMax {
 				insert(GuerrillaDBAndRedisBatchMax)
 			}
@@ -232,8 +227,6 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 			}
 			t.Reset(GuerrillaDBAndRedisBatchTimeout)
 		case <-t.C:
-			//log.Debugf("Query batcher timer fired! [%d]", len(vals))
-			//log.Debug("Contents:", count, vals)
 			// anything to insert?
 			if n := len(vals); n > 0 {
 				insert(count)
@@ -245,8 +238,6 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 
 func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
-	//var length int
-	//var err error
 
 	var redisErr error
 
@@ -272,7 +263,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			db.Raw.Close()
 		}
 		if redisClient.conn != nil {
-			log.Infof("closed redis")
+			mainlog.Infof("closed redis")
 			redisClient.conn.Close()
 		}
 		// close the feeder & wait for query batcher to exit.
@@ -287,7 +278,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 	for {
 		payload := <-saveMailChan
 		if payload == nil {
-			log.Debug("No more saveMailChan payload")
+			mainlog.Debug("No more saveMailChan payload")
 			return
 		}
 		to = payload.recipient.User + "@" + g.config.PrimaryHost
@@ -324,7 +315,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 				data.clear()   // blank
 			}
 		} else {
-			log.WithError(redisErr).Warn("Error while SETEX on redis")
+			mainlog.WithError(redisErr).Warn("Error while SETEX on redis")
 		}
 
 		vals = []interface{}{} // clear the vals
