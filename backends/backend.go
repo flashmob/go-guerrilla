@@ -3,12 +3,14 @@ package backends
 import (
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/envelope"
-	"github.com/flashmob/go-guerrilla/log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 var mainlog log.Logger
@@ -125,10 +127,16 @@ func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend
 	return gateway, nil
 }
 
-// Distributes an envelope to one of the backend workers
+// Process distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	if gw.State != BackendStateRunning {
-		return NewBackendResult("554 Transaction failed - backend not running" + strconv.Itoa(gw.State))
+		resp := &response.Response{
+			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
+			BasicCode:    554,
+			Class:        response.ClassPermanentFailure,
+			Comment:      "Transaction failed - backend not running " + strconv.Itoa(gw.State),
+		}
+		return NewBackendResult(resp.String())
 	}
 
 	to := e.RcptTo
@@ -143,12 +151,31 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	select {
 	case status := <-savedNotify:
 		if status.err != nil {
-			return NewBackendResult("554 Error: " + status.err.Error())
+			resp := &response.Response{
+				EnhancedCode: response.OtherOrUndefinedProtocolStatus,
+				BasicCode:    554,
+				Class:        response.ClassPermanentFailure,
+				Comment:      "Error: " + status.err.Error(),
+			}
+			return NewBackendResult(resp.String())
 		}
-		return NewBackendResult(fmt.Sprintf("250 OK : queued as %s", status.hash))
+		resp := &response.Response{
+			EnhancedCode: response.OtherStatus,
+			BasicCode:    250,
+			Class:        response.ClassSuccess,
+			Comment:      fmt.Sprintf("OK : queued as %s", status.hash),
+		}
+		return NewBackendResult(resp.String())
+
 	case <-time.After(time.Second * 30):
 		mainlog.Infof("Backend has timed out")
-		return NewBackendResult("554 Error: transaction timeout")
+		resp := &response.Response{
+			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
+			BasicCode:    554,
+			Class:        response.ClassPermanentFailure,
+			Comment:      "Error: transaction timeout",
+		}
+		return NewBackendResult(resp.String())
 	}
 }
 func (gw *BackendGateway) Shutdown() error {
@@ -174,9 +201,8 @@ func (gw *BackendGateway) Reinitialize() error {
 	err := gw.Initialize(gw.config)
 	if err != nil {
 		return fmt.Errorf("error while initializing the backend: %s", err)
-	} else {
-		gw.State = BackendStateRunning
 	}
+	gw.State = BackendStateRunning
 	return err
 }
 

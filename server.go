@@ -4,9 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/response"
 	"io"
 	"net"
 	"runtime"
@@ -14,6 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 const (
@@ -319,7 +319,13 @@ func (server *server) handleClient(client *client) {
 				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				client.responseAdd(response.CustomString(response.InvalidCommand, 554, response.ClassPermanentFailure, "Line too long."))
+				resp := &response.Response{
+					EnhancedCode: response.InvalidCommand,
+					BasicCode:    554,
+					Class:        response.ClassPermanentFailure,
+					Comment:      "Line too long.",
+				}
+				client.responseAdd(resp.String())
 				client.kill()
 				break
 			} else if err != nil {
@@ -338,7 +344,6 @@ func (server *server) handleClient(client *client) {
 				cmdLen = CommandVerbMaxLength
 			}
 			cmd := strings.ToUpper(input[:cmdLen])
-
 			switch {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
@@ -355,20 +360,43 @@ func (server *server) handleClient(client *client) {
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: nested MAIL command"))
+					resp := &response.Response{
+						EnhancedCode: response.InvalidCommand,
+						BasicCode:    503,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Error: nested MAIL command",
+					}
+					client.responseAdd(resp.String())
 					break
 				}
-				from, err := extractEmail(input[10:])
+				// Fix for issue #53 - MAIL FROM may only be <> if it is a bounce
+				mail := input[10:]
+				from := &envelope.EmailAddress{}
+				if mail[0:2] != "<>" {
+					// Not Bounce, extract mail.
+					from, err = extractEmail(mail)
+				}
+
 				if err != nil {
 					client.responseAdd(err.Error())
 				} else {
 					client.MailFrom = from
-					client.responseAdd(response.CustomString(response.OtherAddressStatus, 250, response.ClassSuccess, "OK"))
+					resp := &response.Response{
+						EnhancedCode: response.OtherAddressStatus,
+						Class:        response.ClassSuccess,
+					}
+					client.responseAdd(resp.String())
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					client.responseAdd(response.CustomString(response.TooManyRecipients, 452, response.ClassTransientFailure, "Too many recipients"))
+					resp := &response.Response{
+						EnhancedCode: response.TooManyRecipients,
+						BasicCode:    452,
+						Class:        response.ClassTransientFailure,
+						Comment:      "Too many recipients",
+					}
+					client.responseAdd(resp.String())
 					break
 				}
 				to, err := extractEmail(input[8:])
@@ -376,50 +404,110 @@ func (server *server) handleClient(client *client) {
 					client.responseAdd(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						client.responseAdd(response.CustomString(response.BadDestinationMailboxAddress, 454, response.ClassTransientFailure, "Error: Relay access denied: "+to.Host))
+						resp := &response.Response{
+							EnhancedCode: response.BadDestinationMailboxAddress,
+							BasicCode:    454,
+							Class:        response.ClassTransientFailure,
+							Comment:      "Error: Relay access denied: " + to.Host,
+						}
+						client.responseAdd(resp.String())
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						client.responseAdd(response.String(response.DestinationMailboxAddressValid, response.ClassSuccess))
+						resp := &response.Response{
+							EnhancedCode: response.DestinationMailboxAddressValid,
+							Class:        response.ClassSuccess,
+						}
+						client.responseAdd(resp.String())
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				client.responseAdd(response.CustomString(response.OtherAddressStatus, 250, response.ClassSuccess, "OK"))
+				resp := &response.Response{
+					EnhancedCode: response.OtherAddressStatus,
+					Class:        response.ClassSuccess,
+				}
+				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "VRFY") == 0:
-				client.responseAdd(response.CustomString(response.OtherOrUndefinedProtocolStatus, 252, response.ClassSuccess, "Cannot verify user"))
+				resp := &response.Response{
+					EnhancedCode: response.OtherOrUndefinedProtocolStatus,
+					BasicCode:    252,
+					Class:        response.ClassSuccess,
+					Comment:      "Cannot verify user",
+				}
+				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "NOOP") == 0:
-				client.responseAdd(response.String(response.DestinationMailboxAddressValid, response.ClassSuccess))
+				resp := &response.Response{
+					EnhancedCode: response.OtherStatus,
+					Class:        response.ClassSuccess,
+				}
+				client.responseAdd(resp.String())
 
 			case strings.Index(cmd, "QUIT") == 0:
-				client.responseAdd(response.CustomString(response.OtherStatus, 221, response.ClassSuccess, "Bye"))
+				resp := &response.Response{
+					EnhancedCode: response.OtherStatus,
+					BasicCode:    221,
+					Class:        response.ClassSuccess,
+					Comment:      "Bye",
+				}
+				client.responseAdd(resp.String())
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: No sender"))
+					resp := &response.Response{
+						EnhancedCode: response.InvalidCommand,
+						BasicCode:    503,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Error: No sender",
+					}
+					client.responseAdd(resp.String())
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					client.responseAdd(response.CustomString(response.InvalidCommand, 503, response.ClassPermanentFailure, "Error: No recipients"))
+					resp := &response.Response{
+						EnhancedCode: response.InvalidCommand,
+						BasicCode:    503,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Error: No recipients",
+					}
+					client.responseAdd(resp.String())
 					break
 				}
 				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
-				client.responseAdd(response.CustomString(response.OtherStatus, 220, response.ClassSuccess, "Ready to start TLS"))
+				resp := &response.Response{
+					EnhancedCode: response.OtherStatus,
+					BasicCode:    220,
+					Class:        response.ClassSuccess,
+					Comment:      "Ready to start TLS",
+				}
+				client.responseAdd(resp.String())
 				client.state = ClientStartTLS
 			default:
-
-				client.responseAdd(response.CustomString(response.SyntaxError, 500, response.ClassPermanentFailure, "Unrecognized command: "+cmd))
+				resp := &response.Response{
+					EnhancedCode: response.InvalidCommand,
+					BasicCode:    554,
+					Class:        response.ClassPermanentFailure,
+					Comment:      fmt.Sprintf("Unrecognized command"),
+				}
+				client.responseAdd(resp.String())
 				client.errors++
 				if client.errors > MaxUnrecognizedCommands {
-					client.responseAdd(response.CustomString(response.InvalidCommand, 554, response.ClassPermanentFailure, "Too many unrecognized commands"))
+					resp := &response.Response{
+						EnhancedCode: response.InvalidCommand,
+						BasicCode:    554,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Too many unrecognized commands",
+					}
+					client.responseAdd(resp.String())
 					client.kill()
 				}
+
 			}
 
 		case ClientData:
@@ -434,14 +522,32 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					client.responseAdd(response.CustomString(response.SyntaxError, 550, response.ClassPermanentFailure, "Error: "+LineLimitExceeded.Error()))
+					resp := &response.Response{
+						EnhancedCode: response.SyntaxError,
+						BasicCode:    550,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Error: " + LineLimitExceeded.Error(),
+					}
+					client.responseAdd(resp.String())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					client.responseAdd(response.CustomString(response.SyntaxError, 550, response.ClassPermanentFailure, "Error: "+MessageSizeExceeded.Error()))
+					resp := &response.Response{
+						EnhancedCode: response.SyntaxError,
+						BasicCode:    550,
+						Class:        response.ClassPermanentFailure,
+						Comment:      "Error: " + MessageSizeExceeded.Error(),
+					}
+					client.responseAdd(resp.String())
 					client.kill()
 				} else {
+					resp := &response.Response{
+						EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
+						BasicCode:    451,
+						Class:        response.ClassTransientFailure,
+						Comment:      "Error: " + err.Error(),
+					}
+					client.responseAdd(resp.String())
 					client.kill()
-					client.responseAdd(response.CustomString(response.OtherOrUndefinedMailSystemStatus, 451, response.ClassTransientFailure, "Error: "+err.Error()))
 				}
 				server.log.WithError(err).Warn("Error reading data")
 				break
@@ -475,7 +581,13 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			client.responseAdd(response.CustomString(response.OtherOrUndefinedMailSystemStatus, 421, response.ClassTransientFailure, "Server is shutting down. Please try again later. Sayonara!"))
+			resp := &response.Response{
+				EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
+				BasicCode:    421,
+				Class:        response.ClassTransientFailure,
+				Comment:      "Server is shutting down. Please try again later. Sayonara!",
+			}
+			client.responseAdd(resp.String())
 			client.kill()
 		}
 
