@@ -361,7 +361,9 @@ func (server *server) handleClient(client *client) {
 				// Fix for issue #53 - MAIL FROM may only be <> if it is a bounce
 				mail := input[10:]
 				from := &envelope.EmailAddress{}
-				if mail[0:2] != "<>" {
+
+				if !(strings.Index(mail, "<>") == 0) &&
+					!(strings.Index(mail, " <>") == 0) {
 					// Not Bounce, extract mail.
 					from, err = extractEmail(mail)
 				}
