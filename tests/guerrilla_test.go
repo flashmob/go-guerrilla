@@ -617,7 +617,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.2 Bad sender address syntax"
+			expected = "501 5.5.4 Invalid address"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -637,7 +637,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.2 Bad sender address syntax"
+			expected = "501 5.5.4 Invalid address"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -657,7 +657,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.2 Bad sender address syntax"
+			expected = "501 5.5.4 Invalid address"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
