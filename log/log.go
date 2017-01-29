@@ -14,8 +14,8 @@ import (
 type Logger interface {
 	log.FieldLogger
 	WithConn(conn net.Conn) *log.Entry
-	Reopen()
-	Rename(newFile string)
+	Reopen() error
+	Change(newFile string)
 	Fgetname() string
 	SetLevel(level string)
 	GetLevel() string
@@ -76,13 +76,13 @@ func (l *LoggerImpl) GetLevel() string {
 }
 
 // Reopen closes the log file and re-opens it
-func (l *LoggerImpl) Reopen() {
-	l.h.Reopen()
+func (l *LoggerImpl) Reopen() error {
+	return l.h.Reopen()
 }
 
-// Rename closes the old file, open a new one
-func (l *LoggerImpl) Rename(newFile string) {
-	l.h.Rename(newFile)
+// Change closes the old file, open a new one
+func (l *LoggerImpl) Change(newFile string) {
+	l.h.Change(newFile)
 }
 
 // Fgetname Gets the file name
@@ -105,8 +105,8 @@ func (l *LoggerImpl) WithConn(conn net.Conn) *log.Entry {
 // LoggerHook extends the log.Hook interface by adding Reopen() and Rename()
 type LoggerHook interface {
 	log.Hook
-	Reopen()
-	Rename(newFile string)
+	Reopen() error
+	Change(newFile string)
 	Fgetname() string
 }
 type LoggerHookImpl struct {
@@ -127,40 +127,65 @@ type LoggerHookImpl struct {
 // "stdout" - log to stdout, lines will be written to os.Stdout
 // "off" - no log, lines will be written to ioutil.Discard
 func newLogrusHook(dest string) LoggerHook {
-	var w io.Writer
 	hook := LoggerHookImpl{fname: dest}
+	hook.setup(dest)
+	return &hook
+}
+
+// Setups sets the hook's writer w and file descriptor w
+// assumes the hook.fd is closed and nil
+func (hook *LoggerHookImpl) setup(dest string) {
 	if dest == "" || dest == "stderr" {
-		w = os.Stderr
+		hook.w = os.Stderr
 	} else if dest == "stdout" {
-		w = os.Stdout
+		hook.w = os.Stdout
 	} else if dest == "off" {
-		w = ioutil.Discard
+		hook.w = ioutil.Discard
 	} else {
 		if _, err := os.Stat(dest); err == nil {
-			// fire exists open the file for appending
-			if fd, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644); err == nil {
-				w = bufio.NewWriter(fd)
-				hook.fd = fd
-			} else {
-				log.WithError(err).Error("Could not open log file for appending")
-				w = os.Stderr
+			// file exists open the file for appending
+			if err := hook.openAppend(dest); err != nil {
+				log.Error(err)
 			}
 		} else {
 			// create the file
-			if fd, err := os.Create(dest); err == nil {
-				w = bufio.NewWriter(fd)
-				hook.fd = fd
-			} else {
-				log.WithError(err).Error("Could not create log file")
-				w = os.Stderr
+			if err := hook.openCreate(dest); err != nil {
+				log.Error(err)
 			}
 		}
 	}
+	// disable colors when writing to file
 	if hook.fd != nil {
 		hook.plainTxtFormatter = &log.TextFormatter{DisableColors: true}
 	}
-	hook.w = w
-	return &hook
+}
+
+// openAppend opens the dest file for appending. Default to os.Stderr if it can't open dest
+func (hook *LoggerHookImpl) openAppend(dest string) (err error) {
+	fd, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.WithError(err).Error("Could not open log file for appending")
+		hook.w = os.Stderr
+		hook.fd = nil
+		return
+	}
+	hook.w = bufio.NewWriter(fd)
+	hook.fd = fd
+	return
+}
+
+// openCreate creates a new dest file for appending. Default to os.Stderr if it can't open dest
+func (hook *LoggerHookImpl) openCreate(dest string) (err error) {
+	fd, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		log.WithError(err).Error("Could not create log file")
+		hook.w = os.Stderr
+		hook.fd = nil
+		return
+	}
+	hook.w = bufio.NewWriter(fd)
+	hook.fd = fd
+	return
 }
 
 // Fire implements the logrus Hook interface. It disables color text formatting if writing to a file
@@ -199,14 +224,32 @@ func (hook *LoggerHookImpl) Levels() []log.Level {
 	return log.AllLevels
 }
 
-// close and re-open log files, which is a special feature of this hook
-func (hook *LoggerHookImpl) Reopen() {
+// close and re-open log file descriptor, which is a special feature of this hook
+func (hook *LoggerHookImpl) Reopen() error {
+	var err error
 	defer hook.mu.Unlock()
 	hook.mu.Lock()
+	if hook.fd != nil {
+		if err = hook.fd.Close(); err != nil {
+			return err
+		}
+		if err := hook.openAppend(hook.Fgetname()); err != nil {
+			return err
+		}
+	}
+	return err
+
 }
 
-// Rename the log file
-func (hook *LoggerHookImpl) Rename(newFile string) {
+// Changes changes the destination to test
+func (hook *LoggerHookImpl) Change(dest string) {
 	defer hook.mu.Unlock()
 	hook.mu.Lock()
+	if hook.fd != nil {
+		// close the old destination
+		hook.fd.Close()
+		hook.fd = nil
+		hook.w = nil
+	}
+	hook.setup(dest)
 }

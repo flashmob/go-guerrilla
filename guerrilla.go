@@ -162,7 +162,7 @@ func (g *guerrilla) subscribeEvents() {
 
 	// the main log file changed
 	g.Subscribe("config_change:log_file", func(c *AppConfig) {
-		mainlog.Rename(c.LogFile)
+		mainlog.Change(c.LogFile)
 		mainlog.Infof("log file renamed to [%s]", c.LogFile)
 	})
 
@@ -251,7 +251,7 @@ func (g *guerrilla) subscribeEvents() {
 	// when a server's log file changes
 	g.Subscribe("server_change:new_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			server.log.Rename(sc.LogFile)
+			server.log.Change(sc.LogFile)
 		}
 	})
 	// when the daemon caught a sighup
