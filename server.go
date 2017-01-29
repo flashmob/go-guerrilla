@@ -362,7 +362,8 @@ func (server *server) handleClient(client *client) {
 				mail := input[10:]
 				from := &envelope.EmailAddress{}
 
-				if !(strings.Index(mail, "<>") == 0) {
+				if !(strings.Index(mail, "<>") == 0) &&
+					!(strings.Index(mail, " <>") == 0) {
 					// Not Bounce, extract mail.
 					from, err = extractEmail(mail)
 				}
