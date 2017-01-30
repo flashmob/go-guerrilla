@@ -15,7 +15,7 @@ type Logger interface {
 	log.FieldLogger
 	WithConn(conn net.Conn) *log.Entry
 	Reopen() error
-	Change(newFile string)
+	Change(newFile string) error
 	GetLogDest() string
 	SetLevel(level string)
 	GetLevel() string
@@ -33,7 +33,7 @@ type LoggerImpl struct {
 func NewLogger(dest string) Logger {
 	logrus := log.New()
 	logrus.Out = ioutil.Discard // we'll use the hook to output instead
-	h := newLogrusHook(dest)
+	h, _ := NewLogrusHook(dest)
 	logrus.Hooks.Add(h)
 	l := &LoggerImpl{}
 	l.Logger = logrus
@@ -63,8 +63,8 @@ func (l *LoggerImpl) Reopen() error {
 }
 
 // Change closes the old file, open a new one
-func (l *LoggerImpl) Change(newFile string) {
-	l.h.Change(newFile)
+func (l *LoggerImpl) Change(newFile string) error {
+	return l.h.Change(newFile)
 }
 
 // Fgetname Gets the file name
@@ -84,11 +84,14 @@ func (l *LoggerImpl) WithConn(conn net.Conn) *log.Entry {
 
 // custom logrus hook
 
+// hookMu ensures all io operations are synced. Always on exported functions
+var hookMu sync.Mutex
+
 // LoggerHook extends the log.Hook interface by adding Reopen() and Rename()
 type LoggerHook interface {
 	log.Hook
 	Reopen() error
-	Change(newFile string)
+	Change(newFile string) error
 	GetLogDest() string
 }
 type LoggerHookImpl struct {
@@ -99,24 +102,26 @@ type LoggerHookImpl struct {
 	fname string
 	// txtFormatter that doesn't use colors
 	plainTxtFormatter *log.TextFormatter
+
+	mu sync.Mutex
 }
 
 // newLogrusHook creates a new hook. dest can be a file name or one of the following strings:
 // "stderr" - log to stderr, lines will be written to os.Stdout
 // "stdout" - log to stdout, lines will be written to os.Stdout
 // "off" - no log, lines will be written to ioutil.Discard
-func newLogrusHook(dest string) LoggerHook {
+func NewLogrusHook(dest string) (LoggerHook, error) {
+	defer hookMu.Unlock()
+	hookMu.Lock()
 	hook := LoggerHookImpl{fname: dest}
-	hook.setup(dest)
-	return &hook
+	err := hook.setup(dest)
+	return &hook, err
 }
-
-// hookMu ensures all io operations are synced
-var hookMu sync.Mutex
 
 // Setups sets the hook's writer w and file descriptor w
 // assumes the hook.fd is closed and nil
-func (hook *LoggerHookImpl) setup(dest string) {
+func (hook *LoggerHookImpl) setup(dest string) error {
+
 	if dest == "" || dest == "stderr" {
 		hook.w = os.Stderr
 	} else if dest == "stdout" {
@@ -127,12 +132,12 @@ func (hook *LoggerHookImpl) setup(dest string) {
 		if _, err := os.Stat(dest); err == nil {
 			// file exists open the file for appending
 			if err := hook.openAppend(dest); err != nil {
-				log.WithError(err).Error(dest)
+				return err
 			}
 		} else {
 			// create the file
 			if err := hook.openCreate(dest); err != nil {
-				log.Error(err)
+				return err
 			}
 		}
 	}
@@ -140,6 +145,7 @@ func (hook *LoggerHookImpl) setup(dest string) {
 	if hook.fd != nil {
 		hook.plainTxtFormatter = &log.TextFormatter{DisableColors: true}
 	}
+	return nil
 }
 
 // openAppend opens the dest file for appending. Default to os.Stderr if it can't open dest
@@ -188,13 +194,14 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 		r := strings.NewReader(line)
 		_, err = io.Copy(hook.w, r)
 		if wb, ok := hook.w.(*bufio.Writer); ok {
-			wb.Flush()
+			if err := wb.Flush(); err != nil {
+				return err
+			}
 		}
 		return err
 	} else {
 		return err
 	}
-
 }
 
 // GetLogDest returns the destination of the log as a string
@@ -218,7 +225,7 @@ func (hook *LoggerHookImpl) Reopen() error {
 		if err = hook.fd.Close(); err != nil {
 			return err
 		}
-		if err := hook.openAppend(hook.GetLogDest()); err != nil {
+		if err := hook.openAppend(hook.fname); err != nil {
 			return err
 		}
 	}
@@ -227,7 +234,7 @@ func (hook *LoggerHookImpl) Reopen() error {
 }
 
 // Changes changes the destination to test
-func (hook *LoggerHookImpl) Change(dest string) {
+func (hook *LoggerHookImpl) Change(dest string) error {
 	defer hookMu.Unlock()
 	hookMu.Lock()
 	if hook.fd != nil {
@@ -236,5 +243,5 @@ func (hook *LoggerHookImpl) Change(dest string) {
 		hook.fd = nil
 		hook.w = nil
 	}
-	hook.setup(dest)
+	return hook.setup(dest)
 }
