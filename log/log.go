@@ -93,8 +93,6 @@ type LoggerHook interface {
 }
 type LoggerHookImpl struct {
 	w io.Writer
-
-	mu sync.Mutex
 	// file descriptor, can be re-opened
 	fd *os.File
 	// filename to the file descriptor
@@ -231,7 +229,7 @@ func (hook *LoggerHookImpl) Reopen() error {
 // Changes changes the destination to test
 func (hook *LoggerHookImpl) Change(dest string) {
 	defer hookMu.Unlock()
-	hook.mu.Lock()
+	hookMu.Lock()
 	if hook.fd != nil {
 		// close the old destination
 		hook.fd.Close()
