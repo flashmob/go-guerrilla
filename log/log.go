@@ -199,6 +199,9 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 			if err := wb.Flush(); err != nil {
 				return err
 			}
+			if hook.fd != nil {
+				hook.fd.Sync()
+			}
 		}
 		return err
 	} else {
