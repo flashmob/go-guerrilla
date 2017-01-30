@@ -1,6 +1,8 @@
 package response
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestClass(t *testing.T) {
 	if ClassPermanentFailure != 5 {
@@ -31,15 +33,24 @@ func TestGetBasicStatusCode(t *testing.T) {
 // TestString for the String function
 func TestCustomString(t *testing.T) {
 	// Basic testing
-	a := CustomString(OtherStatus, 200, ClassSuccess, "Test")
-	if a != "200 2.0.0 Test" {
-		t.Errorf("CustomString failed. String \"%s\" not expected.", a)
+	resp := &Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    200,
+		Class:        ClassSuccess,
+		Comment:      "Test",
+	}
+
+	if resp.String() != "200 2.0.0 Test" {
+		t.Errorf("CustomString failed. String \"%s\" not expected.", resp)
 	}
 
 	// Default String
-	b := String(OtherStatus, ClassSuccess)
-	if b != "200 2.0.0 OK" {
-		t.Errorf("String failed. String \"%s\" not expected.", b)
+	resp2 := &Response{
+		EnhancedCode: OtherStatus,
+		Class:        ClassSuccess,
+	}
+	if resp2.String() != "200 2.0.0 OK" {
+		t.Errorf("String failed. String \"%s\" not expected.", resp2)
 	}
 }
 
