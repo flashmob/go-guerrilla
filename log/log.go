@@ -21,7 +21,8 @@ type Logger interface {
 }
 
 // Implements the Logger interface
-type LoggerImpl struct {
+// It's a logrus logger wrapper that contains an instance of our LoggerHook
+type HookedLogger struct {
 
 	// satisfy the log.FieldLogger interface
 	*log.Logger
@@ -31,12 +32,22 @@ type LoggerImpl struct {
 
 type loggerCache map[string]Logger
 
+// loggers store the cached loggers created by NewLogger
 var loggers loggerCache
+
+// loggerMu guards the loggers
 var loggerMu sync.Mutex
 
-// NewLogger returns a logger with a custom hook. The hook has been initialized with dest
+// NewLogger returns a struct that implements Logger (i.e HookedLogger) with a custom hook.
+// The hook has been initialized with dest
+// dest can can be a path to a file, or the following string values:
+// "off" - disable any log output
+// "stdout" - write to standard output
+// "stderr" - write to standard error
+// If the file doesn't exists, a new file will be created. Otherwise it will be appended
 // Each Logger returned is cached on dest, subsequent call will get the cached logger if dest matches
 // If there was an error, the log will revert to stderr instead of using a custom hook
+
 func NewLogger(dest string) (Logger, error) {
 	defer loggerMu.Unlock()
 	loggerMu.Lock()
@@ -52,7 +63,7 @@ func NewLogger(dest string) (Logger, error) {
 	// we'll use the hook to output instead
 	logrus.Out = ioutil.Discard
 
-	l := &LoggerImpl{}
+	l := &HookedLogger{}
 	l.Logger = logrus
 
 	// cache it
@@ -73,7 +84,7 @@ func NewLogger(dest string) (Logger, error) {
 }
 
 // SetLevel sets a log level, one of the LogLevels
-func (l *LoggerImpl) SetLevel(level string) {
+func (l *HookedLogger) SetLevel(level string) {
 	var logLevel log.Level
 	var err error
 	if logLevel, err = log.ParseLevel(level); err != nil {
@@ -84,22 +95,22 @@ func (l *LoggerImpl) SetLevel(level string) {
 }
 
 // GetLevel gets the current log level
-func (l *LoggerImpl) GetLevel() string {
+func (l *HookedLogger) GetLevel() string {
 	return l.Level.String()
 }
 
 // Reopen closes the log file and re-opens it
-func (l *LoggerImpl) Reopen() error {
+func (l *HookedLogger) Reopen() error {
 	return l.h.Reopen()
 }
 
 // Fgetname Gets the file name
-func (l *LoggerImpl) GetLogDest() string {
+func (l *HookedLogger) GetLogDest() string {
 	return l.h.GetLogDest()
 }
 
 // WithConn extends logrus to be able to log with a net.Conn
-func (l *LoggerImpl) WithConn(conn net.Conn) *log.Entry {
+func (l *HookedLogger) WithConn(conn net.Conn) *log.Entry {
 	var addr string = "unknown"
 
 	if conn != nil {
@@ -119,7 +130,7 @@ type LoggerHook interface {
 	Reopen() error
 	GetLogDest() string
 }
-type LoggerHookImpl struct {
+type LogrusHook struct {
 	w io.Writer
 	// file descriptor, can be re-opened
 	fd *os.File
@@ -138,14 +149,14 @@ type LoggerHookImpl struct {
 func NewLogrusHook(dest string) (LoggerHook, error) {
 	defer hookMu.Unlock()
 	hookMu.Lock()
-	hook := LoggerHookImpl{fname: dest}
+	hook := LogrusHook{fname: dest}
 	err := hook.setup(dest)
 	return &hook, err
 }
 
 // Setups sets the hook's writer w and file descriptor w
 // assumes the hook.fd is closed and nil
-func (hook *LoggerHookImpl) setup(dest string) error {
+func (hook *LogrusHook) setup(dest string) error {
 
 	if dest == "" || dest == "stderr" {
 		hook.w = os.Stderr
@@ -174,7 +185,7 @@ func (hook *LoggerHookImpl) setup(dest string) error {
 }
 
 // openAppend opens the dest file for appending. Default to os.Stderr if it can't open dest
-func (hook *LoggerHookImpl) openAppend(dest string) (err error) {
+func (hook *LogrusHook) openAppend(dest string) (err error) {
 	fd, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		log.WithError(err).Error("Could not open log file for appending")
@@ -188,7 +199,7 @@ func (hook *LoggerHookImpl) openAppend(dest string) (err error) {
 }
 
 // openCreate creates a new dest file for appending. Default to os.Stderr if it can't open dest
-func (hook *LoggerHookImpl) openCreate(dest string) (err error) {
+func (hook *LogrusHook) openCreate(dest string) (err error) {
 	fd, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		log.WithError(err).Error("Could not create log file")
@@ -202,7 +213,7 @@ func (hook *LoggerHookImpl) openCreate(dest string) (err error) {
 }
 
 // Fire implements the logrus Hook interface. It disables color text formatting if writing to a file
-func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
+func (hook *LogrusHook) Fire(entry *log.Entry) error {
 	defer hookMu.Unlock()
 	hookMu.Lock()
 	if hook.fd != nil {
@@ -235,19 +246,19 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 }
 
 // GetLogDest returns the destination of the log as a string
-func (hook *LoggerHookImpl) GetLogDest() string {
+func (hook *LogrusHook) GetLogDest() string {
 	defer hookMu.Unlock()
 	hookMu.Lock()
 	return hook.fname
 }
 
 // Levels implements the logrus Hook interface
-func (hook *LoggerHookImpl) Levels() []log.Level {
+func (hook *LogrusHook) Levels() []log.Level {
 	return log.AllLevels
 }
 
 // close and re-open log file descriptor, which is a special feature of this hook
-func (hook *LoggerHookImpl) Reopen() error {
+func (hook *LogrusHook) Reopen() error {
 	var err error
 	defer hookMu.Unlock()
 	hookMu.Lock()
