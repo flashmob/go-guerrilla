@@ -43,7 +43,8 @@ func NewLogger(dest string) (Logger, error) {
 	if loggers == nil {
 		loggers = make(loggerCache, 1)
 	} else {
-		if l, ok := loggers["dest"]; ok {
+		if l, ok := loggers[dest]; ok {
+			// return the one we found in the cache
 			return l, nil
 		}
 	}
