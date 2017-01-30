@@ -32,11 +32,14 @@ type LoggerImpl struct {
 type loggerCache map[string]Logger
 
 var loggers loggerCache
+var loggerMu sync.Mutex
 
 // NewLogger returns a logger with a custom hook. The hook has been initialized with dest
 // Each Logger returned is cached on dest, subsequent call will get the cached logger if dest matches
 // If there was an error, the log will revert to stderr instead of using a custom hook
 func NewLogger(dest string) (Logger, error) {
+	defer loggerMu.Unlock()
+	loggerMu.Lock()
 	if loggers == nil {
 		loggers = make(loggerCache, 1)
 	} else {
