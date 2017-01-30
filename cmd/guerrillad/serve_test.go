@@ -3,12 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	test "github.com/flashmob/go-guerrilla/tests"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
-	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -18,6 +12,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"github.com/spf13/cobra"
 )
 
 var configJsonA = `
@@ -930,6 +931,87 @@ func TestSetTimeoutEvent(t *testing.T) {
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
 			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
+		}
+	}
+	// cleanup
+	os.Truncate("../../tests/testlog", 0)
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+
+}
+
+// Start in log_level = debug
+// Load config & start server
+func TestDebugLevelChange(t *testing.T) {
+	mainlog = log.NewLogger("../../tests/testlog")
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonD)) // load configJsonD
+	conf.LogLevel = "debug"
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+	time.Sleep(time.Second)
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(time.Second)
+
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mail.test.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		}
+		conn.Close()
+	}
+	// set the log_level to debug
+
+	newConf := conf // copy the cmdConfg
+	newConf.LogLevel = "info"
+	if jsonbytes, err := json.Marshal(newConf); err == nil {
+		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
+	} else {
+		t.Error(err)
+	}
+	// send a sighup signal to the server to reload config
+	sigHup()
+	time.Sleep(time.Millisecond * 100) // log to change
+
+	// connect again, this time we should see debug
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "NOOP"); err == nil {
+			expect := "200 2.0.0 OK"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		}
+		conn.Close()
+	}
+
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+	// did backend started as expected?
+	fd, _ := os.Open("../../tests/testlog")
+	if read, err := ioutil.ReadAll(fd); err == nil {
+		logOutput := string(read)
+		//fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "log level changed to [info]"); i < 0 {
+			t.Error("Log level did not change to [info]")
+		}
+		// This should not be there:
+		if i := strings.Index(logOutput, "Client sent: NOOP"); i != -1 {
+			t.Error("Log level did not change to [info], we are still seeing debug messages")
 		}
 	}
 	// cleanup
