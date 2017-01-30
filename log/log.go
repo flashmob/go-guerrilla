@@ -2,6 +2,7 @@ package log
 
 import (
 	"bufio"
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -196,6 +197,9 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 			return err
 		}
 		if wb, ok := hook.w.(*bufio.Writer); ok {
+			fmt.Println("Buff weriter relcose!")
+			hook.fd.Close()
+			hook.openAppend(hook.fname)
 			if err := wb.Flush(); err != nil {
 				return err
 			}
