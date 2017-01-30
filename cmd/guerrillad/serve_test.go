@@ -773,7 +773,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	fd, _ := os.Open("../../tests/testlog")
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
+		fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Server [127.0.0.1:2552] new TLS configuration loaded"); i < 0 {
 			t.Error("did not change tls, most likely because Bus.Subscribe(\"server_change:tls_config\" didnt fire")
 		}
