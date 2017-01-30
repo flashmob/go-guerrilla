@@ -93,7 +93,7 @@ var configJson = `
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 2,
-            "log_file" : "./testlog"
+            "log_file" : ""
         },
 
         {
@@ -107,7 +107,7 @@ var configJson = `
             "start_tls_on":false,
             "tls_always_on":true,
             "max_clients":1,
-            "log_file" : "./testlog"
+            "log_file" : ""
         }
     ]
 }
