@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -208,6 +209,8 @@ var configJsonD = `
 }
 `
 
+const testPauseDuration = time.Millisecond * 500
+
 // reload config
 func sigHup() {
 	if data, err := ioutil.ReadFile("pidfile.pid"); err == nil {
@@ -322,7 +325,7 @@ func TestServe(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	data, err := ioutil.ReadFile("pidfile.pid")
 	if err != nil {
@@ -348,7 +351,7 @@ func TestServe(t *testing.T) {
 			t.Error("could not SIGHUP", err)
 			t.FailNow()
 		}
-		time.Sleep(time.Second) // allow sighup to do its job
+		time.Sleep(testPauseDuration) // allow sighup to do its job
 		// did the pidfile change as expected?
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
 			t.Error("pidfile not changed after sighup SIGHUP", err)
@@ -395,7 +398,7 @@ func TestServerAddEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration) // allow the server to start
 	// now change the config by adding a server
 	conf := &CmdConfig{}                                 // blank one
 	conf.load([]byte(configJsonA))                       // load configJsonA
@@ -409,7 +412,7 @@ func TestServerAddEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(time.Second * 1) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 
 	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
 		t.Error("Could not connect to new server", newServer.ListenInterface)
@@ -462,7 +465,7 @@ func TestServerStartEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 	// now change the config by adding a server
 	conf := &CmdConfig{}           // blank one
 	conf.load([]byte(configJsonA)) // load configJsonA
@@ -477,7 +480,7 @@ func TestServerStartEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(time.Second * 1) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
@@ -532,7 +535,7 @@ func TestServerStopEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 	// now change the config by enabling a server
 	conf := &CmdConfig{}           // blank one
 	conf.load([]byte(configJsonA)) // load configJsonA
@@ -547,7 +550,7 @@ func TestServerStopEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(time.Second * 1) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
@@ -573,7 +576,7 @@ func TestServerStopEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(time.Second * 1) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 
 	// it should not connect to the server
 	if _, _, err := test.Connect(newConf.Servers[1], 20); err == nil {
@@ -617,13 +620,13 @@ func TestAllowedHostsEvent(t *testing.T) {
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	// now connect and try RCPT TO with an invalid host
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
@@ -656,7 +659,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(time.Second) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 
 	// now repeat the same conversion, RCPT TO should be accepted
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
@@ -713,13 +716,12 @@ func TestTLSConfigEvent(t *testing.T) {
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(time.Second)
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
@@ -760,10 +762,10 @@ func TestTLSConfigEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	sigHup()
 
-	time.Sleep(time.Second) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 	testTlsHandshake()
 
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 	// send kill signal and wait for exit
 	sigKill()
 	serveWG.Wait()
@@ -797,22 +799,24 @@ func TestBadTLS(t *testing.T) {
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
 	conf := &CmdConfig{}           // blank one
 	conf.load([]byte(configJsonD)) // load configJsonD
+	conf.Servers[0].Timeout = 1
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(time.Second)
+
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
 		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
 			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
 		} else {
+			conn.SetDeadline(time.Now().Add(time.Second))
 			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 				expect := "250 mail.test.com Hello"
 				if strings.Index(result, expect) != 0 {
@@ -828,6 +832,7 @@ func TestBadTLS(t *testing.T) {
 								ServerName:         "127.0.0.1",
 							})
 							if err := tlsConn.Handshake(); err != nil {
+								fmt.Println("failed handshake")
 								mainlog.Info("TLS Handshake failed")
 							} else {
 								t.Error("Handshake succeeded, expected it to fail", conf.AppConfig.Servers[0].ListenInterface)
@@ -852,10 +857,10 @@ func TestBadTLS(t *testing.T) {
 	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
 	sigHup()
 
-	time.Sleep(time.Second) // pause for config to reload
+	time.Sleep(testPauseDuration) // pause for config to reload
 	testTlsHandshake()
 
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 	// send kill signal and wait for exit
 	sigKill()
 	serveWG.Wait()
@@ -888,13 +893,13 @@ func TestSetTimeoutEvent(t *testing.T) {
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(time.Second)
+
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
@@ -940,6 +945,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 
 }
 
+// Test debug level config change
 // Start in log_level = debug
 // Load config & start server
 func TestDebugLevelChange(t *testing.T) {
@@ -953,13 +959,13 @@ func TestDebugLevelChange(t *testing.T) {
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(time.Second)
+
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(testPauseDuration)
 
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
@@ -983,7 +989,7 @@ func TestDebugLevelChange(t *testing.T) {
 	}
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(time.Millisecond * 100) // log to change
+	time.Sleep(testPauseDuration) // log to change
 
 	// connect again, this time we should see debug
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
