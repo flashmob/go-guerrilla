@@ -93,7 +93,7 @@ type LoggerHook interface {
 }
 type LoggerHookImpl struct {
 	w io.Writer
-	// ensure we do not lose entries while re-opening
+
 	mu sync.Mutex
 	// file descriptor, can be re-opened
 	fd *os.File
@@ -112,6 +112,9 @@ func newLogrusHook(dest string) LoggerHook {
 	hook.setup(dest)
 	return &hook
 }
+
+// hookMu ensures all io operations are synced
+var hookMu sync.Mutex
 
 // Setups sets the hook's writer w and file descriptor w
 // assumes the hook.fd is closed and nil
@@ -171,8 +174,8 @@ func (hook *LoggerHookImpl) openCreate(dest string) (err error) {
 
 // Fire implements the logrus Hook interface. It disables color text formatting if writing to a file
 func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
-	defer hook.mu.Unlock()
-	hook.mu.Lock()
+	defer hookMu.Unlock()
+	hookMu.Lock()
 	if hook.fd != nil {
 		// save the old hook
 		oldhook := entry.Logger.Formatter
@@ -196,7 +199,10 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 
 }
 
+// GetLogDest returns the destination of the log as a string
 func (hook *LoggerHookImpl) GetLogDest() string {
+	defer hookMu.Unlock()
+	hookMu.Lock()
 	return hook.fname
 }
 
@@ -208,8 +214,8 @@ func (hook *LoggerHookImpl) Levels() []log.Level {
 // close and re-open log file descriptor, which is a special feature of this hook
 func (hook *LoggerHookImpl) Reopen() error {
 	var err error
-	defer hook.mu.Unlock()
-	hook.mu.Lock()
+	defer hookMu.Unlock()
+	hookMu.Lock()
 	if hook.fd != nil {
 		if err = hook.fd.Close(); err != nil {
 			return err
@@ -224,7 +230,7 @@ func (hook *LoggerHookImpl) Reopen() error {
 
 // Changes changes the destination to test
 func (hook *LoggerHookImpl) Change(dest string) {
-	defer hook.mu.Unlock()
+	defer hookMu.Unlock()
 	hook.mu.Lock()
 	if hook.fd != nil {
 		// close the old destination
