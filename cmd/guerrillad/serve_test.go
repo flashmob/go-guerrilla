@@ -47,7 +47,8 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
         },
         {
             "is_enabled" : false,
@@ -59,7 +60,8 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:2228",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
         }
     ]
 }
@@ -93,7 +95,8 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
         }
     ]
 }
@@ -136,7 +139,8 @@ var configJsonC = `
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
         },
         {
             "is_enabled" : true,
@@ -148,7 +152,8 @@ var configJsonC = `
             "listen_interface":"127.0.0.1:465",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":500
+            "max_clients":500,
+            "log_file" : "../../tests/testlog"
         }
     ]
 }
@@ -182,7 +187,8 @@ var configJsonD = `
             "listen_interface":"127.0.0.1:2552",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
         },
         {
             "is_enabled" : true,
@@ -194,7 +200,8 @@ var configJsonD = `
             "listen_interface":"127.0.0.1:4655",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":500
+            "max_clients":500,
+            "log_file" : "../../tests/testlog"
         }
     ]
 }

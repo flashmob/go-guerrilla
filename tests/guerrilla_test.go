@@ -92,7 +92,8 @@ var configJson = `
             "listen_interface":"127.0.0.1:2526",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+            "log_file" : "./testlog"
         },
 
         {
@@ -105,7 +106,8 @@ var configJson = `
             "listen_interface":"127.0.0.1:4654",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":1
+            "max_clients":1,
+            "log_file" : "./testlog"
         }
     ]
 }
@@ -176,7 +178,6 @@ func TestStart(t *testing.T) {
 	// don't forget to reset
 
 	os.Truncate("./testlog", 0)
-
 }
 
 // Simple smoke-test to see if the server can listen & issues a greeting on connect

@@ -163,7 +163,7 @@ func (g *guerrilla) subscribeEvents() {
 	// the main log file changed
 	g.Subscribe("config_change:log_file", func(c *AppConfig) {
 		mainlog.Change(c.LogFile)
-		mainlog.Infof("log file renamed to [%s]", c.LogFile)
+		mainlog.Infof("main logging changed to [%s]", c.LogFile)
 	})
 
 	// when log level changes, apply to mainlog and server logs
@@ -172,7 +172,7 @@ func (g *guerrilla) subscribeEvents() {
 		g.mapServers(func(server *server) {
 			server.log.SetLevel(c.LogLevel)
 		})
-		mainlog.Infof("log level changed [%s]", c.LogFile)
+		mainlog.Infof("log level changed to [%s]", c.LogLevel)
 	})
 
 	// server config was updated
@@ -251,12 +251,14 @@ func (g *guerrilla) subscribeEvents() {
 	// when a server's log file changes
 	g.Subscribe("server_change:new_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			mainlog.Infof("Server [%s] changed, now logging to: [%s]", sc.ListenInterface, sc.LogFile)
 			server.log.Change(sc.LogFile)
 		}
 	})
 	// when the daemon caught a sighup
 	g.Subscribe("server_change:reopen_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
+			mainlog.Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
 			server.log.Reopen()
 		}
 	})

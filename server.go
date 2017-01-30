@@ -76,15 +76,17 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		state:           ServerStateNew,
 		mainlog:         l,
 	}
-	if len(sc.LogFile) > 0 && l.Fgetname() != sc.LogFile {
-		// use separate logger for server
-		server.log = log.NewLogger(sc.LogFile)
-		// set to same level
-		server.log.SetLevel(mainlog.GetLevel())
+
+	if sc.LogFile == "" {
+		// none set, use the same log file as mainlog
+		server.log = log.NewLogger(mainlog.GetLogDest())
 	} else {
-		// use the main log
-		server.log = server.mainlog
+		server.log = log.NewLogger(sc.LogFile)
 	}
+
+	// set to same level
+	server.log.SetLevel(mainlog.GetLevel())
+
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
 	if err := server.configureSSL(); err != nil {
@@ -157,8 +159,6 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-
-		server.log.SetLevel(log.DebugLevel)
 		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
 		clientID++

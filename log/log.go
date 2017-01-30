@@ -16,7 +16,7 @@ type Logger interface {
 	WithConn(conn net.Conn) *log.Entry
 	Reopen() error
 	Change(newFile string)
-	Fgetname() string
+	GetLogDest() string
 	SetLevel(level string)
 	GetLevel() string
 }
@@ -41,38 +41,20 @@ func NewLogger(dest string) Logger {
 	return l
 }
 
-const (
-	PanicLevel = "panic"
-	ErrorLevel = "error"
-	WarnLevel  = "warnlevel"
-	InfoLevel  = "info"
-	DebugLevel = "debug"
-)
-
-// LogLevels maps to logrus levels
-var LogLevels = map[string]log.Level{
-	PanicLevel: log.PanicLevel,
-	ErrorLevel: log.ErrorLevel,
-	WarnLevel:  log.WarnLevel,
-	InfoLevel:  log.InfoLevel,
-	DebugLevel: log.DebugLevel,
-}
-
 // SetLevel sets a log level, one of the LogLevels
 func (l *LoggerImpl) SetLevel(level string) {
-	if v, ok := LogLevels[level]; ok {
-		l.Level = v
+	var logLevel log.Level
+	var err error
+	if logLevel, err = log.ParseLevel(level); err != nil {
+		return
 	}
+	l.Level = logLevel
+	log.SetLevel(logLevel)
 }
 
 // GetLevel gets the current log level
 func (l *LoggerImpl) GetLevel() string {
-	for k, v := range LogLevels {
-		if v == l.Level {
-			return k
-		}
-	}
-	return ""
+	return l.Level.String()
 }
 
 // Reopen closes the log file and re-opens it
@@ -86,8 +68,8 @@ func (l *LoggerImpl) Change(newFile string) {
 }
 
 // Fgetname Gets the file name
-func (l *LoggerImpl) Fgetname() string {
-	return l.h.Fgetname()
+func (l *LoggerImpl) GetLogDest() string {
+	return l.h.GetLogDest()
 }
 
 // WithConn extends logrus to be able to log with a net.Conn
@@ -107,7 +89,7 @@ type LoggerHook interface {
 	log.Hook
 	Reopen() error
 	Change(newFile string)
-	Fgetname() string
+	GetLogDest() string
 }
 type LoggerHookImpl struct {
 	w io.Writer
@@ -117,7 +99,6 @@ type LoggerHookImpl struct {
 	fd *os.File
 	// filename to the file descriptor
 	fname string
-
 	// txtFormatter that doesn't use colors
 	plainTxtFormatter *log.TextFormatter
 }
@@ -145,7 +126,7 @@ func (hook *LoggerHookImpl) setup(dest string) {
 		if _, err := os.Stat(dest); err == nil {
 			// file exists open the file for appending
 			if err := hook.openAppend(dest); err != nil {
-				log.Error(err)
+				log.WithError(err).Error(dest)
 			}
 		} else {
 			// create the file
@@ -215,7 +196,7 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 
 }
 
-func (hook *LoggerHookImpl) Fgetname() string {
+func (hook *LoggerHookImpl) GetLogDest() string {
 	return hook.fname
 }
 
@@ -233,7 +214,7 @@ func (hook *LoggerHookImpl) Reopen() error {
 		if err = hook.fd.Close(); err != nil {
 			return err
 		}
-		if err := hook.openAppend(hook.Fgetname()); err != nil {
+		if err := hook.openAppend(hook.GetLogDest()); err != nil {
 			return err
 		}
 	}
