@@ -192,7 +192,9 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 	}
 	if line, err := entry.String(); err == nil {
 		r := strings.NewReader(line)
-		_, err = io.Copy(hook.w, r)
+		if _, err = io.Copy(hook.w, r); err != nil {
+			return err
+		}
 		if wb, ok := hook.w.(*bufio.Writer); ok {
 			if err := wb.Flush(); err != nil {
 				return err
