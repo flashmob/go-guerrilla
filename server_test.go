@@ -36,9 +36,11 @@ func getMockServerConfig() *ServerConfig {
 // using the dummy backend
 // RCP TO command only allows test.com host
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
-
-	mainlog = log.NewLogger(sc.LogFile)
-
+	var logOpenError error
+	mainlog, logOpenError = log.NewLogger(sc.LogFile)
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
 	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)

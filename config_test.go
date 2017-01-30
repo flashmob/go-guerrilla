@@ -197,7 +197,7 @@ func TestConfigChangeEvents(t *testing.T) {
 
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
-	logger := log.NewLogger(oldconf.LogFile)
+	logger, _ := log.NewLogger(oldconf.LogFile)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, _ := backends.New("dummy", bcfg, logger)
 	app, _ := New(oldconf, backend, logger)

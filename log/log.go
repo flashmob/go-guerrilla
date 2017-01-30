@@ -15,7 +15,6 @@ type Logger interface {
 	log.FieldLogger
 	WithConn(conn net.Conn) *log.Entry
 	Reopen() error
-	Change(newFile string) error
 	GetLogDest() string
 	SetLevel(level string)
 	GetLevel() string
@@ -30,15 +29,43 @@ type LoggerImpl struct {
 	h LoggerHook
 }
 
-func NewLogger(dest string) Logger {
+type loggerCache map[string]Logger
+
+var loggers loggerCache
+
+// NewLogger returns a logger with a custom hook. The hook has been initialized with dest
+// Each Logger returned is cached on dest, subsequent call will get the cached logger if dest matches
+// If there was an error, the log will revert to stderr instead of using a custom hook
+func NewLogger(dest string) (Logger, error) {
+	if loggers == nil {
+		loggers = make(loggerCache, 1)
+	} else {
+		if l, ok := loggers["dest"]; ok {
+			return l, nil
+		}
+	}
 	logrus := log.New()
-	logrus.Out = ioutil.Discard // we'll use the hook to output instead
-	h, _ := NewLogrusHook(dest)
-	logrus.Hooks.Add(h)
+	// we'll use the hook to output instead
+	logrus.Out = ioutil.Discard
+
 	l := &LoggerImpl{}
 	l.Logger = logrus
-	l.h = h
-	return l
+
+	// cache it
+	loggers[dest] = l
+
+	// setup the hook
+	if h, err := NewLogrusHook(dest); err != nil {
+		// revert back to stderr
+		logrus.Out = os.Stderr
+		return l, err
+	} else {
+		logrus.Hooks.Add(h)
+		l.h = h
+	}
+
+	return l, nil
+
 }
 
 // SetLevel sets a log level, one of the LogLevels
@@ -60,11 +87,6 @@ func (l *LoggerImpl) GetLevel() string {
 // Reopen closes the log file and re-opens it
 func (l *LoggerImpl) Reopen() error {
 	return l.h.Reopen()
-}
-
-// Change closes the old file, open a new one
-func (l *LoggerImpl) Change(newFile string) error {
-	return l.h.Change(newFile)
 }
 
 // Fgetname Gets the file name
@@ -91,7 +113,6 @@ var hookMu sync.Mutex
 type LoggerHook interface {
 	log.Hook
 	Reopen() error
-	Change(newFile string) error
 	GetLogDest() string
 }
 type LoggerHookImpl struct {
@@ -192,14 +213,10 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 	}
 	if line, err := entry.String(); err == nil {
 		r := strings.NewReader(line)
-		//fmt.Println("Buff weriter relcose!")
-		hook.fd.Close()
-		hook.openAppend(hook.fname)
 		if _, err = io.Copy(hook.w, r); err != nil {
 			return err
 		}
 		if wb, ok := hook.w.(*bufio.Writer); ok {
-
 			if err := wb.Flush(); err != nil {
 				return err
 			}
@@ -240,17 +257,4 @@ func (hook *LoggerHookImpl) Reopen() error {
 	}
 	return err
 
-}
-
-// Changes changes the destination to test
-func (hook *LoggerHookImpl) Change(dest string) error {
-	defer hookMu.Unlock()
-	hookMu.Lock()
-	if hook.fd != nil {
-		// close the old destination
-		hook.fd.Close()
-		hook.fd = nil
-		hook.w = nil
-	}
-	return hook.setup(dest)
 }

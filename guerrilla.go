@@ -162,10 +162,11 @@ func (g *guerrilla) subscribeEvents() {
 
 	// the main log file changed
 	g.Subscribe("config_change:log_file", func(c *AppConfig) {
-		if err := mainlog.Change(c.LogFile); err == nil {
+		var err error
+		if mainlog, err = log.NewLogger(c.LogFile); err == nil {
 			mainlog.Infof("main logging changed to [%s]", c.LogFile)
 		} else {
-			mainlog.WithError(err).Infof("main logging change failed [%s]", c.LogFile)
+			mainlog.WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
 		}
 
 	})
@@ -255,13 +256,14 @@ func (g *guerrilla) subscribeEvents() {
 	// when a server's log file changes
 	g.Subscribe("server_change:new_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			if err := server.log.Change(sc.LogFile); err == nil {
+			var err error
+			if server.log, err = log.NewLogger(sc.LogFile); err == nil {
 				mainlog.Infof("Server [%s] changed, now logging to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,
 				)
 			} else {
-				mainlog.WithError(err).Infof(
+				mainlog.WithError(err).Errorf(
 					"Server [%s] log change failed to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,

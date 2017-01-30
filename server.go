@@ -76,12 +76,15 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		state:           ServerStateNew,
 		mainlog:         l,
 	}
-
+	var logOpenError error
 	if sc.LogFile == "" {
 		// none set, use the same log file as mainlog
-		server.log = log.NewLogger(mainlog.GetLogDest())
+		server.log, logOpenError = log.NewLogger(mainlog.GetLogDest())
 	} else {
-		server.log = log.NewLogger(sc.LogFile)
+		server.log, logOpenError = log.NewLogger(sc.LogFile)
+	}
+	if logOpenError != nil {
+		server.log.WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
 	}
 
 	// set to same level

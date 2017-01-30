@@ -40,7 +40,10 @@ var (
 
 func init() {
 	// log to stderr on startup
-	mainlog = log.NewLogger("stderr")
+	var logOpenError error
+	if mainlog, logOpenError = log.NewLogger("stderr"); logOpenError != nil {
+		mainlog.WithError(logOpenError).Error("Failed creating a logger to stderr")
+	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		"goguerrilla.conf", "Path to the configuration file")
 	// intentionally didn't specify default pidFile; value from config is used if flag is empty
@@ -146,8 +149,10 @@ func serve(cmd *cobra.Command, args []string) {
 		writePid(ac.PidFile)
 	})
 	// change the logger from stdrerr to one from config
-	mainlog = log.NewLogger(cmdConfig.LogFile)
-
+	var logOpenError error
+	if mainlog, logOpenError = log.NewLogger(cmdConfig.LogFile); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed changing to a custom logger [%s]", cmdConfig.LogFile)
+	}
 	sigHandler(app)
 
 }
