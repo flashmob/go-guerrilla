@@ -2,7 +2,6 @@ package log
 
 import (
 	"bufio"
-	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -193,13 +192,14 @@ func (hook *LoggerHookImpl) Fire(entry *log.Entry) error {
 	}
 	if line, err := entry.String(); err == nil {
 		r := strings.NewReader(line)
+		//fmt.Println("Buff weriter relcose!")
+		hook.fd.Close()
+		hook.openAppend(hook.fname)
 		if _, err = io.Copy(hook.w, r); err != nil {
 			return err
 		}
 		if wb, ok := hook.w.(*bufio.Writer); ok {
-			fmt.Println("Buff weriter relcose!")
-			hook.fd.Close()
-			hook.openAppend(hook.fname)
+
 			if err := wb.Flush(); err != nil {
 				return err
 			}
