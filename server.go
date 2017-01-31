@@ -59,6 +59,9 @@ type server struct {
 	state           int
 	mainlog         log.Logger
 	log             log.Logger
+	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
+	logStore     atomic.Value
+	mainlogStore atomic.Value
 }
 
 type allowedHosts struct {
@@ -116,6 +119,23 @@ func (s *server) configureSSL() error {
 	return nil
 }
 
+// configureLog checks to see if there is a new logger, so that the server.log can be safely changed
+// this function is not gorotine safe, although it'll read the new value safely
+func (s *server) configureLog() {
+	// when log changed
+	if l, ok := s.logStore.Load().(*log.HookedLogger); ok {
+		if l != s.log {
+			s.log = l
+		}
+	}
+	// when mainlog changed
+	if ml, ok := s.mainlogStore.Load().(*log.HookedLogger); ok {
+		if ml != s.mainlog {
+			s.mainlog = ml
+		}
+	}
+}
+
 // Set the timeout for the server and all clients
 func (server *server) setTimeout(seconds int) {
 	duration := time.Duration(int64(seconds))
@@ -164,6 +184,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 	for {
 		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
+		server.configureLog()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
@@ -176,7 +197,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 				server.closedListener <- true
 				return nil
 			}
-			mainlog.WithError(err).Info("Temporary error accepting client")
+			server.mainlog.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrow_err error) {
@@ -294,7 +315,7 @@ func (server *server) handleClient(client *client) {
 	if sc.TLSAlwaysOn {
 		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 		if !ok {
-			mainlog.Error("Failed to load *tls.Config")
+			server.mainlog.Error("Failed to load *tls.Config")
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
@@ -573,7 +594,7 @@ func (server *server) handleClient(client *client) {
 			if !client.TLS && sc.StartTLSOn {
 				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 				if !ok {
-					mainlog.Error("Failed to load *tls.Config")
+					server.mainlog.Error("Failed to load *tls.Config")
 				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()

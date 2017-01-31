@@ -6,6 +6,7 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"sync"
+	"sync/atomic"
 )
 
 var mainlog log.Logger
@@ -47,9 +48,10 @@ type guerrilla struct {
 	servers map[string]*server
 	backend backends.Backend
 	// guard controls access to g.servers
-	guard sync.Mutex
-	state int8
-	bus   *evbus.EventBus
+	guard           sync.Mutex
+	state           int8
+	bus             *evbus.EventBus
+	newMainlogStore atomic.Value
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
@@ -163,8 +165,12 @@ func (g *guerrilla) subscribeEvents() {
 	// the main log file changed
 	g.Subscribe("config_change:log_file", func(c *AppConfig) {
 		var err error
-		if mainlog, err = log.NewLogger(c.LogFile); err == nil {
-			mainlog.Infof("main logging changed to [%s]", c.LogFile)
+		var l log.Logger
+		if l, err = log.NewLogger(c.LogFile); err == nil {
+			g.mapServers(func(server *server) {
+				server.mainlogStore.Store(l) // it will change to hl on the next accepted client
+			})
+			mainlog.Infof("main log for new clients changed to to [%s]", c.LogFile)
 		} else {
 			mainlog.WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
 		}
@@ -257,8 +263,10 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe("server_change:new_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			var err error
-			if server.log, err = log.NewLogger(sc.LogFile); err == nil {
-				mainlog.Infof("Server [%s] changed, now logging to: [%s]",
+			var l log.Logger
+			if l, err = log.NewLogger(sc.LogFile); err == nil {
+				server.logStore.Store(l) // it will change to hl on the next accepted client
+				mainlog.Infof("Server [%s] changed, new clients will log to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,
 				)
