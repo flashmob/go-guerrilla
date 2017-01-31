@@ -22,8 +22,10 @@ import (
 
 	"bytes"
 	"compress/zlib"
-	"github.com/ziutek/mymysql/autorc"
-	_ "github.com/ziutek/mymysql/godrv"
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/go-sql-driver/mysql"
 	"io"
 	"strings"
 	"sync"
@@ -49,7 +51,7 @@ type GuerrillaDBAndRedisBackend struct {
 }
 
 // statement cache. It's an array, not slice
-type stmtCache [GuerrillaDBAndRedisBatchMax]*autorc.Stmt
+type stmtCache [GuerrillaDBAndRedisBatchMax]*sql.Stmt
 
 type guerrillaDBAndRedisConfig struct {
 	NumberOfWorkers    int    `json:"save_workers_size"`
@@ -146,26 +148,26 @@ func (c *compressedData) clear() {
 }
 
 // prepares the sql query with the number of rows that can be batched with it
-func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *autorc.Conn) *autorc.Stmt {
+func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	if rows == 0 {
 		panic("rows argument cannot be 0")
 	}
 	if g.cache[rows-1] != nil {
 		return g.cache[rows-1]
 	}
-	sql := "INSERT INTO " + g.config.MysqlTable + " "
-	sql += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
-	sql += " values "
+	sqlstr := "INSERT INTO " + g.config.MysqlTable + " "
+	sqlstr += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
+	sqlstr += " values "
 	values := "(NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
 	// add more rows
 	comma := ""
 	for i := 0; i < rows; i++ {
-		sql += comma + values
+		sqlstr += comma + values
 		if comma == "" {
 			comma = ","
 		}
 	}
-	stmt, sqlErr := db.Prepare(sql)
+	stmt, sqlErr := db.Prepare(sqlstr)
 	if sqlErr != nil {
 		mainlog.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
 	}
@@ -174,7 +176,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *autorc.Con
 	return stmt
 }
 
-func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *autorc.Conn, insertStmt *autorc.Stmt, vals *[]interface{}) {
+func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
 			//logln(1, fmt.Sprintf("Recovered in %v", r))
@@ -190,8 +192,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *autorc.Conn, insertStmt 
 	}()
 	// prepare the query used to insert when rows reaches batchMax
 	insertStmt = g.prepareInsertQuery(c, db)
-	insertStmt.Bind(*vals...)
-	_, _, err := insertStmt.Exec()
+	_, err := insertStmt.Exec(*vals...)
 	if err != nil {
 		mainlog.WithError(err).Error("There was a problem the insert")
 	}
@@ -201,7 +202,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *autorc.Conn, insertStmt 
 // Execute the batches query when:
 // - number of batched rows reaches a threshold, i.e. count n = threshold
 // - or, no new rows within a certain time, i.e. times out
-func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{}, db *autorc.Conn) {
+func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{}, db *sql.DB) {
 	// controls shutdown
 	defer g.batcherWg.Done()
 	g.batcherWg.Add(1)
@@ -273,14 +274,22 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 	workerId++
 
 	redisClient := &redisClient{}
-	db := autorc.New(
-		"tcp",
-		"",
-		g.config.MysqlHost,
-		g.config.MysqlUser,
-		g.config.MysqlPass,
-		g.config.MysqlDB)
-	db.Register("set names utf8")
+	var db *sql.DB
+	var err error
+	conf := mysql.Config{
+		User:         g.config.MysqlUser,
+		Passwd:       g.config.MysqlPass,
+		DBName:       g.config.MysqlDB,
+		Net:          "tcp",
+		Addr:         g.config.MysqlHost,
+		ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		Params:       map[string]string{"collation": "utf8_general_ci"},
+	}
+	if db, err = sql.Open("mysql", conf.FormatDSN()); err != nil {
+		mainlog.Fatalf("cannot open mysql", err)
+	}
+
 	// start the query SQL batching where we will send data via the feeder channel
 	feeder := make(chan []interface{}, 1)
 	go g.insertQueryBatcher(feeder, db)
@@ -290,9 +299,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			//recover form closed channel
 			fmt.Println("Recovered in f", r)
 		}
-		if db.Raw != nil {
-			db.Raw.Close()
-		}
+		db.Close()
 		if redisClient.conn != nil {
 			mainlog.Infof("closed redis")
 			redisClient.conn.Close()
@@ -383,18 +390,21 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 
 // test database connection settings
 func (g *GuerrillaDBAndRedisBackend) testSettings() (err error) {
-	db := autorc.New(
-		"tcp",
-		"",
-		g.config.MysqlHost,
-		g.config.MysqlUser,
-		g.config.MysqlPass,
-		g.config.MysqlDB)
 
-	if mysqlErr := db.Raw.Connect(); mysqlErr != nil {
-		err = fmt.Errorf("MySql cannot connect, check your settings: %s", mysqlErr)
+	var db *sql.DB
+	conf := mysql.Config{
+		User:         g.config.MysqlUser,
+		Passwd:       g.config.MysqlPass,
+		DBName:       g.config.MysqlDB,
+		Net:          "tcp",
+		Addr:         g.config.MysqlHost,
+		ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+	}
+	if db, err = sql.Open("mysql", conf.FormatDSN()); err != nil {
+		err = fmt.Errorf("MySql cannot connect, check your settings: %s", err)
 	} else {
-		db.Raw.Close()
+		db.Close()
 	}
 
 	redisClient := &redisClient{}
