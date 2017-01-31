@@ -762,10 +762,10 @@ func TestTLSConfigEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	sigHup()
 
-	time.Sleep(testPauseDuration) // pause for config to reload
+	time.Sleep(testPauseDuration * 2) // pause for config to reload
 	testTlsHandshake()
 
-	time.Sleep(testPauseDuration)
+	//time.Sleep(testPauseDuration)
 	// send kill signal and wait for exit
 	sigKill()
 	serveWG.Wait()
