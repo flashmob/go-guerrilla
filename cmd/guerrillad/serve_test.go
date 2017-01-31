@@ -707,6 +707,12 @@ func TestAllowedHostsEvent(t *testing.T) {
 
 func TestTLSConfigEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	// pause for generated cert to output on slow machines
+	time.Sleep(testPauseDuration)
+	// did cert output?
+	if _, err := os.Stat("../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+		t.Error("Did not create cert ", err)
+	}
 	mainlog, _ = log.NewLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
@@ -757,10 +763,21 @@ func TestTLSConfigEvent(t *testing.T) {
 	}
 	testTlsHandshake()
 
+	if err := os.Remove("../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+		t.Error("could not remove cert", err)
+	}
+	if err := os.Remove("../../tests/mail2.guerrillamail.com.key.pem"); err != nil {
+		t.Error("could not remove key", err)
+	}
+
 	// generate a new cert
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// pause for generated cert to output
 	time.Sleep(testPauseDuration * 2)
+	// did cert output?
+	if _, err := os.Stat("../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+		t.Error("Did not create cert ", err)
+	}
 
 	sigHup()
 
