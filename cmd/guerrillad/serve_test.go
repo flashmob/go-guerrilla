@@ -760,7 +760,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	// generate a new cert
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// pause for generated cert to output
-	time.Sleep(testPauseDuration)
+	time.Sleep(testPauseDuration * 2)
 
 	sigHup()
 
