@@ -835,7 +835,6 @@ func TestBadTLS(t *testing.T) {
 								ServerName:         "127.0.0.1",
 							})
 							if err := tlsConn.Handshake(); err != nil {
-								fmt.Println("failed handshake")
 								mainlog.Info("TLS Handshake failed")
 							} else {
 								t.Error("Handshake succeeded, expected it to fail", conf.AppConfig.Servers[0].ListenInterface)
