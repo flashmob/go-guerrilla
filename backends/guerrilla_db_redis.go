@@ -25,11 +25,12 @@ import (
 	"github.com/ziutek/mymysql/autorc"
 	_ "github.com/ziutek/mymysql/godrv"
 	"io"
+	"strings"
 	"sync"
 )
 
 // how many rows to batch at a time
-const GuerrillaDBAndRedisBatchMax = 500
+const GuerrillaDBAndRedisBatchMax = 100
 
 // tick on every...
 const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
@@ -173,6 +174,29 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *autorc.Con
 	return stmt
 }
 
+func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *autorc.Conn, insertStmt *autorc.Stmt, vals *[]interface{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			//logln(1, fmt.Sprintf("Recovered in %v", r))
+			sum := 0
+			for _, v := range *vals {
+				if str, ok := v.(string); ok {
+					sum = sum + len(str)
+				}
+
+			}
+			mainlog.Errorf("panic while inserting query [%s] size:%d", r, sum)
+		}
+	}()
+	// prepare the query used to insert when rows reaches batchMax
+	insertStmt = g.prepareInsertQuery(c, db)
+	insertStmt.Bind(*vals...)
+	_, _, err := insertStmt.Exec()
+	if err != nil {
+		mainlog.WithError(err).Error("There was a problem the insert")
+	}
+}
+
 // Batches the rows from the feeder chan in to a single INSERT statement.
 // Execute the batches query when:
 // - number of batched rows reaches a threshold, i.e. count n = threshold
@@ -193,12 +217,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	// inserts executes a batched insert query, clears the vals and resets the count
 	insert := func(c int) {
 		if c > 0 {
-			insertStmt = g.prepareInsertQuery(c, db)
-			insertStmt.Bind(vals...)
-			_, _, err := insertStmt.Exec()
-			if err != nil {
-				mainlog.WithError(err).Error("There was a problem the insert")
-			}
+			g.doQuery(c, db, insertStmt, &vals)
 		}
 		vals = nil
 		count = 0
@@ -209,7 +228,6 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	for {
 		select {
 		case row := <-feeder:
-			mainlog.Debug("row form chan is", row, "cols:", len(row))
 			if row == nil {
 				mainlog.Debug("Query batchaer exiting")
 				// Insert any remaining rows
@@ -218,6 +236,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 			}
 			vals = append(vals, row...)
 			count++
+			mainlog.Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
 			if count == GuerrillaDBAndRedisBatchMax {
 				insert(GuerrillaDBAndRedisBatchMax)
 			}
@@ -236,10 +255,22 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	}
 }
 
+func trimToLimit(str string, limit int) string {
+	ret := strings.TrimSpace(str)
+	if len(str) > limit {
+		ret = str[:limit]
+	}
+	return ret
+}
+
+var workerId = 0
+
 func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
 
 	var redisErr error
+
+	workerId++
 
 	redisClient := &redisClient{}
 	db := autorc.New(
@@ -281,8 +312,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			mainlog.Debug("No more saveMailChan payload")
 			return
 		}
-		to = payload.recipient.User + "@" + g.config.PrimaryHost
-
+		mainlog.Debug("Got mail from chan", payload.mail.RemoteAddress)
+		to = trimToLimit(strings.TrimSpace(payload.recipient.User)+"@"+g.config.PrimaryHost, 255)
+		payload.mail.Helo = trimToLimit(payload.mail.Helo, 255)
+		payload.recipient.Host = trimToLimit(payload.recipient.Host, 255)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
 		payload.mail.ParseHeaders()
 		hash := MD5Hex(
@@ -315,20 +348,20 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 				data.clear()   // blank
 			}
 		} else {
-			mainlog.WithError(redisErr).Warn("Error while SETEX on redis")
+			mainlog.WithError(redisErr).Warn("Error while connecting redis")
 		}
 
 		vals = []interface{}{} // clear the vals
 		vals = append(vals,
-			to,
-			payload.mail.MailFrom.String(),
-			payload.mail.Subject,
+			trimToLimit(to, 255),
+			trimToLimit(payload.mail.MailFrom.String(), 255),
+			trimToLimit(payload.mail.Subject, 255),
 			body,
 			data.String(),
 			hash,
-			to,
+			trimToLimit(to, 255),
 			payload.mail.RemoteAddress,
-			payload.mail.MailFrom.String(),
+			trimToLimit(payload.mail.MailFrom.String(), 255),
 			payload.mail.TLS)
 		feeder <- vals
 		payload.savedNotify <- &saveStatus{nil, hash}
