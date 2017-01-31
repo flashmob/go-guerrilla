@@ -208,7 +208,7 @@ var configJsonD = `
 }
 `
 
-const testPauseDuration = time.Millisecond * 500
+const testPauseDuration = time.Millisecond * 600
 
 // reload config
 func sigHup() {
