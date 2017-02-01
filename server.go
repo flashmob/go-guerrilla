@@ -270,18 +270,10 @@ func (server *server) readCommand(client *client, maxSize int64) (string, error)
 	return input, err
 }
 
-// Writes a response to the client. Flushes the client.bufout buffer to the connection
-func (server *server) writeResponse(client *client) error {
+// flushResponse a response to the client. Flushes the client.bufout buffer to the connection
+func (server *server) flushResponse(client *client) error {
 	client.setTimeout(server.timeout.Load().(time.Duration))
-	//_, err := io.Copy(client.bufout,  &client.response)
-	//if err != nil {
-	//	return err
-	//}
 	return client.bufout.Flush()
-	//if err != nil {
-	//	return err
-	//}
-	//return nil
 }
 
 func (server *server) isShuttingDown() bool {
@@ -332,7 +324,7 @@ func (server *server) handleClient(client *client) {
 	for client.isAlive() {
 		switch client.state {
 		case ClientGreeting:
-			client.setResponse(greeting)
+			client.sendResponse(greeting)
 			client.state = ClientCmd
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
@@ -345,7 +337,7 @@ func (server *server) handleClient(client *client) {
 				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				client.setResponse(response.Canned.FailLineTooLong)
+				client.sendResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
@@ -368,12 +360,12 @@ func (server *server) handleClient(client *client) {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.setResponse(helo)
+				client.sendResponse(helo)
 
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.setResponse(ehlo,
+				client.sendResponse(ehlo,
 					messageSize,
 					pipelining,
 					advertiseTLS,
@@ -381,11 +373,11 @@ func (server *server) handleClient(client *client) {
 					help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				client.setResponse("214 OK\r\n", messageSize, pipelining, advertiseTLS, help)
+				client.sendResponse("214 OK\r\n", messageSize, pipelining, advertiseTLS, help)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					client.setResponse(response.Canned.FailNestedMailCmd)
+					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
 				mail := input[10:]
@@ -396,66 +388,66 @@ func (server *server) handleClient(client *client) {
 				}
 
 				if err != nil {
-					client.setResponse(err)
+					client.sendResponse(err)
 				} else {
 					client.MailFrom = from
-					client.setResponse(response.Canned.SuccessMailCmd)
+					client.sendResponse(response.Canned.SuccessMailCmd)
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					client.setResponse(response.Canned.ErrorTooManyRecipients)
+					client.sendResponse(response.Canned.ErrorTooManyRecipients)
 					break
 				}
 				to, err := extractEmail(input[8:])
 				if err != nil {
-					client.setResponse(err.Error())
+					client.sendResponse(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						client.setResponse(response.Canned.ErrorRelayDenied, to.Host)
+						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						client.setResponse(response.Canned.SuccessRcptCmd)
+						client.sendResponse(response.Canned.SuccessRcptCmd)
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				client.setResponse(response.Canned.SuccessResetCmd)
+				client.sendResponse(response.Canned.SuccessResetCmd)
 
 			case strings.Index(cmd, "VRFY") == 0:
-				client.setResponse(response.Canned.SuccessVerifyCmd)
+				client.sendResponse(response.Canned.SuccessVerifyCmd)
 
 			case strings.Index(cmd, "NOOP") == 0:
-				client.setResponse(response.Canned.SuccessNoopCmd)
+				client.sendResponse(response.Canned.SuccessNoopCmd)
 
 			case strings.Index(cmd, "QUIT") == 0:
-				client.setResponse(response.Canned.SuccessQuitCmd)
+				client.sendResponse(response.Canned.SuccessQuitCmd)
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					client.setResponse(response.Canned.FailNoSenderDataCmd)
+					client.sendResponse(response.Canned.FailNoSenderDataCmd)
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					client.setResponse(response.Canned.FailNoRecipientsDataCmd)
+					client.sendResponse(response.Canned.FailNoRecipientsDataCmd)
 					break
 				}
-				client.setResponse(response.Canned.SuccessDataCmd)
+				client.sendResponse(response.Canned.SuccessDataCmd)
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
 
-				client.setResponse(response.Canned.SuccessStartTLSCmd)
+				client.sendResponse(response.Canned.SuccessStartTLSCmd)
 				client.state = ClientStartTLS
 			default:
 				client.errors++
 				if client.errors >= MaxUnrecognizedCommands {
-					client.setResponse(response.Canned.FailMaxUnrecognizedCmd)
+					client.sendResponse(response.Canned.FailMaxUnrecognizedCmd)
 					client.kill()
 				} else {
-					client.setResponse(response.Canned.FailUnrecognizedCmd)
+					client.sendResponse(response.Canned.FailUnrecognizedCmd)
 				}
 			}
 
@@ -471,13 +463,13 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					client.setResponse(response.Canned.FailReadLimitExceededDataCmd, LineLimitExceeded.Error())
+					client.sendResponse(response.Canned.FailReadLimitExceededDataCmd, LineLimitExceeded.Error())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					client.setResponse(response.Canned.FailMessageSizeExceeded, MessageSizeExceeded.Error())
+					client.sendResponse(response.Canned.FailMessageSizeExceeded, MessageSizeExceeded.Error())
 					client.kill()
 				} else {
-					client.setResponse(response.Canned.FailReadErrorDataCmd, err.Error())
+					client.sendResponse(response.Canned.FailReadErrorDataCmd, err.Error())
 					client.kill()
 				}
 				server.log.WithError(err).Warn("Error reading data")
@@ -488,7 +480,7 @@ func (server *server) handleClient(client *client) {
 			if res.Code() < 300 {
 				client.messagesSent++
 			}
-			client.setResponse(res.String())
+			client.sendResponse(res.String())
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
@@ -512,7 +504,7 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			client.setResponse(response.Canned.ErrorShutdown)
+			client.sendResponse(response.Canned.ErrorShutdown)
 			client.kill()
 		}
 
@@ -520,7 +512,7 @@ func (server *server) handleClient(client *client) {
 			if server.log.IsDebug() {
 				server.log.Debugf("Writing response to client: \n%s", client.response.String())
 			}
-			err := server.writeResponse(client)
+			err := server.flushResponse(client)
 			if err != nil {
 				server.log.WithError(err).Debug("Error writing response")
 				return

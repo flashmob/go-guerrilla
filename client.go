@@ -69,7 +69,7 @@ func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 }
 
 // setResponse adds a response to be written on the next turn
-func (c *client) setResponse(r ...interface{}) {
+func (c *client) sendResponse(r ...interface{}) {
 	c.bufout.Reset(c.conn)
 	if c.log.IsDebug() {
 		// us additional buffer so that we can log the response in debug mode only
@@ -78,17 +78,23 @@ func (c *client) setResponse(r ...interface{}) {
 	for _, item := range r {
 		switch v := item.(type) {
 		case string:
-			c.bufout.WriteString(v)
+			if _, err := c.bufout.WriteString(v); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
 			if c.log.IsDebug() {
 				c.response.WriteString(v)
 			}
 		case error:
-			c.bufout.WriteString(v.Error())
+			if _, err := c.bufout.WriteString(v.Error()); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
 			if c.log.IsDebug() {
 				c.response.WriteString(v.Error())
 			}
 		case fmt.Stringer:
-			c.bufout.WriteString(v.String())
+			if _, err := c.bufout.WriteString(v.String()); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
 			if c.log.IsDebug() {
 				c.response.WriteString(v.String())
 			}
