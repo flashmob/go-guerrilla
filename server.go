@@ -213,7 +213,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(server.clientPool.Borrow(conn, clientID))
+		}(server.clientPool.Borrow(conn, clientID, server.log))
 
 	}
 }
@@ -270,19 +270,18 @@ func (server *server) readCommand(client *client, maxSize int64) (string, error)
 	return input, err
 }
 
-// Writes a response to the client.
+// Writes a response to the client. Flushes the client.bufout buffer to the connection
 func (server *server) writeResponse(client *client) error {
 	client.setTimeout(server.timeout.Load().(time.Duration))
-	size, err := client.bufout.WriteString(client.response)
-	if err != nil {
-		return err
-	}
-	err = client.bufout.Flush()
-	if err != nil {
-		return err
-	}
-	client.response = client.response[size:]
-	return nil
+	//_, err := io.Copy(client.bufout,  &client.response)
+	//if err != nil {
+	//	return err
+	//}
+	return client.bufout.Flush()
+	//if err != nil {
+	//	return err
+	//}
+	//return nil
 }
 
 func (server *server) isShuttingDown() bool {
@@ -517,8 +516,10 @@ func (server *server) handleClient(client *client) {
 			client.kill()
 		}
 
-		if len(client.response) > 0 {
-			server.log.Debugf("Writing response to client: \n%s", client.response)
+		if client.bufout.Buffered() > 0 {
+			if server.log.IsDebug() {
+				server.log.Debugf("Writing response to client: \n%s", client.response.String())
+			}
 			err := server.writeResponse(client)
 			if err != nil {
 				server.log.WithError(err).Debug("Error writing response")

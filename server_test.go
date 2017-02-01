@@ -60,7 +60,7 @@ func TestHandleClient(t *testing.T) {
 	sc := getMockServerConfig()
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1)
+	client := NewClient(conn.Server, 1, mainlog)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

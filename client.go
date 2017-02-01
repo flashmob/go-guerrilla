@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"net"
 	"net/textproto"
 	"sync"
@@ -38,7 +39,7 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response   string
+	response   bytes.Buffer
 	conn       net.Conn
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
@@ -46,10 +47,11 @@ type client struct {
 	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
+	log       log.Logger
 }
 
 // Allocate a new client
-func NewClient(conn net.Conn, clientID uint64) *client {
+func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
 		conn: conn,
 		Envelope: &envelope.Envelope{
@@ -59,6 +61,7 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
+		log:         logger,
 	}
 	// used for reading the DATA state
 	c.smtpReader = textproto.NewReader(c.bufin.Reader)
@@ -67,21 +70,34 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 
 // setResponse adds a response to be written on the next turn
 func (c *client) setResponse(r ...interface{}) {
-	c.response = ""
-	var b bytes.Buffer
+	c.bufout.Reset(c.conn)
+	if c.log.IsDebug() {
+		// us additional buffer so that we can log the response in debug mode only
+		c.response.Reset()
+	}
 	for _, item := range r {
 		switch v := item.(type) {
 		case string:
-			b.WriteString(v)
+			c.bufout.WriteString(v)
+			if c.log.IsDebug() {
+				c.response.WriteString(v)
+			}
 		case error:
-			b.WriteString(v.Error())
+			c.bufout.WriteString(v.Error())
+			if c.log.IsDebug() {
+				c.response.WriteString(v.Error())
+			}
 		case fmt.Stringer:
-			b.WriteString(v.String())
+			c.bufout.WriteString(v.String())
+			if c.log.IsDebug() {
+				c.response.WriteString(v.String())
+			}
 		}
 	}
-	b.WriteString("\r\n")
-
-	c.response = b.String()
+	c.bufout.WriteString("\r\n")
+	if c.log.IsDebug() {
+		c.response.WriteString("\r\n")
+	}
 }
 
 // resetTransaction resets the SMTP transaction, ready for the next email (doesn't disconnect)
@@ -150,7 +166,7 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.ID = clientID
 	c.TLS = false
 	c.errors = 0
-	c.response = ""
+	//c.response.Reset()
 	c.Helo = ""
 	c.Header = nil
 	c.RemoteAddress = conn.RemoteAddr().String()

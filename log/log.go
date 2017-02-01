@@ -18,6 +18,7 @@ type Logger interface {
 	GetLogDest() string
 	SetLevel(level string)
 	GetLevel() string
+	IsDebug() bool
 }
 
 // Implements the Logger interface
@@ -81,6 +82,10 @@ func NewLogger(dest string) (Logger, error) {
 
 	return l, nil
 
+}
+
+func (l *HookedLogger) IsDebug() bool {
+	return l.GetLevel() == "debug"
 }
 
 // SetLevel sets a log level, one of the LogLevels
