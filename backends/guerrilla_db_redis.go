@@ -349,8 +349,6 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		if redisErr == nil {
 			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, data)
 			if doErr == nil {
-				//payload.mail.Data = ""
-				//payload.mail.Data.Reset()
 				body = "redis" // the backend system will know to look in redis for the message data
 				data.clear()   // blank
 			}

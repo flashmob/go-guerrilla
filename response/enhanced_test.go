@@ -18,13 +18,13 @@ func TestClass(t *testing.T) {
 
 func TestGetBasicStatusCode(t *testing.T) {
 	// Known status code
-	a := getBasicStatusCode(EnhancedStatus{2, OtherOrUndefinedProtocolStatus})
+	a := getBasicStatusCode(EnhancedStatusCode{2, OtherOrUndefinedProtocolStatus})
 	if a != 250 {
 		t.Errorf("getBasicStatusCode. Int \"%d\" not expected.", a)
 	}
 
 	// Unknown status code
-	b := getBasicStatusCode(EnhancedStatus{2, OtherStatus})
+	b := getBasicStatusCode(EnhancedStatusCode{2, OtherStatus})
 	if b != 200 {
 		t.Errorf("getBasicStatusCode. Int \"%d\" not expected.", b)
 	}
@@ -56,7 +56,7 @@ func TestCustomString(t *testing.T) {
 
 func TestBuildEnhancedResponseFromDefaultStatus(t *testing.T) {
 	//a := buildEnhancedResponseFromDefaultStatus(ClassPermanentFailure, InvalidCommand)
-	a := EnhancedStatus{ClassPermanentFailure, InvalidCommand}.String()
+	a := EnhancedStatusCode{ClassPermanentFailure, InvalidCommand}.String()
 	if a != "5.5.1" {
 		t.Errorf("buildEnhancedResponseFromDefaultStatus failed. String \"%s\" not expected.", a)
 	}

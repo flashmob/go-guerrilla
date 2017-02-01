@@ -82,9 +82,10 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
-func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla, logger log.Logger) {
+func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
 
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
+		logger, _ := log.NewLogger(cmdConfig.LogFile)
 		var err error
 		if err = backend.Shutdown(); err != nil {
 			logger.WithError(err).Warn("Backend failed to shutdown")
@@ -140,8 +141,8 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
-	subscribeBackendEvent("config_change:backend_config", backend, app, mainlog)
-	subscribeBackendEvent("config_change:backend_name", backend, app, mainlog)
+	subscribeBackendEvent("config_change:backend_config", backend, app)
+	subscribeBackendEvent("config_change:backend_name", backend, app)
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config

@@ -99,7 +99,7 @@ type BackendGateway struct {
 	b  Backend
 	// controls access to state
 	stateGuard sync.Mutex
-	State      int
+	State      backendState
 	config     BackendConfig
 }
 
@@ -109,6 +109,12 @@ const (
 	BackendStateShuttered
 	BackendStateError
 )
+
+type backendState int
+
+func (s backendState) String() string {
+	return strconv.Itoa(int(s))
+}
 
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
@@ -130,13 +136,7 @@ func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend
 // Process distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	if gw.State != BackendStateRunning {
-		resp := &response.Response{
-			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-			BasicCode:    554,
-			Class:        response.ClassPermanentFailure,
-			Comment:      "Transaction failed - backend not running " + strconv.Itoa(gw.State),
-		}
-		return NewBackendResult(resp.String())
+		return NewBackendResult(response.Canned.FailBackendNotRunning + gw.State.String())
 	}
 
 	to := e.RcptTo
@@ -151,31 +151,13 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	select {
 	case status := <-savedNotify:
 		if status.err != nil {
-			resp := &response.Response{
-				EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-				BasicCode:    554,
-				Class:        response.ClassPermanentFailure,
-				Comment:      "Error: " + status.err.Error(),
-			}
-			return NewBackendResult(resp.String())
+			return NewBackendResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
-		resp := &response.Response{
-			EnhancedCode: response.OtherStatus,
-			BasicCode:    250,
-			Class:        response.ClassSuccess,
-			Comment:      fmt.Sprintf("OK : queued as %s", status.hash),
-		}
-		return NewBackendResult(resp.String())
+		return NewBackendResult(response.Canned.SuccessMessageQueued + status.hash)
 
 	case <-time.After(time.Second * 30):
 		mainlog.Infof("Backend has timed out")
-		resp := &response.Response{
-			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-			BasicCode:    554,
-			Class:        response.ClassPermanentFailure,
-			Comment:      "Error: transaction timeout",
-		}
-		return NewBackendResult(resp.String())
+		return NewBackendResult(response.Canned.FailBackendTimeout)
 	}
 }
 func (gw *BackendGateway) Shutdown() error {

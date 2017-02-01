@@ -22,8 +22,10 @@ const (
 	ClassPermanentFailure = 5
 )
 
+// class is a type for ClassSuccess, ClassTransientFailure and ClassPermanentFailure constants
 type class int
 
+// String implements stringer for the class type
 func (c class) String() string {
 	return fmt.Sprintf("%c00", c)
 }
@@ -32,79 +34,79 @@ func (c class) String() string {
 // Mapping according to https://www.iana.org/assignments/smtp-enhanced-status-codes/smtp-enhanced-status-codes.xml
 // This might not be entirely useful
 var codeMap = struct {
-	m map[EnhancedStatus]int
-}{m: map[EnhancedStatus]int{
+	m map[EnhancedStatusCode]int
+}{m: map[EnhancedStatusCode]int{
 
-	EnhancedStatus{ClassSuccess, ".1.0"}: 250,
-	EnhancedStatus{ClassSuccess, ".1.5"}: 250,
-	EnhancedStatus{ClassSuccess, ".3.0"}: 250,
-	EnhancedStatus{ClassSuccess, ".5.0"}: 250,
-	EnhancedStatus{ClassSuccess, ".6.4"}: 250,
-	EnhancedStatus{ClassSuccess, ".6.8"}: 252,
-	EnhancedStatus{ClassSuccess, ".7.0"}: 220,
+	EnhancedStatusCode{ClassSuccess, OtherAddressStatus}:               250,
+	EnhancedStatusCode{ClassSuccess, DestinationMailboxAddressValid}:   250,
+	EnhancedStatusCode{ClassSuccess, OtherOrUndefinedMailSystemStatus}: 250,
+	EnhancedStatusCode{ClassSuccess, OtherOrUndefinedProtocolStatus}:   250,
+	EnhancedStatusCode{ClassSuccess, ConversionWithLossPerformed}:      250,
+	EnhancedStatusCode{ClassSuccess, ".6.8"}:                           252,
+	EnhancedStatusCode{ClassSuccess, ".7.0"}:                           220,
 
-	EnhancedStatus{ClassTransientFailure, ".1.1"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".1.8"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".2.4"}:  450,
-	EnhancedStatus{ClassTransientFailure, ".3.0"}:  421,
-	EnhancedStatus{ClassTransientFailure, ".3.1"}:  452,
-	EnhancedStatus{ClassTransientFailure, ".3.2"}:  453,
-	EnhancedStatus{ClassTransientFailure, ".4.1"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".4.2"}:  421,
-	EnhancedStatus{ClassTransientFailure, ".4.3"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".4.5"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".5.0"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".5.1"}:  430,
-	EnhancedStatus{ClassTransientFailure, ".5.3"}:  452,
-	EnhancedStatus{ClassTransientFailure, ".5.4"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".7.0"}:  450,
-	EnhancedStatus{ClassTransientFailure, ".7.1"}:  451,
-	EnhancedStatus{ClassTransientFailure, ".7.12"}: 422,
-	EnhancedStatus{ClassTransientFailure, ".7.15"}: 450,
-	EnhancedStatus{ClassTransientFailure, ".7.24"}: 451,
+	EnhancedStatusCode{ClassTransientFailure, BadDestinationMailboxAddress}:      451,
+	EnhancedStatusCode{ClassTransientFailure, BadSendersSystemAddress}:           451,
+	EnhancedStatusCode{ClassTransientFailure, MailingListExpansionProblem}:       450,
+	EnhancedStatusCode{ClassTransientFailure, OtherOrUndefinedMailSystemStatus}:  421,
+	EnhancedStatusCode{ClassTransientFailure, MailSystemFull}:                    452,
+	EnhancedStatusCode{ClassTransientFailure, SystemNotAcceptingNetworkMessages}: 453,
+	EnhancedStatusCode{ClassTransientFailure, NoAnswerFromHost}:                  451,
+	EnhancedStatusCode{ClassTransientFailure, BadConnection}:                     421,
+	EnhancedStatusCode{ClassTransientFailure, RoutingServerFailure}:              451,
+	EnhancedStatusCode{ClassTransientFailure, NetworkCongestion}:                 451,
+	EnhancedStatusCode{ClassTransientFailure, OtherOrUndefinedProtocolStatus}:    451,
+	EnhancedStatusCode{ClassTransientFailure, InvalidCommand}:                    430,
+	EnhancedStatusCode{ClassTransientFailure, TooManyRecipients}:                 452,
+	EnhancedStatusCode{ClassTransientFailure, InvalidCommandArguments}:           451,
+	EnhancedStatusCode{ClassTransientFailure, ".7.0"}:                            450,
+	EnhancedStatusCode{ClassTransientFailure, ".7.1"}:                            451,
+	EnhancedStatusCode{ClassTransientFailure, ".7.12"}:                           422,
+	EnhancedStatusCode{ClassTransientFailure, ".7.15"}:                           450,
+	EnhancedStatusCode{ClassTransientFailure, ".7.24"}:                           451,
 
-	EnhancedStatus{ClassPermanentFailure, ".1.1"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".1.3"}:  501,
-	EnhancedStatus{ClassPermanentFailure, ".1.8"}:  501,
-	EnhancedStatus{ClassPermanentFailure, ".1.10"}: 556,
-	EnhancedStatus{ClassPermanentFailure, ".2.2"}:  552,
-	EnhancedStatus{ClassPermanentFailure, ".2.3"}:  552,
-	EnhancedStatus{ClassPermanentFailure, ".3.0"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".3.4"}:  552,
-	EnhancedStatus{ClassPermanentFailure, ".4.3"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".5.0"}:  501,
-	EnhancedStatus{ClassPermanentFailure, ".5.1"}:  500,
-	EnhancedStatus{ClassPermanentFailure, ".5.2"}:  500,
-	EnhancedStatus{ClassPermanentFailure, ".5.4"}:  501,
-	EnhancedStatus{ClassPermanentFailure, ".5.6"}:  500,
-	EnhancedStatus{ClassPermanentFailure, ".6.3"}:  554,
-	EnhancedStatus{ClassPermanentFailure, ".6.6"}:  554,
-	EnhancedStatus{ClassPermanentFailure, ".6.7"}:  553,
-	EnhancedStatus{ClassPermanentFailure, ".6.8"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".6.9"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".7.0"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".7.1"}:  551,
-	EnhancedStatus{ClassPermanentFailure, ".7.2"}:  550,
-	EnhancedStatus{ClassPermanentFailure, ".7.4"}:  504,
-	EnhancedStatus{ClassPermanentFailure, ".7.8"}:  554,
-	EnhancedStatus{ClassPermanentFailure, ".7.9"}:  534,
-	EnhancedStatus{ClassPermanentFailure, ".7.10"}: 523,
-	EnhancedStatus{ClassPermanentFailure, ".7.11"}: 524,
-	EnhancedStatus{ClassPermanentFailure, ".7.13"}: 525,
-	EnhancedStatus{ClassPermanentFailure, ".7.14"}: 535,
-	EnhancedStatus{ClassPermanentFailure, ".7.15"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.16"}: 552,
-	EnhancedStatus{ClassPermanentFailure, ".7.17"}: 500,
-	EnhancedStatus{ClassPermanentFailure, ".7.18"}: 500,
-	EnhancedStatus{ClassPermanentFailure, ".7.19"}: 500,
-	EnhancedStatus{ClassPermanentFailure, ".7.20"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.21"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.22"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.23"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.24"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.25"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.26"}: 550,
-	EnhancedStatus{ClassPermanentFailure, ".7.27"}: 550,
+	EnhancedStatusCode{ClassPermanentFailure, BadDestinationMailboxAddress}:            550,
+	EnhancedStatusCode{ClassPermanentFailure, BadDestinationMailboxAddressSyntax}:      501,
+	EnhancedStatusCode{ClassPermanentFailure, BadSendersSystemAddress}:                 501,
+	EnhancedStatusCode{ClassPermanentFailure, ".1.10"}:                                 556,
+	EnhancedStatusCode{ClassPermanentFailure, MailboxFull}:                             552,
+	EnhancedStatusCode{ClassPermanentFailure, MessageLengthExceedsAdministrativeLimit}: 552,
+	EnhancedStatusCode{ClassPermanentFailure, OtherOrUndefinedMailSystemStatus}:        550,
+	EnhancedStatusCode{ClassPermanentFailure, MessageTooBigForSystem}:                  552,
+	EnhancedStatusCode{ClassPermanentFailure, RoutingServerFailure}:                    550,
+	EnhancedStatusCode{ClassPermanentFailure, OtherOrUndefinedProtocolStatus}:          501,
+	EnhancedStatusCode{ClassPermanentFailure, InvalidCommand}:                          500,
+	EnhancedStatusCode{ClassPermanentFailure, SyntaxError}:                             500,
+	EnhancedStatusCode{ClassPermanentFailure, InvalidCommandArguments}:                 501,
+	EnhancedStatusCode{ClassPermanentFailure, ".5.6"}:                                  500,
+	EnhancedStatusCode{ClassPermanentFailure, ConversionRequiredButNotSupported}:       554,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.6"}:                                  554,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.7"}:                                  553,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.8"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.9"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.0"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.1"}:                                  551,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.2"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.4"}:                                  504,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.8"}:                                  554,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.9"}:                                  534,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.10"}:                                 523,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.11"}:                                 524,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.13"}:                                 525,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.14"}:                                 535,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.15"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.16"}:                                 552,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.17"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.18"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.19"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.20"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.21"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.22"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.23"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.24"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.25"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.26"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.27"}:                                 550,
 }}
 
 var (
@@ -150,8 +152,12 @@ type Responses struct {
 	SuccessMessageQueued string
 }
 
+// Called automatically during package load to build up the Responses struct
 func init() {
+
+	// There's even a Wikipedia page for canned responses: https://en.wikipedia.org/wiki/Canned_response
 	Canned = Responses{}
+
 	Canned.FailLineTooLong = (&Response{
 		EnhancedCode: InvalidCommand,
 		BasicCode:    554,
@@ -377,37 +383,39 @@ const (
 	ConversionFailed                        = ".6.5"
 )
 
-// TODO: More defaults needed....
 var defaultTexts = struct {
-	m map[string]string
-}{m: map[string]string{
-	"2.0.0": "OK",
-	"2.1.0": "OK",
-	"2.1.5": "Recipient valid",
-	"2.5.0": "OK",
-	"4.5.3": "Too many recipients",
-	"4.5.4": "Relay access denied",
-	"5.5.1": "Invalid command",
+	m map[EnhancedStatusCode]string
+}{m: map[EnhancedStatusCode]string{
+	EnhancedStatusCode{ClassSuccess, ".0.0"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".1.0"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".1.5"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".5.0"}:          "OK",
+	EnhancedStatusCode{ClassTransientFailure, ".5.3"}: "Too many recipients",
+	EnhancedStatusCode{ClassTransientFailure, ".5.4"}: "Relay access denied",
+	EnhancedStatusCode{ClassPermanentFailure, ".5.1"}: "Invalid command",
 }}
 
 // Response type for Stringer interface
 type Response struct {
-	EnhancedCode string
+	EnhancedCode subjectDetail
 	BasicCode    int
 	Class        class
 	// Comment is optional
 	Comment string
 }
 
+// it looks like this ".5.4"
+type subjectDetail string
+
 // EnhancedStatus are the ones that look like 2.1.0
-type EnhancedStatus struct {
-	Class  class
-	Status string
+type EnhancedStatusCode struct {
+	Class             class
+	SubjectDetailCode subjectDetail
 }
 
 // String returns a string representation of EnhancedStatus
-func (e EnhancedStatus) String() string {
-	return fmt.Sprintf("%d%s", e.Class, e.Status)
+func (e EnhancedStatusCode) String() string {
+	return fmt.Sprintf("%d%s", e.Class, e.SubjectDetailCode)
 }
 
 // String returns a custom Response as a string
@@ -416,8 +424,8 @@ func (r *Response) String() string {
 	basicCode := r.BasicCode
 	comment := r.Comment
 	if len(comment) == 0 && r.BasicCode == 0 {
-		comment = defaultTexts.m[r.EnhancedCode]
-		if len(comment) == 0 {
+		var ok bool
+		if comment, ok = defaultTexts.m[EnhancedStatusCode{r.Class, r.EnhancedCode}]; !ok {
 			switch r.Class {
 			case 2:
 				comment = "OK"
@@ -428,7 +436,7 @@ func (r *Response) String() string {
 			}
 		}
 	}
-	e := EnhancedStatus{r.Class, r.EnhancedCode}
+	e := EnhancedStatusCode{r.Class, r.EnhancedCode}
 	if r.BasicCode == 0 {
 		basicCode = getBasicStatusCode(e)
 	}
@@ -437,7 +445,7 @@ func (r *Response) String() string {
 }
 
 // getBasicStatusCode gets the basic status code from codeMap, or fallback code if not mapped
-func getBasicStatusCode(e EnhancedStatus) int {
+func getBasicStatusCode(e EnhancedStatusCode) int {
 	if val, ok := codeMap.m[e]; ok {
 		return val
 	}
