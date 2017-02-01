@@ -22,80 +22,89 @@ const (
 	ClassPermanentFailure = 5
 )
 
+type class int
+
+func (c class) String() string {
+	return fmt.Sprintf("%c00", c)
+}
+
 // codeMap for mapping Enhanced Status Code to Basic Code
 // Mapping according to https://www.iana.org/assignments/smtp-enhanced-status-codes/smtp-enhanced-status-codes.xml
-// This might not be entierly useful
+// This might not be entirely useful
 var codeMap = struct {
-	m map[string]int
-}{m: map[string]int{
-	"2.1.0":  250,
-	"2.1.5":  250,
-	"2.3.0":  250,
-	"2.5.0":  250,
-	"2.6.4":  250,
-	"2.6.8":  252,
-	"2.7.0":  220,
-	"4.1.1":  451,
-	"4.1.8":  451,
-	"4.2.4":  450,
-	"4.3.0":  421,
-	"4.3.1":  452,
-	"4.3.2":  453,
-	"4.4.1":  451,
-	"4.4.2":  421,
-	"4.4.3":  451,
-	"4.4.5":  451,
-	"4.5.0":  451,
-	"4.5.1":  430,
-	"4.5.3":  452,
-	"4.5.4":  451,
-	"4.7.0":  450,
-	"4.7.1":  451,
-	"4.7.12": 422,
-	"4.7.15": 450,
-	"4.7.24": 451,
-	"5.1.1":  550,
-	"5.1.3":  501,
-	"5.1.8":  501,
-	"5.1.10": 556,
-	"5.2.2":  552,
-	"5.2.3":  552,
-	"5.3.0":  550,
-	"5.3.4":  552,
-	"5.4.3":  550,
-	"5.5.0":  501,
-	"5.5.1":  500,
-	"5.5.2":  500,
-	"5.5.4":  501,
-	"5.5.6":  500,
-	"5.6.3":  554,
-	"5.6.6":  554,
-	"5.6.7":  553,
-	"5.6.8":  550,
-	"5.6.9":  550,
-	"5.7.0":  550,
-	"5.7.1":  551,
-	"5.7.2":  550,
-	"5.7.4":  504,
-	"5.7.8":  554,
-	"5.7.9":  534,
-	"5.7.10": 523,
-	"5.7.11": 524,
-	"5.7.13": 525,
-	"5.7.14": 535,
-	"5.7.15": 550,
-	"5.7.16": 552,
-	"5.7.17": 500,
-	"5.7.18": 500,
-	"5.7.19": 500,
-	"5.7.20": 550,
-	"5.7.21": 550,
-	"5.7.22": 550,
-	"5.7.23": 550,
-	"5.7.24": 550,
-	"5.7.25": 550,
-	"5.7.26": 550,
-	"5.7.27": 550,
+	m map[EnhancedStatus]int
+}{m: map[EnhancedStatus]int{
+
+	EnhancedStatus{ClassSuccess, ".1.0"}: 250,
+	EnhancedStatus{ClassSuccess, ".1.5"}: 250,
+	EnhancedStatus{ClassSuccess, ".3.0"}: 250,
+	EnhancedStatus{ClassSuccess, ".5.0"}: 250,
+	EnhancedStatus{ClassSuccess, ".6.4"}: 250,
+	EnhancedStatus{ClassSuccess, ".6.8"}: 252,
+	EnhancedStatus{ClassSuccess, ".7.0"}: 220,
+
+	EnhancedStatus{ClassTransientFailure, ".1.1"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".1.8"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".2.4"}:  450,
+	EnhancedStatus{ClassTransientFailure, ".3.0"}:  421,
+	EnhancedStatus{ClassTransientFailure, ".3.1"}:  452,
+	EnhancedStatus{ClassTransientFailure, ".3.2"}:  453,
+	EnhancedStatus{ClassTransientFailure, ".4.1"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".4.2"}:  421,
+	EnhancedStatus{ClassTransientFailure, ".4.3"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".4.5"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".5.0"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".5.1"}:  430,
+	EnhancedStatus{ClassTransientFailure, ".5.3"}:  452,
+	EnhancedStatus{ClassTransientFailure, ".5.4"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".7.0"}:  450,
+	EnhancedStatus{ClassTransientFailure, ".7.1"}:  451,
+	EnhancedStatus{ClassTransientFailure, ".7.12"}: 422,
+	EnhancedStatus{ClassTransientFailure, ".7.15"}: 450,
+	EnhancedStatus{ClassTransientFailure, ".7.24"}: 451,
+
+	EnhancedStatus{ClassPermanentFailure, ".1.1"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".1.3"}:  501,
+	EnhancedStatus{ClassPermanentFailure, ".1.8"}:  501,
+	EnhancedStatus{ClassPermanentFailure, ".1.10"}: 556,
+	EnhancedStatus{ClassPermanentFailure, ".2.2"}:  552,
+	EnhancedStatus{ClassPermanentFailure, ".2.3"}:  552,
+	EnhancedStatus{ClassPermanentFailure, ".3.0"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".3.4"}:  552,
+	EnhancedStatus{ClassPermanentFailure, ".4.3"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".5.0"}:  501,
+	EnhancedStatus{ClassPermanentFailure, ".5.1"}:  500,
+	EnhancedStatus{ClassPermanentFailure, ".5.2"}:  500,
+	EnhancedStatus{ClassPermanentFailure, ".5.4"}:  501,
+	EnhancedStatus{ClassPermanentFailure, ".5.6"}:  500,
+	EnhancedStatus{ClassPermanentFailure, ".6.3"}:  554,
+	EnhancedStatus{ClassPermanentFailure, ".6.6"}:  554,
+	EnhancedStatus{ClassPermanentFailure, ".6.7"}:  553,
+	EnhancedStatus{ClassPermanentFailure, ".6.8"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".6.9"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".7.0"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".7.1"}:  551,
+	EnhancedStatus{ClassPermanentFailure, ".7.2"}:  550,
+	EnhancedStatus{ClassPermanentFailure, ".7.4"}:  504,
+	EnhancedStatus{ClassPermanentFailure, ".7.8"}:  554,
+	EnhancedStatus{ClassPermanentFailure, ".7.9"}:  534,
+	EnhancedStatus{ClassPermanentFailure, ".7.10"}: 523,
+	EnhancedStatus{ClassPermanentFailure, ".7.11"}: 524,
+	EnhancedStatus{ClassPermanentFailure, ".7.13"}: 525,
+	EnhancedStatus{ClassPermanentFailure, ".7.14"}: 535,
+	EnhancedStatus{ClassPermanentFailure, ".7.15"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.16"}: 552,
+	EnhancedStatus{ClassPermanentFailure, ".7.17"}: 500,
+	EnhancedStatus{ClassPermanentFailure, ".7.18"}: 500,
+	EnhancedStatus{ClassPermanentFailure, ".7.19"}: 500,
+	EnhancedStatus{ClassPermanentFailure, ".7.20"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.21"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.22"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.23"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.24"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.25"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.26"}: 550,
+	EnhancedStatus{ClassPermanentFailure, ".7.27"}: 550,
 }}
 
 var (
@@ -103,7 +112,7 @@ var (
 	Canned Responses
 )
 
-// Responses has some already made up responses
+// Responses has some already pre-constructed responses
 type Responses struct {
 
 	// The 500's
@@ -390,22 +399,18 @@ type Response struct {
 	Comment string
 }
 
-type class int
-
-func (c class) String() string {
-	return fmt.Sprintf("%c00", c)
-}
-
+// EnhancedStatus are the ones that look like 2.1.0
 type EnhancedStatus struct {
 	Class  class
 	Status string
 }
 
+// String returns a string representation of EnhancedStatus
 func (e EnhancedStatus) String() string {
 	return fmt.Sprintf("%d%s", e.Class, e.Status)
 }
 
-// Custom returns a custom Response Stringer
+// String returns a custom Response as a string
 func (r *Response) String() string {
 
 	basicCode := r.BasicCode
@@ -431,9 +436,9 @@ func (r *Response) String() string {
 	return fmt.Sprintf("%d %s %s", basicCode, e.String(), comment)
 }
 
+// getBasicStatusCode gets the basic status code from codeMap, or fallback code if not mapped
 func getBasicStatusCode(e EnhancedStatus) int {
-	// todo, map can be mapped on enhanced Status?
-	if val, ok := codeMap.m[e.String()]; ok {
+	if val, ok := codeMap.m[e]; ok {
 		return val
 	}
 	// Fallback if code is not defined
