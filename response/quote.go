@@ -80,7 +80,7 @@ var quotes = struct {
 214 The Dude: What the f**k you talkin' about?`,
 	38: `214-Walter Sobchak: I mean, say what you want about the tenets of National Socialism, 
 214 Dude, at least it's an ethos.`,
-	39: "214 The Dude: My only hope is that the Big Lebowski kills me before the Germans can cut my dick off.",
+	39: "214 The Dude: My only hope is that the Big Lebowski kills me before the Germans can cut my d**k off.",
 	40: "214 The Dude: You human paraquat!",
 	41: "214 The Dude: Strikes and gutters, ups and downs.",
 	42: "214 The Dude: Sooner or later you are going to have to face the fact that your a moron.",
@@ -146,7 +146,7 @@ var quotes = struct {
 	80: "214 Walter Sobchak: Aw, f**k it Dude. Let's go bowling.",
 	81: "214 Walter Sobchak: Life does not stop and start at your convenience you miserable piece of s**t.",
 	82: "214 Walter Sobchak: I told that kraut a f**king thousand times that I don't roll on Shabbos!",
-	83: "214 Walter Sobchak: This is what happens when you f**k a stranger in the ass!",
+	83: "214 Walter Sobchak: This is what happens when you find a stranger in the alps!",
 }}
 
 // GetQuote returns a random quote from The big Lebowski
