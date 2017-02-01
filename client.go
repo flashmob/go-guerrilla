@@ -2,7 +2,9 @@ package guerrilla
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"net"
 	"net/textproto"
@@ -63,9 +65,23 @@ func NewClient(conn net.Conn, clientID uint64) *client {
 	return c
 }
 
-// Add a response to be written on the next turn
-func (c *client) responseAdd(r string) {
-	c.response = c.response + r + "\r\n"
+// setResponse adds a response to be written on the next turn
+func (c *client) setResponse(r ...interface{}) {
+	c.response = ""
+	var b bytes.Buffer
+	for _, item := range r {
+		switch v := item.(type) {
+		case string:
+			b.WriteString(v)
+		case error:
+			b.WriteString(v.Error())
+		case fmt.Stringer:
+			b.WriteString(v.String())
+		}
+	}
+	b.WriteString("\r\n")
+
+	c.response = b.String()
 }
 
 // resetTransaction resets the SMTP transaction, ready for the next email (doesn't disconnect)

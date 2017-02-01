@@ -333,7 +333,7 @@ func (server *server) handleClient(client *client) {
 	for client.isAlive() {
 		switch client.state {
 		case ClientGreeting:
-			client.responseAdd(greeting)
+			client.setResponse(greeting)
 			client.state = ClientCmd
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
@@ -346,7 +346,7 @@ func (server *server) handleClient(client *client) {
 				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				client.responseAdd(response.Canned.FailLineTooLong)
+				client.setResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
@@ -369,24 +369,24 @@ func (server *server) handleClient(client *client) {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.responseAdd(helo)
+				client.setResponse(helo)
 
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.responseAdd(ehlo +
-					messageSize +
-					pipelining +
-					advertiseTLS +
-					advertiseEnhancedStatusCodes +
+				client.setResponse(ehlo,
+					messageSize,
+					pipelining,
+					advertiseTLS,
+					advertiseEnhancedStatusCodes,
 					help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
+				client.setResponse("214 OK\r\n", messageSize, pipelining, advertiseTLS, help)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					client.responseAdd(response.Canned.FailNestedMailCmd)
+					client.setResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
 				mail := input[10:]
@@ -397,66 +397,66 @@ func (server *server) handleClient(client *client) {
 				}
 
 				if err != nil {
-					client.responseAdd(err.Error())
+					client.setResponse(err)
 				} else {
 					client.MailFrom = from
-					client.responseAdd(response.Canned.SuccessMailCmd)
+					client.setResponse(response.Canned.SuccessMailCmd)
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					client.responseAdd(response.Canned.ErrorTooManyRecipients)
+					client.setResponse(response.Canned.ErrorTooManyRecipients)
 					break
 				}
 				to, err := extractEmail(input[8:])
 				if err != nil {
-					client.responseAdd(err.Error())
+					client.setResponse(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						client.responseAdd(response.Canned.ErrorRelayDenied + to.Host)
+						client.setResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						client.responseAdd(response.Canned.SuccessRcptCmd)
+						client.setResponse(response.Canned.SuccessRcptCmd)
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				client.responseAdd(response.Canned.SuccessResetCmd)
+				client.setResponse(response.Canned.SuccessResetCmd)
 
 			case strings.Index(cmd, "VRFY") == 0:
-				client.responseAdd(response.Canned.SuccessVerifyCmd)
+				client.setResponse(response.Canned.SuccessVerifyCmd)
 
 			case strings.Index(cmd, "NOOP") == 0:
-				client.responseAdd(response.Canned.SuccessNoopCmd)
+				client.setResponse(response.Canned.SuccessNoopCmd)
 
 			case strings.Index(cmd, "QUIT") == 0:
-				client.responseAdd(response.Canned.SuccessQuitCmd)
+				client.setResponse(response.Canned.SuccessQuitCmd)
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					client.responseAdd(response.Canned.FailNoSenderDataCmd)
+					client.setResponse(response.Canned.FailNoSenderDataCmd)
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					client.responseAdd(response.Canned.FailNoRecipientsDataCmd)
+					client.setResponse(response.Canned.FailNoRecipientsDataCmd)
 					break
 				}
-				client.responseAdd(response.Canned.SuccessDataCmd)
+				client.setResponse(response.Canned.SuccessDataCmd)
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
 
-				client.responseAdd(response.Canned.SuccessStartTLSCmd)
+				client.setResponse(response.Canned.SuccessStartTLSCmd)
 				client.state = ClientStartTLS
 			default:
 				client.errors++
 				if client.errors >= MaxUnrecognizedCommands {
-					client.responseAdd(response.Canned.FailMaxUnrecognizedCmd)
+					client.setResponse(response.Canned.FailMaxUnrecognizedCmd)
 					client.kill()
 				} else {
-					client.responseAdd(response.Canned.FailUnrecognizedCmd)
+					client.setResponse(response.Canned.FailUnrecognizedCmd)
 				}
 			}
 
@@ -472,13 +472,13 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					client.responseAdd(response.Canned.FailReadLimitExceededDataCmd + LineLimitExceeded.Error())
+					client.setResponse(response.Canned.FailReadLimitExceededDataCmd, LineLimitExceeded.Error())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					client.responseAdd(response.Canned.FailMessageSizeExceeded + MessageSizeExceeded.Error())
+					client.setResponse(response.Canned.FailMessageSizeExceeded, MessageSizeExceeded.Error())
 					client.kill()
 				} else {
-					client.responseAdd(response.Canned.FailReadErrorDataCmd + err.Error())
+					client.setResponse(response.Canned.FailReadErrorDataCmd, err.Error())
 					client.kill()
 				}
 				server.log.WithError(err).Warn("Error reading data")
@@ -489,7 +489,7 @@ func (server *server) handleClient(client *client) {
 			if res.Code() < 300 {
 				client.messagesSent++
 			}
-			client.responseAdd(res.String())
+			client.setResponse(res.String())
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
@@ -513,7 +513,7 @@ func (server *server) handleClient(client *client) {
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			client.responseAdd(response.Canned.ErrorShutdown)
+			client.setResponse(response.Canned.ErrorShutdown)
 			client.kill()
 		}
 
