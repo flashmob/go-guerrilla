@@ -345,7 +345,9 @@ func (server *server) handleClient(client *client) {
 				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + advertiseEnhancedStatusCodes + help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
+				// Get quote (issue #64)
+				quote := response.GetQuote()
+				client.responseAdd("214-OK\r\n" + quote)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
