@@ -2,7 +2,6 @@ package response
 
 import (
 	"fmt"
-	"strconv"
 )
 
 const (
@@ -99,6 +98,232 @@ var codeMap = struct {
 	"5.7.27": 550,
 }}
 
+var (
+	// Canned is to be read-only, except in the init() function
+	Canned Responses
+)
+
+// Responses has some already made up responses
+type Responses struct {
+
+	// The 500's
+	FailLineTooLong              string
+	FailNestedMailCmd            string
+	FailNoSenderDataCmd          string
+	FailNoRecipientsDataCmd      string
+	FailUnrecognizedCmd          string
+	FailMaxUnrecognizedCmd       string
+	FailReadLimitExceededDataCmd string
+	FailMessageSizeExceeded      string
+	FailReadErrorDataCmd         string
+	FailPathTooLong              string
+	FailInvalidAddress           string
+	FailLocalPartTooLong         string
+	FailDomainTooLong            string
+	FailBackendNotRunning        string
+	FailBackendTransaction       string
+	FailBackendTimeout           string
+
+	// The 400's
+	ErrorTooManyRecipients string
+	ErrorRelayDenied       string
+	ErrorShutdown          string
+
+	// The 200's
+	SuccessMailCmd       string
+	SuccessRcptCmd       string
+	SuccessResetCmd      string
+	SuccessVerifyCmd     string
+	SuccessNoopCmd       string
+	SuccessQuitCmd       string
+	SuccessDataCmd       string
+	SuccessStartTLSCmd   string
+	SuccessMessageQueued string
+}
+
+func init() {
+	Canned = Responses{}
+	Canned.FailLineTooLong = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Line too long.",
+	}).String()
+
+	Canned.FailNestedMailCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: nested MAIL command",
+	}).String()
+
+	Canned.SuccessMailCmd = (&Response{
+		EnhancedCode: OtherAddressStatus,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessRcptCmd = (&Response{
+		EnhancedCode: DestinationMailboxAddressValid,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessResetCmd = Canned.SuccessMailCmd
+	Canned.SuccessNoopCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessVerifyCmd = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    252,
+		Class:        ClassSuccess,
+		Comment:      "Cannot verify user",
+	}).String()
+
+	Canned.ErrorTooManyRecipients = (&Response{
+		EnhancedCode: TooManyRecipients,
+		BasicCode:    452,
+		Class:        ClassTransientFailure,
+		Comment:      "Too many recipients",
+	}).String()
+
+	Canned.ErrorRelayDenied = (&Response{
+		EnhancedCode: BadDestinationMailboxAddress,
+		BasicCode:    454,
+		Class:        ClassTransientFailure,
+		Comment:      "Error: Relay access denied: ",
+	}).String()
+
+	Canned.SuccessQuitCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    221,
+		Class:        ClassSuccess,
+		Comment:      "Bye",
+	}).String()
+
+	Canned.FailNoSenderDataCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: No sender",
+	}).String()
+
+	Canned.FailNoRecipientsDataCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: No recipients",
+	}).String()
+
+	Canned.SuccessDataCmd = "354 Enter message, ending with '.' on a line by itself"
+
+	Canned.SuccessStartTLSCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    220,
+		Class:        ClassSuccess,
+		Comment:      "Ready to start TLS",
+	}).String()
+
+	Canned.FailUnrecognizedCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Unrecognized command",
+	}).String()
+
+	Canned.FailMaxUnrecognizedCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Too many unrecognized commands",
+	}).String()
+
+	Canned.ErrorShutdown = (&Response{
+		EnhancedCode: OtherOrUndefinedMailSystemStatus,
+		BasicCode:    421,
+		Class:        ClassTransientFailure,
+		Comment:      "Server is shutting down. Please try again later. Sayonara!",
+	}).String()
+
+	Canned.FailReadLimitExceededDataCmd = (&Response{
+		EnhancedCode: SyntaxError,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailMessageSizeExceeded = (&Response{
+		EnhancedCode: SyntaxError,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailReadErrorDataCmd = (&Response{
+		EnhancedCode: OtherOrUndefinedMailSystemStatus,
+		BasicCode:    451,
+		Class:        ClassTransientFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailPathTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Path too long",
+	}).String()
+
+	Canned.FailInvalidAddress = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    501,
+		Class:        ClassPermanentFailure,
+		Comment:      "Invalid address",
+	}).String()
+
+	Canned.FailLocalPartTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Local part too long, cannot exceed 64 characters",
+	}).String()
+
+	Canned.FailDomainTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Domain cannot exceed 255 characters",
+	}).String()
+
+	Canned.FailBackendNotRunning = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Transaction failed - backend not running ",
+	}).String()
+
+	Canned.FailBackendTransaction = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.SuccessMessageQueued = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    250,
+		Class:        ClassSuccess,
+		Comment:      "OK : queued as ",
+	}).String()
+
+	Canned.FailBackendTimeout = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: transaction timeout",
+	}).String()
+
+}
+
 // DefaultMap contains defined default codes (RfC 3463)
 const (
 	OtherStatus                             = ".0.0"
@@ -160,14 +385,29 @@ var defaultTexts = struct {
 type Response struct {
 	EnhancedCode string
 	BasicCode    int
-	Class        int
+	Class        class
 	// Comment is optional
 	Comment string
 }
 
+type class int
+
+func (c class) String() string {
+	return fmt.Sprintf("%c00", c)
+}
+
+type EnhancedStatus struct {
+	Class  class
+	Status string
+}
+
+func (e EnhancedStatus) String() string {
+	return fmt.Sprintf("%d%s", e.Class, e.Status)
+}
+
 // Custom returns a custom Response Stringer
 func (r *Response) String() string {
-	e := buildEnhancedResponseFromDefaultStatus(r.Class, r.EnhancedCode)
+
 	basicCode := r.BasicCode
 	comment := r.Comment
 	if len(comment) == 0 && r.BasicCode == 0 {
@@ -183,49 +423,19 @@ func (r *Response) String() string {
 			}
 		}
 	}
+	e := EnhancedStatus{r.Class, r.EnhancedCode}
 	if r.BasicCode == 0 {
 		basicCode = getBasicStatusCode(e)
 	}
 
-	return fmt.Sprintf("%d %s %s", basicCode, e, comment)
+	return fmt.Sprintf("%d %s %s", basicCode, e.String(), comment)
 }
 
-/*
-// CustomString builds an enhanced status code string using your custom string and basic code
-func CustomString(enhancedCode string, basicCode, class int, comment string) string {
-	e := buildEnhancedResponseFromDefaultStatus(class, enhancedCode)
-	return fmt.Sprintf("%d %s %s", basicCode, e, comment)
-}
-
-// String builds an enhanced status code string
-func String(enhancedCode string, class int) string {
-	e := buildEnhancedResponseFromDefaultStatus(class, enhancedCode)
-	basicCode := getBasicStatusCode(e)
-	comment := defaultTexts.m[enhancedCode]
-
-	if len(comment) == 0 {
-		switch class {
-		case 2:
-			comment = "OK"
-		case 4:
-			comment = "Temporary failure."
-		case 5:
-			comment = "Permanent failure."
-		}
-	}
-	return CustomString(enhancedCode, basicCode, class, comment)
-}
-*/
-func getBasicStatusCode(enhancedStatusCode string) int {
-	if val, ok := codeMap.m[enhancedStatusCode]; ok {
+func getBasicStatusCode(e EnhancedStatus) int {
+	// todo, map can be mapped on enhanced Status?
+	if val, ok := codeMap.m[e.String()]; ok {
 		return val
 	}
 	// Fallback if code is not defined
-	fb, _ := strconv.Atoi(fmt.Sprintf("%c00", enhancedStatusCode[0]))
-	return fb
-}
-
-func buildEnhancedResponseFromDefaultStatus(c int, status string) string {
-	// Construct code
-	return fmt.Sprintf("%d%s", c, status)
+	return int(e.Class) * 100
 }
