@@ -373,7 +373,6 @@ func (server *server) handleClient(client *client) {
 					help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				// Get quote (issue #64)
 				quote := response.GetQuote()
 				client.sendResponse("214-OK\r\n" + quote)
 
