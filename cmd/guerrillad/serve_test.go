@@ -900,7 +900,10 @@ func TestBadTLS(t *testing.T) {
 					t.Error("Expected", expect, "but got", result)
 				} else {
 					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 2.0.0 Ready to start TLS"
+						//expect := "220 2.0.0 Ready to start TLS"
+
+						// Issue #66 : we won't advertise STARTTLS if the cert is not found or invalid
+						expect := "554 5.5.1 Unrecognized command"
 						if strings.Index(result, expect) != 0 {
 							t.Error("Expected:", expect, "but got:", result)
 						} else {

@@ -82,6 +82,7 @@ func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
 	if err := server.configureSSL(); err != nil {
 		return server, err
 	}
+
 	return server, nil
 }
 
@@ -90,7 +91,19 @@ func (s *server) configureSSL() error {
 	if sConfig.TLSAlwaysOn || sConfig.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(sConfig.PublicKeyFile, sConfig.PrivateKeyFile)
 		if err != nil {
-			return fmt.Errorf("error while loading the certificate: %s", err)
+			// Issue #66 : we won't advertise STARTTLS if the cert is not found or invalid
+			var msg string
+			if sConfig.TLSAlwaysOn && !sConfig.StartTLSOn {
+				sConfig.IsEnabled = false
+				msg = fmt.Sprintf("TLS only server is now disabled.")
+			}
+			if sConfig.StartTLSOn {
+				sConfig.StartTLSOn = false
+				msg = fmt.Sprintf("STARTTLS is now disabled for this server.")
+			}
+			e := fmt.Errorf("error while loading the certificate: %s - %s", err, msg)
+			s.configStore.Store(sConfig)
+			return e
 		}
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{cert},
