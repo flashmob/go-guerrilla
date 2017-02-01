@@ -594,6 +594,66 @@ func TestMailFromCmd(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
+			// No mail from content
+			response, err = Command(conn, bufin, "MAIL FROM:")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Short mail from content
+			response, err = Command(conn, bufin, "MAIL FROM:<")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Short mail from content 2
+			response, err = Command(conn, bufin, "MAIL FROM:x")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
 			// What?
 			response, err = Command(conn, bufin, "MAIL FROM:<<>>")
 			if err != nil {

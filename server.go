@@ -373,7 +373,9 @@ func (server *server) handleClient(client *client) {
 					help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				client.sendResponse("214 OK\r\n", messageSize, pipelining, advertiseTLS, help)
+				// Get quote (issue #64)
+				quote := response.GetQuote()
+				client.sendResponse("214-OK\r\n" + quote)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
@@ -382,7 +384,9 @@ func (server *server) handleClient(client *client) {
 				}
 				mail := input[10:]
 				from := &envelope.EmailAddress{}
-				if mail[0:2] != "<>" {
+
+				if !(strings.Index(mail, "<>") == 0) &&
+					!(strings.Index(mail, " <>") == 0) {
 					// Not Bounce, extract mail.
 					from, err = extractEmail(mail)
 				}
