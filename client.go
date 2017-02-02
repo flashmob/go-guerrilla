@@ -2,9 +2,11 @@ package guerrilla
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
-	log "github.com/Sirupsen/logrus"
+	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"net"
 	"net/textproto"
 	"sync"
@@ -37,7 +39,7 @@ type client struct {
 	state        ClientState
 	messagesSent int
 	// Response to be written to the client
-	response   string
+	response   bytes.Buffer
 	conn       net.Conn
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
@@ -45,28 +47,63 @@ type client struct {
 	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
+	log       log.Logger
 }
 
 // Allocate a new client
-func NewClient(conn net.Conn, clientID uint64) *client {
+func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
 		conn: conn,
 		Envelope: &envelope.Envelope{
-			RemoteAddress: conn.RemoteAddr().String(),
+			RemoteAddress: getRemoteAddr(conn),
 		},
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
+		log:         logger,
 	}
 	// used for reading the DATA state
 	c.smtpReader = textproto.NewReader(c.bufin.Reader)
 	return c
 }
 
-// Add a response to be written on the next turn
-func (c *client) responseAdd(r string) {
-	c.response = c.response + r + "\r\n"
+// setResponse adds a response to be written on the next turn
+func (c *client) sendResponse(r ...interface{}) {
+	c.bufout.Reset(c.conn)
+	if c.log.IsDebug() {
+		// us additional buffer so that we can log the response in debug mode only
+		c.response.Reset()
+	}
+	for _, item := range r {
+		switch v := item.(type) {
+		case string:
+			if _, err := c.bufout.WriteString(v); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
+			if c.log.IsDebug() {
+				c.response.WriteString(v)
+			}
+		case error:
+			if _, err := c.bufout.WriteString(v.Error()); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
+			if c.log.IsDebug() {
+				c.response.WriteString(v.Error())
+			}
+		case fmt.Stringer:
+			if _, err := c.bufout.WriteString(v.String()); err != nil {
+				c.log.WithError(err).Error("could not write to c.bufout")
+			}
+			if c.log.IsDebug() {
+				c.response.WriteString(v.String())
+			}
+		}
+	}
+	c.bufout.WriteString("\r\n")
+	if c.log.IsDebug() {
+		c.response.WriteString("\r\n")
+	}
 }
 
 // resetTransaction resets the SMTP transaction, ready for the next email (doesn't disconnect)
@@ -112,7 +149,7 @@ func (c *client) setTimeout(t time.Duration) {
 	}
 }
 
-// Closes a client connection, , goroutine safe
+// closeConn closes a client connection, , goroutine safe
 func (c *client) closeConn() {
 	defer c.connGuard.Unlock()
 	c.connGuard.Lock()
@@ -135,31 +172,40 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.ID = clientID
 	c.TLS = false
 	c.errors = 0
-	c.response = ""
 	c.Helo = ""
 	c.Header = nil
-	c.RemoteAddress = conn.RemoteAddr().String()
+	c.RemoteAddress = getRemoteAddr(conn)
+
 }
 
-// getId returns the client's unique ID
+// getID returns the client's unique ID
 func (c *client) getID() uint64 {
 	return c.ID
 }
 
-// Upgrades a client connection to TLS
-func (client *client) upgradeToTLS(tlsConfig *tls.Config) bool {
+// UpgradeToTLS upgrades a client connection to TLS
+func (client *client) upgradeToTLS(tlsConfig *tls.Config) error {
 	var tlsConn *tls.Conn
 	// load the config thread-safely
 	tlsConn = tls.Server(client.conn, tlsConfig)
+	// Call handshake here to get any handshake error before reading starts
 	err := tlsConn.Handshake()
 	if err != nil {
-		log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
-		return false
+		return err
 	}
+	// convert tlsConn to net.Conn
 	client.conn = net.Conn(tlsConn)
 	client.bufout.Reset(client.conn)
 	client.bufin.Reset(client.conn)
 	client.TLS = true
+	return err
+}
 
-	return true
+func getRemoteAddr(conn net.Conn) string {
+	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		// we just want the IP (not the port)
+		return addr.IP.String()
+	} else {
+		return conn.RemoteAddr().Network()
+	}
 }

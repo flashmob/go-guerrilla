@@ -1,8 +1,6 @@
 package backends
 
 import (
-	log "github.com/Sirupsen/logrus"
-
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
@@ -60,8 +58,8 @@ func (b *AbstractBackend) Process(mail *envelope.Envelope) BackendResult {
 	mail.ParseHeaders()
 
 	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
-		log.Info("Headers are: %s", mail.Header)
+		mainlog.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
+		mainlog.Info("Headers are: %s", mail.Header)
 
 	}
 	return NewBackendResult("250 OK")
@@ -84,7 +82,7 @@ func (b *AbstractBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	for {
 		payload := <-saveMailChan
 		if payload == nil {
-			log.Debug("No more saveMailChan payload")
+			mainlog.Debug("No more saveMailChan payload")
 			return
 		}
 		// process the email here

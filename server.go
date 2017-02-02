@@ -6,18 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
-	"time"
-
 	"runtime"
-
-	log "github.com/Sirupsen/logrus"
-
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -51,7 +48,6 @@ const (
 type server struct {
 	configStore     atomic.Value // stores guerrilla.ServerConfig
 	backend         backends.Backend
-	tlsConfig       *tls.Config
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
@@ -61,6 +57,11 @@ type server struct {
 	closedListener  chan (bool)
 	hosts           allowedHosts // stores map[string]bool for faster lookup
 	state           int
+	mainlog         log.Logger
+	log             log.Logger
+	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
+	logStore     atomic.Value
+	mainlogStore atomic.Value
 }
 
 type allowedHosts struct {
@@ -69,14 +70,29 @@ type allowedHosts struct {
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b backends.Backend) (*server, error) {
+func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
 	server := &server{
 		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
+		mainlog:         l,
 	}
+	var logOpenError error
+	if sc.LogFile == "" {
+		// none set, use the same log file as mainlog
+		server.log, logOpenError = log.GetLogger(server.mainlog.GetLogDest())
+	} else {
+		server.log, logOpenError = log.GetLogger(sc.LogFile)
+	}
+	if logOpenError != nil {
+		server.log.WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+	}
+
+	// set to same level
+	server.log.SetLevel(server.mainlog.GetLevel())
+
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
 	if err := server.configureSSL(); err != nil {
@@ -101,6 +117,23 @@ func (s *server) configureSSL() error {
 		s.tlsConfigStore.Store(tlsConfig)
 	}
 	return nil
+}
+
+// configureLog checks to see if there is a new logger, so that the server.log can be safely changed
+// this function is not gorotine safe, although it'll read the new value safely
+func (s *server) configureLog() {
+	// when log changed
+	if l, ok := s.logStore.Load().(log.Logger); ok {
+		if l != s.log {
+			s.log = l
+		}
+	}
+	// when mainlog changed
+	if ml, ok := s.mainlogStore.Load().(log.Logger); ok {
+		if ml != s.mainlog {
+			s.mainlog = ml
+		}
+	}
 }
 
 // Set the timeout for the server and all clients
@@ -144,26 +177,27 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.listenInterface, err.Error())
 	}
 
-	log.Infof("Listening on TCP %s", server.listenInterface)
+	server.log.Infof("Listening on TCP %s", server.listenInterface)
 	server.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
+		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
+		server.configureLog()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
+				server.log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
 				// the listener has been closed, wait for clients to exit
-				log.Infof("shutting down pool [%s]", server.listenInterface)
+				server.log.Infof("shutting down pool [%s]", server.listenInterface)
 				server.clientPool.ShutdownState()
 				server.clientPool.ShutdownWait()
 				server.state = ServerStateStopped
 				server.closedListener <- true
 				return nil
 			}
-			log.WithError(err).Info("Temporary error accepting client")
+			server.mainlog.WithError(err).Info("Temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrow_err error) {
@@ -172,14 +206,14 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 				server.handleClient(c)
 				server.clientPool.Return(c)
 			} else {
-				log.WithError(borrow_err).Info("couldn't borrow a new client")
+				server.log.WithError(borrow_err).Info("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				conn.Close()
 
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(server.clientPool.Borrow(conn, clientID))
+		}(server.clientPool.Borrow(conn, clientID, server.log))
 
 	}
 }
@@ -236,19 +270,10 @@ func (server *server) readCommand(client *client, maxSize int64) (string, error)
 	return input, err
 }
 
-// Writes a response to the client.
-func (server *server) writeResponse(client *client) error {
+// flushResponse a response to the client. Flushes the client.bufout buffer to the connection
+func (server *server) flushResponse(client *client) error {
 	client.setTimeout(server.timeout.Load().(time.Duration))
-	size, err := client.bufout.WriteString(client.response)
-	if err != nil {
-		return err
-	}
-	err = client.bufout.Flush()
-	if err != nil {
-		return err
-	}
-	client.response = client.response[size:]
-	return nil
+	return client.bufout.Flush()
 }
 
 func (server *server) isShuttingDown() bool {
@@ -259,7 +284,7 @@ func (server *server) isShuttingDown() bool {
 func (server *server) handleClient(client *client) {
 	defer client.closeConn()
 	sc := server.configStore.Load().(ServerConfig)
-	log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
+	server.log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
@@ -275,14 +300,18 @@ func (server *server) handleClient(client *client) {
 	pipelining := "250-PIPELINING\r\n"
 	advertiseTLS := "250-STARTTLS\r\n"
 	advertiseEnhancedStatusCodes := "250-ENHANCEDSTATUSCODES\r\n"
-	// the last line doesn't need \r\n since string will be printed as a new line
+	// The last line doesn't need \r\n since string will be printed as a new line.
+	// Also, Last line has no dash -
 	help := "250 HELP"
 
 	if sc.TLSAlwaysOn {
 		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
-		if ok && client.upgradeToTLS(tlsConfig) {
+		if !ok {
+			server.mainlog.Error("Failed to load *tls.Config")
+		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
+			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -295,30 +324,24 @@ func (server *server) handleClient(client *client) {
 	for client.isAlive() {
 		switch client.state {
 		case ClientGreeting:
-			client.responseAdd(greeting)
+			client.sendResponse(greeting)
 			client.state = ClientCmd
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := server.readCommand(client, sc.MaxSize)
-			log.Debugf("Client sent: %s", input)
+			server.log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
 				return
 			} else if err == LineLimitExceeded {
-				resp := &response.Response{
-					EnhancedCode: response.InvalidCommand,
-					BasicCode:    554,
-					Class:        response.ClassPermanentFailure,
-					Comment:      "Line too long.",
-				}
-				client.responseAdd(resp.String())
+				client.sendResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
 				client.kill()
 				break
 			}
@@ -337,28 +360,27 @@ func (server *server) handleClient(client *client) {
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.responseAdd(helo)
+				client.sendResponse(helo)
 
 			case strings.Index(cmd, "EHLO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
-				client.responseAdd(ehlo + messageSize + pipelining + advertiseTLS + advertiseEnhancedStatusCodes + help)
+				client.sendResponse(ehlo,
+					messageSize,
+					pipelining,
+					advertiseTLS,
+					advertiseEnhancedStatusCodes,
+					help)
 
 			case strings.Index(cmd, "HELP") == 0:
-				client.responseAdd("214 OK\r\n" + messageSize + pipelining + advertiseTLS + help)
+				quote := response.GetQuote()
+				client.sendResponse("214-OK\r\n" + quote)
 
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
-					resp := &response.Response{
-						EnhancedCode: response.InvalidCommand,
-						BasicCode:    503,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Error: nested MAIL command",
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
-				// Fix for issue #53 - MAIL FROM may only be <> if it is a bounce
 				mail := input[10:]
 				from := &envelope.EmailAddress{}
 
@@ -369,136 +391,67 @@ func (server *server) handleClient(client *client) {
 				}
 
 				if err != nil {
-					client.responseAdd(err.Error())
+					client.sendResponse(err)
 				} else {
 					client.MailFrom = from
-					resp := &response.Response{
-						EnhancedCode: response.OtherAddressStatus,
-						Class:        response.ClassSuccess,
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.SuccessMailCmd)
 				}
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
-					resp := &response.Response{
-						EnhancedCode: response.TooManyRecipients,
-						BasicCode:    452,
-						Class:        response.ClassTransientFailure,
-						Comment:      "Too many recipients",
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.ErrorTooManyRecipients)
 					break
 				}
 				to, err := extractEmail(input[8:])
 				if err != nil {
-					client.responseAdd(err.Error())
+					client.sendResponse(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						resp := &response.Response{
-							EnhancedCode: response.BadDestinationMailboxAddress,
-							BasicCode:    454,
-							Class:        response.ClassTransientFailure,
-							Comment:      "Error: Relay access denied: " + to.Host,
-						}
-						client.responseAdd(resp.String())
+						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
 						client.RcptTo = append(client.RcptTo, *to)
-						resp := &response.Response{
-							EnhancedCode: response.DestinationMailboxAddressValid,
-							Class:        response.ClassSuccess,
-						}
-						client.responseAdd(resp.String())
+						client.sendResponse(response.Canned.SuccessRcptCmd)
 					}
 				}
 
 			case strings.Index(cmd, "RSET") == 0:
 				client.resetTransaction()
-				resp := &response.Response{
-					EnhancedCode: response.OtherAddressStatus,
-					Class:        response.ClassSuccess,
-				}
-				client.responseAdd(resp.String())
+				client.sendResponse(response.Canned.SuccessResetCmd)
 
 			case strings.Index(cmd, "VRFY") == 0:
-				resp := &response.Response{
-					EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-					BasicCode:    252,
-					Class:        response.ClassSuccess,
-					Comment:      "Cannot verify user",
-				}
-				client.responseAdd(resp.String())
+				client.sendResponse(response.Canned.SuccessVerifyCmd)
 
 			case strings.Index(cmd, "NOOP") == 0:
-				resp := &response.Response{
-					EnhancedCode: response.OtherStatus,
-					Class:        response.ClassSuccess,
-				}
-				client.responseAdd(resp.String())
+				client.sendResponse(response.Canned.SuccessNoopCmd)
 
 			case strings.Index(cmd, "QUIT") == 0:
-				resp := &response.Response{
-					EnhancedCode: response.OtherStatus,
-					BasicCode:    221,
-					Class:        response.ClassSuccess,
-					Comment:      "Bye",
-				}
-				client.responseAdd(resp.String())
+				client.sendResponse(response.Canned.SuccessQuitCmd)
 				client.kill()
 
 			case strings.Index(cmd, "DATA") == 0:
 				if client.MailFrom.IsEmpty() {
-					resp := &response.Response{
-						EnhancedCode: response.InvalidCommand,
-						BasicCode:    503,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Error: No sender",
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailNoSenderDataCmd)
 					break
 				}
 				if len(client.RcptTo) == 0 {
-					resp := &response.Response{
-						EnhancedCode: response.InvalidCommand,
-						BasicCode:    503,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Error: No recipients",
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailNoRecipientsDataCmd)
 					break
 				}
-				client.responseAdd("354 Enter message, ending with '.' on a line by itself")
+				client.sendResponse(response.Canned.SuccessDataCmd)
 				client.state = ClientData
 
 			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
-				resp := &response.Response{
-					EnhancedCode: response.OtherStatus,
-					BasicCode:    220,
-					Class:        response.ClassSuccess,
-					Comment:      "Ready to start TLS",
-				}
-				client.responseAdd(resp.String())
+
+				client.sendResponse(response.Canned.SuccessStartTLSCmd)
 				client.state = ClientStartTLS
 			default:
-				resp := &response.Response{
-					EnhancedCode: response.InvalidCommand,
-					BasicCode:    554,
-					Class:        response.ClassPermanentFailure,
-					Comment:      fmt.Sprintf("Unrecognized command"),
-				}
-				client.responseAdd(resp.String())
 				client.errors++
-				if client.errors > MaxUnrecognizedCommands {
-					resp := &response.Response{
-						EnhancedCode: response.InvalidCommand,
-						BasicCode:    554,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Too many unrecognized commands",
-					}
-					client.responseAdd(resp.String())
+				if client.errors >= MaxUnrecognizedCommands {
+					client.sendResponse(response.Canned.FailMaxUnrecognizedCmd)
 					client.kill()
+				} else {
+					client.sendResponse(response.Canned.FailUnrecognizedCmd)
 				}
-
 			}
 
 		case ClientData:
@@ -513,34 +466,16 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					resp := &response.Response{
-						EnhancedCode: response.SyntaxError,
-						BasicCode:    550,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Error: " + LineLimitExceeded.Error(),
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailReadLimitExceededDataCmd, LineLimitExceeded.Error())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					resp := &response.Response{
-						EnhancedCode: response.SyntaxError,
-						BasicCode:    550,
-						Class:        response.ClassPermanentFailure,
-						Comment:      "Error: " + MessageSizeExceeded.Error(),
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailMessageSizeExceeded, MessageSizeExceeded.Error())
 					client.kill()
 				} else {
-					resp := &response.Response{
-						EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
-						BasicCode:    451,
-						Class:        response.ClassTransientFailure,
-						Comment:      "Error: " + err.Error(),
-					}
-					client.responseAdd(resp.String())
+					client.sendResponse(response.Canned.FailReadErrorDataCmd, err.Error())
 					client.kill()
 				}
-				log.WithError(err).Warn("Error reading data")
+				server.log.WithError(err).Warn("Error reading data")
 				break
 			}
 
@@ -548,7 +483,7 @@ func (server *server) handleClient(client *client) {
 			if res.Code() < 300 {
 				client.messagesSent++
 			}
-			client.responseAdd(res.String())
+			client.sendResponse(res.String())
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
@@ -558,30 +493,31 @@ func (server *server) handleClient(client *client) {
 		case ClientStartTLS:
 			if !client.TLS && sc.StartTLSOn {
 				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
-				if ok && client.upgradeToTLS(tlsConfig) {
+				if !ok {
+					server.mainlog.Error("Failed to load *tls.Config")
+				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()
+				} else {
+					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}
 			// change to command state
 			client.state = ClientCmd
 		case ClientShutdown:
 			// shutdown state
-			resp := &response.Response{
-				EnhancedCode: response.OtherOrUndefinedMailSystemStatus,
-				BasicCode:    421,
-				Class:        response.ClassTransientFailure,
-				Comment:      "Server is shutting down. Please try again later. Sayonara!",
-			}
-			client.responseAdd(resp.String())
+			client.sendResponse(response.Canned.ErrorShutdown)
 			client.kill()
 		}
 
-		if len(client.response) > 0 {
-			log.Debugf("Writing response to client: \n%s", client.response)
-			err := server.writeResponse(client)
+		if client.bufout.Buffered() > 0 {
+			if server.log.IsDebug() {
+				server.log.Debugf("Writing response to client: \n%s", client.response.String())
+			}
+			err := server.flushResponse(client)
 			if err != nil {
-				log.WithError(err).Debug("Error writing response")
+				server.log.WithError(err).Debug("Error writing response")
 				return
 			}
 		}
