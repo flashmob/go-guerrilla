@@ -82,16 +82,16 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 	var logOpenError error
 	if sc.LogFile == "" {
 		// none set, use the same log file as mainlog
-		server.log, logOpenError = log.NewLogger(mainlog.GetLogDest())
+		server.log, logOpenError = log.GetLogger(server.mainlog.GetLogDest())
 	} else {
-		server.log, logOpenError = log.NewLogger(sc.LogFile)
+		server.log, logOpenError = log.GetLogger(sc.LogFile)
 	}
 	if logOpenError != nil {
 		server.log.WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
 	}
 
 	// set to same level
-	server.log.SetLevel(mainlog.GetLevel())
+	server.log.SetLevel(server.mainlog.GetLevel())
 
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
@@ -123,13 +123,13 @@ func (s *server) configureSSL() error {
 // this function is not gorotine safe, although it'll read the new value safely
 func (s *server) configureLog() {
 	// when log changed
-	if l, ok := s.logStore.Load().(*log.HookedLogger); ok {
+	if l, ok := s.logStore.Load().(log.Logger); ok {
 		if l != s.log {
 			s.log = l
 		}
 	}
 	// when mainlog changed
-	if ml, ok := s.mainlogStore.Load().(*log.HookedLogger); ok {
+	if ml, ok := s.mainlogStore.Load().(log.Logger); ok {
 		if ml != s.mainlog {
 			s.mainlog = ml
 		}

@@ -41,8 +41,8 @@ var (
 func init() {
 	// log to stderr on startup
 	var logOpenError error
-	if mainlog, logOpenError = log.NewLogger("stderr"); logOpenError != nil {
-		mainlog.WithError(logOpenError).Error("Failed creating a logger to stderr")
+	if mainlog, logOpenError = log.GetLogger(log.OutputStderr.String()); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger to %s", log.OutputStderr)
 	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		"goguerrilla.conf", "Path to the configuration file")
@@ -73,7 +73,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			mainlog.Infof("Shutdown signal caught")
 			app.Shutdown()
-			mainlog.Infof("Shutdown completd, exiting.")
+			mainlog.Infof("Shutdown completed, exiting.")
 			return
 		} else {
 			mainlog.Infof("Shutdown, unknown signal caught")
@@ -85,7 +85,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
 
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
-		logger, _ := log.NewLogger(cmdConfig.LogFile)
+		logger, _ := log.GetLogger(cmdConfig.LogFile)
 		var err error
 		if err = backend.Shutdown(); err != nil {
 			logger.WithError(err).Warn("Backend failed to shutdown")
@@ -150,10 +150,12 @@ func serve(cmd *cobra.Command, args []string) {
 		writePid(ac.PidFile)
 	})
 	// change the logger from stdrerr to one from config
+	mainlog.Infof("main log configured to %s", cmdConfig.LogFile)
 	var logOpenError error
-	if mainlog, logOpenError = log.NewLogger(cmdConfig.LogFile); logOpenError != nil {
+	if mainlog, logOpenError = log.GetLogger(cmdConfig.LogFile); logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed changing to a custom logger [%s]", cmdConfig.LogFile)
 	}
+	app.SetLogger(mainlog)
 	sigHandler(app)
 
 }

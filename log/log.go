@@ -19,6 +19,7 @@ type Logger interface {
 	SetLevel(level string)
 	GetLevel() string
 	IsDebug() bool
+	AddHook(h log.Hook)
 }
 
 // Implements the Logger interface
@@ -34,12 +35,14 @@ type HookedLogger struct {
 type loggerCache map[string]Logger
 
 // loggers store the cached loggers created by NewLogger
-var loggers loggerCache
+var loggers struct {
+	cache loggerCache
+	// mutex guards the cache
+	sync.Mutex
+}
 
-// loggerMu guards the loggers
-var loggerMu sync.Mutex
-
-// NewLogger returns a struct that implements Logger (i.e HookedLogger) with a custom hook.
+// GetLogger returns a struct that implements Logger (i.e HookedLogger) with a custom hook.
+// It may be new or already created, (ie. singleton factory pattern)
 // The hook has been initialized with dest
 // dest can can be a path to a file, or the following string values:
 // "off" - disable any log output
@@ -49,13 +52,13 @@ var loggerMu sync.Mutex
 // Each Logger returned is cached on dest, subsequent call will get the cached logger if dest matches
 // If there was an error, the log will revert to stderr instead of using a custom hook
 
-func NewLogger(dest string) (Logger, error) {
-	defer loggerMu.Unlock()
-	loggerMu.Lock()
-	if loggers == nil {
-		loggers = make(loggerCache, 1)
+func GetLogger(dest string) (Logger, error) {
+	loggers.Lock()
+	defer loggers.Unlock()
+	if loggers.cache == nil {
+		loggers.cache = make(loggerCache, 1)
 	} else {
-		if l, ok := loggers[dest]; ok {
+		if l, ok := loggers.cache[dest]; ok {
 			// return the one we found in the cache
 			return l, nil
 		}
@@ -68,7 +71,7 @@ func NewLogger(dest string) (Logger, error) {
 	l.Logger = logrus
 
 	// cache it
-	loggers[dest] = l
+	loggers.cache[dest] = l
 
 	// setup the hook
 	if h, err := NewLogrusHook(dest); err != nil {
@@ -84,8 +87,13 @@ func NewLogger(dest string) (Logger, error) {
 
 }
 
+// AddHook adds a new logrus hook
+func (l *HookedLogger) AddHook(h log.Hook) {
+	log.AddHook(h)
+}
+
 func (l *HookedLogger) IsDebug() bool {
-	return l.GetLevel() == "debug"
+	return l.GetLevel() == log.DebugLevel.String()
 }
 
 // SetLevel sets a log level, one of the LogLevels
@@ -152,22 +160,59 @@ type LogrusHook struct {
 // "stdout" - log to stdout, lines will be written to os.Stdout
 // "off" - no log, lines will be written to ioutil.Discard
 func NewLogrusHook(dest string) (LoggerHook, error) {
-	defer hookMu.Unlock()
 	hookMu.Lock()
+	defer hookMu.Unlock()
 	hook := LogrusHook{fname: dest}
 	err := hook.setup(dest)
 	return &hook, err
 }
 
-// Setups sets the hook's writer w and file descriptor w
+type OutputOption int
+
+const (
+	OutputStderr OutputOption = 1 + iota
+	OutputStdout
+	OutputOff
+	OutputNull
+	OutputFile
+)
+
+var outputOptions = [...]string{
+	"stderr",
+	"stdout",
+	"off",
+	"",
+	"file",
+}
+
+func (o OutputOption) String() string {
+	return outputOptions[o-1]
+}
+
+func parseOutputOption(str string) OutputOption {
+	switch str {
+	case "stderr":
+		return OutputStderr
+	case "stdout":
+		return OutputStdout
+	case "off":
+		return OutputOff
+	case "":
+		return OutputNull
+	}
+	return OutputFile
+}
+
+// Setup sets the hook's writer w and file descriptor fd
 // assumes the hook.fd is closed and nil
 func (hook *LogrusHook) setup(dest string) error {
 
-	if dest == "" || dest == "stderr" {
+	out := parseOutputOption(dest)
+	if out == OutputNull || out == OutputStderr {
 		hook.w = os.Stderr
-	} else if dest == "stdout" {
+	} else if out == OutputStdout {
 		hook.w = os.Stdout
-	} else if dest == "off" {
+	} else if out == OutputOff {
 		hook.w = ioutil.Discard
 	} else {
 		if _, err := os.Stat(dest); err == nil {
@@ -219,8 +264,8 @@ func (hook *LogrusHook) openCreate(dest string) (err error) {
 
 // Fire implements the logrus Hook interface. It disables color text formatting if writing to a file
 func (hook *LogrusHook) Fire(entry *log.Entry) error {
-	defer hookMu.Unlock()
 	hookMu.Lock()
+	defer hookMu.Unlock()
 	if hook.fd != nil {
 		// save the old hook
 		oldhook := entry.Logger.Formatter
@@ -252,8 +297,8 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 
 // GetLogDest returns the destination of the log as a string
 func (hook *LogrusHook) GetLogDest() string {
-	defer hookMu.Unlock()
 	hookMu.Lock()
+	defer hookMu.Unlock()
 	return hook.fname
 }
 
@@ -262,17 +307,21 @@ func (hook *LogrusHook) Levels() []log.Level {
 	return log.AllLevels
 }
 
-// close and re-open log file descriptor, which is a special feature of this hook
+// Reopen closes and re-open log file descriptor, which is a special feature of this hook
 func (hook *LogrusHook) Reopen() error {
-	var err error
-	defer hookMu.Unlock()
 	hookMu.Lock()
+	defer hookMu.Unlock()
+	var err error
 	if hook.fd != nil {
 		if err = hook.fd.Close(); err != nil {
 			return err
 		}
-		if err := hook.openAppend(hook.fname); err != nil {
-			return err
+		// The file could have been re-named by an external program such as logrotate(8)
+		if _, err := os.Stat(hook.fname); err != nil {
+			// The file doesn't exist,create a new one.
+			return hook.openCreate(hook.fname)
+		} else {
+			return hook.openAppend(hook.fname)
 		}
 	}
 	return err

@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 )
 
-var mainlog log.Logger
-
 const (
 	// server has just been created
 	GuerrillaStateNew = iota
@@ -41,6 +39,7 @@ type Guerrilla interface {
 	Subscribe(topic string, fn interface{}) error
 	Publish(topic string, args ...interface{})
 	Unsubscribe(topic string, handler interface{}) error
+	SetLogger(log.Logger)
 }
 
 type guerrilla struct {
@@ -48,10 +47,23 @@ type guerrilla struct {
 	servers map[string]*server
 	backend backends.Backend
 	// guard controls access to g.servers
-	guard           sync.Mutex
-	state           int8
-	bus             *evbus.EventBus
-	newMainlogStore atomic.Value
+	guard   sync.Mutex
+	state   int8
+	bus     *evbus.EventBus
+	mainlog logStore
+}
+
+type logStore struct {
+	atomic.Value
+}
+
+// Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
+func (ls logStore) Get() log.Logger {
+	if v, ok := ls.Load().(log.Logger); ok {
+		return v
+	}
+	l, _ := log.GetLogger(log.OutputStderr.String())
+	return l
 }
 
 // Returns a new instance of Guerrilla with the given config, not yet running.
@@ -62,9 +74,10 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 		backend: b,
 		bus:     evbus.New(),
 	}
-	mainlog = l
+	g.mainlog.Store(l)
+
 	if ac.LogLevel != "" {
-		mainlog.SetLevel(ac.LogLevel)
+		g.mainlog.Get().SetLevel(ac.LogLevel)
 	}
 
 	g.state = GuerrillaStateNew
@@ -77,16 +90,16 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 
 // Instantiate servers
 func (g *guerrilla) makeServers() error {
-	mainlog.Debug("making servers")
+	g.mainlog.Get().Debug("making servers")
 	var errs Errors
 	for _, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
 			// server already instantiated
 			continue
 		}
-		server, err := newServer(&sc, g.backend, mainlog)
+		server, err := newServer(&sc, g.backend, g.mainlog.Get())
 		if err != nil {
-			mainlog.WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
+			g.mainlog.Get().WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
 			errs = append(errs, err)
 		}
 		if server != nil {
@@ -159,31 +172,38 @@ func (g *guerrilla) subscribeEvents() {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
 		})
-		mainlog.Infof("allowed_hosts config changed, a new list was set")
+		g.mainlog.Get().Infof("allowed_hosts config changed, a new list was set")
 	})
 
 	// the main log file changed
 	g.Subscribe("config_change:log_file", func(c *AppConfig) {
 		var err error
 		var l log.Logger
-		if l, err = log.NewLogger(c.LogFile); err == nil {
+		if l, err = log.GetLogger(c.LogFile); err == nil {
+			g.mainlog.Store(l)
 			g.mapServers(func(server *server) {
 				server.mainlogStore.Store(l) // it will change to hl on the next accepted client
 			})
-			mainlog.Infof("main log for new clients changed to to [%s]", c.LogFile)
+			g.mainlog.Get().Infof("main log for new clients changed to to [%s]", c.LogFile)
 		} else {
-			mainlog.WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
+			g.mainlog.Get().WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
 		}
 
 	})
 
+	// re-open the main log file (file not changed)
+	g.Subscribe("config_change:log_file", func(c *AppConfig) {
+		g.mainlog.Get().Reopen()
+		g.mainlog.Get().Infof("re-opened main log file [%s]", c.LogFile)
+	})
+
 	// when log level changes, apply to mainlog and server logs
 	g.Subscribe("config_change:log_level", func(c *AppConfig) {
-		mainlog.SetLevel(c.LogLevel)
+		g.mainlog.Get().SetLevel(c.LogLevel)
 		g.mapServers(func(server *server) {
 			server.log.SetLevel(c.LogLevel)
 		})
-		mainlog.Infof("log level changed to [%s]", c.LogLevel)
+		g.mainlog.Get().Infof("log level changed to [%s]", c.LogLevel)
 	})
 
 	// server config was updated
@@ -198,11 +218,11 @@ func (g *guerrilla) subscribeEvents() {
 		if i, _ := g.findServer(sc.ListenInterface); i == -1 {
 			// not found, lets add it
 			g.addServer(sc)
-			mainlog.Infof("New server added [%s]", sc.ListenInterface)
+			g.mainlog.Get().Infof("New server added [%s]", sc.ListenInterface)
 			if g.state == GuerrillaStateStarted {
 				err := g.Start()
 				if err != nil {
-					mainlog.WithError(err).Info("Event server_change:new_server returned errors when starting")
+					g.mainlog.Get().WithError(err).Info("Event server_change:new_server returned errors when starting")
 				}
 			}
 		}
@@ -211,10 +231,10 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe("server_change:start_server", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
-				mainlog.Infof("Starting server [%s]", server.listenInterface)
+				g.mainlog.Get().Infof("Starting server [%s]", server.listenInterface)
 				err := g.Start()
 				if err != nil {
-					mainlog.WithError(err).Info("Event server_change:start_server returned errors when starting")
+					g.mainlog.Get().WithError(err).Info("Event server_change:start_server returned errors when starting")
 				}
 			}
 		}
@@ -224,7 +244,7 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if server.state == ServerStateRunning {
 				server.Shutdown()
-				mainlog.Infof("Server [%s] stopped.", sc.ListenInterface)
+				g.mainlog.Get().Infof("Server [%s] stopped.", sc.ListenInterface)
 			}
 		}
 	})
@@ -233,7 +253,7 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			server.Shutdown()
 			g.removeServer(i, sc.ListenInterface)
-			mainlog.Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
+			g.mainlog.Get().Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
 		}
 	})
 
@@ -241,9 +261,9 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe("server_change:tls_config", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			if err := server.configureSSL(); err == nil {
-				mainlog.Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
+				g.mainlog.Get().Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
 			} else {
-				mainlog.WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
+				g.mainlog.Get().WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
 			}
 		}
 	})
@@ -264,14 +284,15 @@ func (g *guerrilla) subscribeEvents() {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
 			var err error
 			var l log.Logger
-			if l, err = log.NewLogger(sc.LogFile); err == nil {
-				server.logStore.Store(l) // it will change to hl on the next accepted client
-				mainlog.Infof("Server [%s] changed, new clients will log to: [%s]",
+			if l, err = log.GetLogger(sc.LogFile); err == nil {
+				g.mainlog.Store(l)
+				server.logStore.Store(l) // it will change to l on the next accepted client
+				g.mainlog.Get().Infof("Server [%s] changed, new clients will log to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,
 				)
 			} else {
-				mainlog.WithError(err).Errorf(
+				g.mainlog.Get().WithError(err).Errorf(
 					"Server [%s] log change failed to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,
@@ -282,8 +303,8 @@ func (g *guerrilla) subscribeEvents() {
 	// when the daemon caught a sighup
 	g.Subscribe("server_change:reopen_log_file", func(sc *ServerConfig) {
 		if i, server := g.findServer(sc.ListenInterface); i != -1 {
-			mainlog.Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
 			server.log.Reopen()
+			g.mainlog.Get().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
 		}
 	})
 
@@ -352,13 +373,13 @@ func (g *guerrilla) Shutdown() {
 	for ListenInterface, s := range g.servers {
 		if s.state == ServerStateRunning {
 			s.Shutdown()
-			mainlog.Infof("shutdown completed for [%s]", ListenInterface)
+			g.mainlog.Get().Infof("shutdown completed for [%s]", ListenInterface)
 		}
 	}
 	if err := g.backend.Shutdown(); err != nil {
-		mainlog.WithError(err).Warn("Backend failed to shutdown")
+		g.mainlog.Get().WithError(err).Warn("Backend failed to shutdown")
 	} else {
-		mainlog.Infof("Backend shutdown completed")
+		g.mainlog.Get().Infof("Backend shutdown completed")
 	}
 }
 
@@ -372,4 +393,8 @@ func (g *guerrilla) Publish(topic string, args ...interface{}) {
 
 func (g *guerrilla) Unsubscribe(topic string, handler interface{}) error {
 	return g.bus.Unsubscribe(topic, handler)
+}
+
+func (g *guerrilla) SetLogger(l log.Logger) {
+	g.mainlog.Store(l)
 }

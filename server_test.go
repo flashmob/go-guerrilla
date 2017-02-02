@@ -37,7 +37,8 @@ func getMockServerConfig() *ServerConfig {
 // RCP TO command only allows test.com host
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	var logOpenError error
-	mainlog, logOpenError = log.NewLogger(sc.LogFile)
+	var mainlog log.Logger
+	mainlog, logOpenError = log.GetLogger(sc.LogFile)
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
@@ -56,8 +57,13 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 }
 
 func TestHandleClient(t *testing.T) {
-
+	var mainlog log.Logger
+	var logOpenError error
 	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
 	client := NewClient(conn.Server, 1, mainlog)

@@ -257,7 +257,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		"config_change:backend_name":   false,
 		"server_change:new_server":     false,
 	}
-	mainlog, _ = log.NewLogger("off")
+	mainlog, _ = log.GetLogger("off")
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New("dummy", bcfg, mainlog)
@@ -313,7 +313,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 func TestServe(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -386,7 +386,7 @@ func TestServe(t *testing.T) {
 // then connect to it & HELO.
 func TestServerAddEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -453,7 +453,7 @@ func TestServerAddEvent(t *testing.T) {
 // then connect to 127.0.0.1:2228 & HELO.
 func TestServerStartEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -523,7 +523,7 @@ func TestServerStartEvent(t *testing.T) {
 
 func TestServerStopEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -611,7 +611,7 @@ func TestServerStopEvent(t *testing.T) {
 
 func TestAllowedHostsEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
 	conf := &CmdConfig{}           // blank one
@@ -713,7 +713,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	if _, err := os.Stat("../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
 		t.Error("Did not create cert ", err)
 	}
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
 	conf := &CmdConfig{}           // blank one
@@ -808,7 +808,7 @@ func TestTLSConfigEvent(t *testing.T) {
 // Test for missing TLS certificate, when starting or config reload
 
 func TestBadTLS(t *testing.T) {
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
 		mainlog.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
 	} else {
@@ -902,7 +902,7 @@ func TestBadTLS(t *testing.T) {
 // Start with configJsonD.json
 
 func TestSetTimeoutEvent(t *testing.T) {
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	//mainlog, _ = log.GetLogger("../../tests/testlog")
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
@@ -967,7 +967,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 // Start in log_level = debug
 // Load config & start server
 func TestDebugLevelChange(t *testing.T) {
-	mainlog, _ = log.NewLogger("../../tests/testlog")
+	//mainlog, _ = log.GetLogger("../../tests/testlog")
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
@@ -996,7 +996,7 @@ func TestDebugLevelChange(t *testing.T) {
 		}
 		conn.Close()
 	}
-	// set the log_level to debug
+	// set the log_level to info
 
 	newConf := conf // copy the cmdConfg
 	newConf.LogLevel = "info"
@@ -1009,7 +1009,7 @@ func TestDebugLevelChange(t *testing.T) {
 	sigHup()
 	time.Sleep(testPauseDuration) // log to change
 
-	// connect again, this time we should see debug
+	// connect again, this time we should see info
 	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
 	} else {
