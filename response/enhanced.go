@@ -2,7 +2,6 @@ package response
 
 import (
 	"fmt"
-	"strconv"
 )
 
 const (
@@ -23,81 +22,322 @@ const (
 	ClassPermanentFailure = 5
 )
 
+// class is a type for ClassSuccess, ClassTransientFailure and ClassPermanentFailure constants
+type class int
+
+// String implements stringer for the class type
+func (c class) String() string {
+	return fmt.Sprintf("%c00", c)
+}
+
 // codeMap for mapping Enhanced Status Code to Basic Code
 // Mapping according to https://www.iana.org/assignments/smtp-enhanced-status-codes/smtp-enhanced-status-codes.xml
-// This might not be entierly useful
+// This might not be entirely useful
 var codeMap = struct {
-	m map[string]int
-}{m: map[string]int{
-	"2.1.0":  250,
-	"2.1.5":  250,
-	"2.3.0":  250,
-	"2.5.0":  250,
-	"2.6.4":  250,
-	"2.6.8":  252,
-	"2.7.0":  220,
-	"4.1.1":  451,
-	"4.1.8":  451,
-	"4.2.4":  450,
-	"4.3.0":  421,
-	"4.3.1":  452,
-	"4.3.2":  453,
-	"4.4.1":  451,
-	"4.4.2":  421,
-	"4.4.3":  451,
-	"4.4.5":  451,
-	"4.5.0":  451,
-	"4.5.1":  430,
-	"4.5.3":  452,
-	"4.5.4":  451,
-	"4.7.0":  450,
-	"4.7.1":  451,
-	"4.7.12": 422,
-	"4.7.15": 450,
-	"4.7.24": 451,
-	"5.1.1":  550,
-	"5.1.3":  501,
-	"5.1.8":  501,
-	"5.1.10": 556,
-	"5.2.2":  552,
-	"5.2.3":  552,
-	"5.3.0":  550,
-	"5.3.4":  552,
-	"5.4.3":  550,
-	"5.5.0":  501,
-	"5.5.1":  500,
-	"5.5.2":  500,
-	"5.5.4":  501,
-	"5.5.6":  500,
-	"5.6.3":  554,
-	"5.6.6":  554,
-	"5.6.7":  553,
-	"5.6.8":  550,
-	"5.6.9":  550,
-	"5.7.0":  550,
-	"5.7.1":  551,
-	"5.7.2":  550,
-	"5.7.4":  504,
-	"5.7.8":  554,
-	"5.7.9":  534,
-	"5.7.10": 523,
-	"5.7.11": 524,
-	"5.7.13": 525,
-	"5.7.14": 535,
-	"5.7.15": 550,
-	"5.7.16": 552,
-	"5.7.17": 500,
-	"5.7.18": 500,
-	"5.7.19": 500,
-	"5.7.20": 550,
-	"5.7.21": 550,
-	"5.7.22": 550,
-	"5.7.23": 550,
-	"5.7.24": 550,
-	"5.7.25": 550,
-	"5.7.26": 550,
-	"5.7.27": 550,
+	m map[EnhancedStatusCode]int
+}{m: map[EnhancedStatusCode]int{
+
+	EnhancedStatusCode{ClassSuccess, OtherAddressStatus}:               250,
+	EnhancedStatusCode{ClassSuccess, DestinationMailboxAddressValid}:   250,
+	EnhancedStatusCode{ClassSuccess, OtherOrUndefinedMailSystemStatus}: 250,
+	EnhancedStatusCode{ClassSuccess, OtherOrUndefinedProtocolStatus}:   250,
+	EnhancedStatusCode{ClassSuccess, ConversionWithLossPerformed}:      250,
+	EnhancedStatusCode{ClassSuccess, ".6.8"}:                           252,
+	EnhancedStatusCode{ClassSuccess, ".7.0"}:                           220,
+
+	EnhancedStatusCode{ClassTransientFailure, BadDestinationMailboxAddress}:      451,
+	EnhancedStatusCode{ClassTransientFailure, BadSendersSystemAddress}:           451,
+	EnhancedStatusCode{ClassTransientFailure, MailingListExpansionProblem}:       450,
+	EnhancedStatusCode{ClassTransientFailure, OtherOrUndefinedMailSystemStatus}:  421,
+	EnhancedStatusCode{ClassTransientFailure, MailSystemFull}:                    452,
+	EnhancedStatusCode{ClassTransientFailure, SystemNotAcceptingNetworkMessages}: 453,
+	EnhancedStatusCode{ClassTransientFailure, NoAnswerFromHost}:                  451,
+	EnhancedStatusCode{ClassTransientFailure, BadConnection}:                     421,
+	EnhancedStatusCode{ClassTransientFailure, RoutingServerFailure}:              451,
+	EnhancedStatusCode{ClassTransientFailure, NetworkCongestion}:                 451,
+	EnhancedStatusCode{ClassTransientFailure, OtherOrUndefinedProtocolStatus}:    451,
+	EnhancedStatusCode{ClassTransientFailure, InvalidCommand}:                    430,
+	EnhancedStatusCode{ClassTransientFailure, TooManyRecipients}:                 452,
+	EnhancedStatusCode{ClassTransientFailure, InvalidCommandArguments}:           451,
+	EnhancedStatusCode{ClassTransientFailure, ".7.0"}:                            450,
+	EnhancedStatusCode{ClassTransientFailure, ".7.1"}:                            451,
+	EnhancedStatusCode{ClassTransientFailure, ".7.12"}:                           422,
+	EnhancedStatusCode{ClassTransientFailure, ".7.15"}:                           450,
+	EnhancedStatusCode{ClassTransientFailure, ".7.24"}:                           451,
+
+	EnhancedStatusCode{ClassPermanentFailure, BadDestinationMailboxAddress}:            550,
+	EnhancedStatusCode{ClassPermanentFailure, BadDestinationMailboxAddressSyntax}:      501,
+	EnhancedStatusCode{ClassPermanentFailure, BadSendersSystemAddress}:                 501,
+	EnhancedStatusCode{ClassPermanentFailure, ".1.10"}:                                 556,
+	EnhancedStatusCode{ClassPermanentFailure, MailboxFull}:                             552,
+	EnhancedStatusCode{ClassPermanentFailure, MessageLengthExceedsAdministrativeLimit}: 552,
+	EnhancedStatusCode{ClassPermanentFailure, OtherOrUndefinedMailSystemStatus}:        550,
+	EnhancedStatusCode{ClassPermanentFailure, MessageTooBigForSystem}:                  552,
+	EnhancedStatusCode{ClassPermanentFailure, RoutingServerFailure}:                    550,
+	EnhancedStatusCode{ClassPermanentFailure, OtherOrUndefinedProtocolStatus}:          501,
+	EnhancedStatusCode{ClassPermanentFailure, InvalidCommand}:                          500,
+	EnhancedStatusCode{ClassPermanentFailure, SyntaxError}:                             500,
+	EnhancedStatusCode{ClassPermanentFailure, InvalidCommandArguments}:                 501,
+	EnhancedStatusCode{ClassPermanentFailure, ".5.6"}:                                  500,
+	EnhancedStatusCode{ClassPermanentFailure, ConversionRequiredButNotSupported}:       554,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.6"}:                                  554,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.7"}:                                  553,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.8"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".6.9"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.0"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.1"}:                                  551,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.2"}:                                  550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.4"}:                                  504,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.8"}:                                  554,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.9"}:                                  534,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.10"}:                                 523,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.11"}:                                 524,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.13"}:                                 525,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.14"}:                                 535,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.15"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.16"}:                                 552,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.17"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.18"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.19"}:                                 500,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.20"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.21"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.22"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.23"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.24"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.25"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.26"}:                                 550,
+	EnhancedStatusCode{ClassPermanentFailure, ".7.27"}:                                 550,
 }}
+
+var (
+	// Canned is to be read-only, except in the init() function
+	Canned Responses
+)
+
+// Responses has some already pre-constructed responses
+type Responses struct {
+
+	// The 500's
+	FailLineTooLong              string
+	FailNestedMailCmd            string
+	FailNoSenderDataCmd          string
+	FailNoRecipientsDataCmd      string
+	FailUnrecognizedCmd          string
+	FailMaxUnrecognizedCmd       string
+	FailReadLimitExceededDataCmd string
+	FailMessageSizeExceeded      string
+	FailReadErrorDataCmd         string
+	FailPathTooLong              string
+	FailInvalidAddress           string
+	FailLocalPartTooLong         string
+	FailDomainTooLong            string
+	FailBackendNotRunning        string
+	FailBackendTransaction       string
+	FailBackendTimeout           string
+
+	// The 400's
+	ErrorTooManyRecipients string
+	ErrorRelayDenied       string
+	ErrorShutdown          string
+
+	// The 200's
+	SuccessMailCmd       string
+	SuccessRcptCmd       string
+	SuccessResetCmd      string
+	SuccessVerifyCmd     string
+	SuccessNoopCmd       string
+	SuccessQuitCmd       string
+	SuccessDataCmd       string
+	SuccessStartTLSCmd   string
+	SuccessMessageQueued string
+}
+
+// Called automatically during package load to build up the Responses struct
+func init() {
+
+	// There's even a Wikipedia page for canned responses: https://en.wikipedia.org/wiki/Canned_response
+	Canned = Responses{}
+
+	Canned.FailLineTooLong = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Line too long.",
+	}).String()
+
+	Canned.FailNestedMailCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: nested MAIL command",
+	}).String()
+
+	Canned.SuccessMailCmd = (&Response{
+		EnhancedCode: OtherAddressStatus,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessRcptCmd = (&Response{
+		EnhancedCode: DestinationMailboxAddressValid,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessResetCmd = Canned.SuccessMailCmd
+	Canned.SuccessNoopCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		Class:        ClassSuccess,
+	}).String()
+
+	Canned.SuccessVerifyCmd = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    252,
+		Class:        ClassSuccess,
+		Comment:      "Cannot verify user",
+	}).String()
+
+	Canned.ErrorTooManyRecipients = (&Response{
+		EnhancedCode: TooManyRecipients,
+		BasicCode:    452,
+		Class:        ClassTransientFailure,
+		Comment:      "Too many recipients",
+	}).String()
+
+	Canned.ErrorRelayDenied = (&Response{
+		EnhancedCode: BadDestinationMailboxAddress,
+		BasicCode:    454,
+		Class:        ClassTransientFailure,
+		Comment:      "Error: Relay access denied: ",
+	}).String()
+
+	Canned.SuccessQuitCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    221,
+		Class:        ClassSuccess,
+		Comment:      "Bye",
+	}).String()
+
+	Canned.FailNoSenderDataCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: No sender",
+	}).String()
+
+	Canned.FailNoRecipientsDataCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    503,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: No recipients",
+	}).String()
+
+	Canned.SuccessDataCmd = "354 Enter message, ending with '.' on a line by itself"
+
+	Canned.SuccessStartTLSCmd = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    220,
+		Class:        ClassSuccess,
+		Comment:      "Ready to start TLS",
+	}).String()
+
+	Canned.FailUnrecognizedCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Unrecognized command",
+	}).String()
+
+	Canned.FailMaxUnrecognizedCmd = (&Response{
+		EnhancedCode: InvalidCommand,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Too many unrecognized commands",
+	}).String()
+
+	Canned.ErrorShutdown = (&Response{
+		EnhancedCode: OtherOrUndefinedMailSystemStatus,
+		BasicCode:    421,
+		Class:        ClassTransientFailure,
+		Comment:      "Server is shutting down. Please try again later. Sayonara!",
+	}).String()
+
+	Canned.FailReadLimitExceededDataCmd = (&Response{
+		EnhancedCode: SyntaxError,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailMessageSizeExceeded = (&Response{
+		EnhancedCode: SyntaxError,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailReadErrorDataCmd = (&Response{
+		EnhancedCode: OtherOrUndefinedMailSystemStatus,
+		BasicCode:    451,
+		Class:        ClassTransientFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.FailPathTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Path too long",
+	}).String()
+
+	Canned.FailInvalidAddress = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    501,
+		Class:        ClassPermanentFailure,
+		Comment:      "Invalid address",
+	}).String()
+
+	Canned.FailLocalPartTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Local part too long, cannot exceed 64 characters",
+	}).String()
+
+	Canned.FailDomainTooLong = (&Response{
+		EnhancedCode: InvalidCommandArguments,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Domain cannot exceed 255 characters",
+	}).String()
+
+	Canned.FailBackendNotRunning = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Transaction failed - backend not running ",
+	}).String()
+
+	Canned.FailBackendTransaction = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: ",
+	}).String()
+
+	Canned.SuccessMessageQueued = (&Response{
+		EnhancedCode: OtherStatus,
+		BasicCode:    250,
+		Class:        ClassSuccess,
+		Comment:      "OK : queued as ",
+	}).String()
+
+	Canned.FailBackendTimeout = (&Response{
+		EnhancedCode: OtherOrUndefinedProtocolStatus,
+		BasicCode:    554,
+		Class:        ClassPermanentFailure,
+		Comment:      "Error: transaction timeout",
+	}).String()
+
+}
 
 // DefaultMap contains defined default codes (RfC 3463)
 const (
@@ -143,36 +383,49 @@ const (
 	ConversionFailed                        = ".6.5"
 )
 
-// TODO: More defaults needed....
 var defaultTexts = struct {
-	m map[string]string
-}{m: map[string]string{
-	"2.0.0": "OK",
-	"2.1.0": "OK",
-	"2.1.5": "Recipient valid",
-	"2.5.0": "OK",
-	"4.5.3": "Too many recipients",
-	"4.5.4": "Relay access denied",
-	"5.5.1": "Invalid command",
+	m map[EnhancedStatusCode]string
+}{m: map[EnhancedStatusCode]string{
+	EnhancedStatusCode{ClassSuccess, ".0.0"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".1.0"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".1.5"}:          "OK",
+	EnhancedStatusCode{ClassSuccess, ".5.0"}:          "OK",
+	EnhancedStatusCode{ClassTransientFailure, ".5.3"}: "Too many recipients",
+	EnhancedStatusCode{ClassTransientFailure, ".5.4"}: "Relay access denied",
+	EnhancedStatusCode{ClassPermanentFailure, ".5.1"}: "Invalid command",
 }}
 
 // Response type for Stringer interface
 type Response struct {
-	EnhancedCode string
+	EnhancedCode subjectDetail
 	BasicCode    int
-	Class        int
+	Class        class
 	// Comment is optional
 	Comment string
 }
 
-// Custom returns a custom Response Stringer
+// it looks like this ".5.4"
+type subjectDetail string
+
+// EnhancedStatus are the ones that look like 2.1.0
+type EnhancedStatusCode struct {
+	Class             class
+	SubjectDetailCode subjectDetail
+}
+
+// String returns a string representation of EnhancedStatus
+func (e EnhancedStatusCode) String() string {
+	return fmt.Sprintf("%d%s", e.Class, e.SubjectDetailCode)
+}
+
+// String returns a custom Response as a string
 func (r *Response) String() string {
-	e := buildEnhancedResponseFromDefaultStatus(r.Class, r.EnhancedCode)
+
 	basicCode := r.BasicCode
 	comment := r.Comment
 	if len(comment) == 0 && r.BasicCode == 0 {
-		comment = defaultTexts.m[r.EnhancedCode]
-		if len(comment) == 0 {
+		var ok bool
+		if comment, ok = defaultTexts.m[EnhancedStatusCode{r.Class, r.EnhancedCode}]; !ok {
 			switch r.Class {
 			case 2:
 				comment = "OK"
@@ -183,49 +436,19 @@ func (r *Response) String() string {
 			}
 		}
 	}
+	e := EnhancedStatusCode{r.Class, r.EnhancedCode}
 	if r.BasicCode == 0 {
 		basicCode = getBasicStatusCode(e)
 	}
 
-	return fmt.Sprintf("%d %s %s", basicCode, e, comment)
+	return fmt.Sprintf("%d %s %s", basicCode, e.String(), comment)
 }
 
-/*
-// CustomString builds an enhanced status code string using your custom string and basic code
-func CustomString(enhancedCode string, basicCode, class int, comment string) string {
-	e := buildEnhancedResponseFromDefaultStatus(class, enhancedCode)
-	return fmt.Sprintf("%d %s %s", basicCode, e, comment)
-}
-
-// String builds an enhanced status code string
-func String(enhancedCode string, class int) string {
-	e := buildEnhancedResponseFromDefaultStatus(class, enhancedCode)
-	basicCode := getBasicStatusCode(e)
-	comment := defaultTexts.m[enhancedCode]
-
-	if len(comment) == 0 {
-		switch class {
-		case 2:
-			comment = "OK"
-		case 4:
-			comment = "Temporary failure."
-		case 5:
-			comment = "Permanent failure."
-		}
-	}
-	return CustomString(enhancedCode, basicCode, class, comment)
-}
-*/
-func getBasicStatusCode(enhancedStatusCode string) int {
-	if val, ok := codeMap.m[enhancedStatusCode]; ok {
+// getBasicStatusCode gets the basic status code from codeMap, or fallback code if not mapped
+func getBasicStatusCode(e EnhancedStatusCode) int {
+	if val, ok := codeMap.m[e]; ok {
 		return val
 	}
 	// Fallback if code is not defined
-	fb, _ := strconv.Atoi(fmt.Sprintf("%c00", enhancedStatusCode[0]))
-	return fb
-}
-
-func buildEnhancedResponseFromDefaultStatus(c int, status string) string {
-	// Construct code
-	return fmt.Sprintf("%d%s", c, status)
+	return int(e.Class) * 100
 }

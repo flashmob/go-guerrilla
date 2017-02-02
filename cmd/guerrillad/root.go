@@ -1,7 +1,7 @@
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -23,9 +23,9 @@ func init() {
 		"print out more debug information")
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if verbose {
-			log.SetLevel(log.DebugLevel)
+			logrus.SetLevel(logrus.DebugLevel)
 		} else {
-			log.SetLevel(log.InfoLevel)
+			logrus.SetLevel(logrus.InfoLevel)
 		}
 	}
 }

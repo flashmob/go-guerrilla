@@ -2,6 +2,7 @@ package guerrilla
 
 import (
 	"errors"
+	"github.com/flashmob/go-guerrilla/log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -120,7 +121,7 @@ func (p *Pool) GetActiveClientsCount() int {
 }
 
 // Borrow a Client from the pool. Will block if len(activeClients) > maxClients
-func (p *Pool) Borrow(conn net.Conn, clientID uint64) (Poolable, error) {
+func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger) (Poolable, error) {
 	p.poolGuard.Lock()
 	defer p.poolGuard.Unlock()
 
@@ -135,7 +136,7 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64) (Poolable, error) {
 		case c = <-p.pool:
 			c.init(conn, clientID)
 		default:
-			c = NewClient(conn, clientID)
+			c = NewClient(conn, clientID, logger)
 		}
 		p.activeClientsAdd(c)
 

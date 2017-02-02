@@ -153,6 +153,7 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 		return
 	}
 	pem.Encode(keyOut, pemBlockForKey(priv))
+	keyOut.Sync()
 	keyOut.Close()
 
 }

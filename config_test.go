@@ -1,10 +1,8 @@
 package guerrilla
 
 import (
-	"bufio"
-	"bytes"
-	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"io/ioutil"
 	"os"
@@ -22,6 +20,8 @@ func init() {
 //
 var configJsonA = `
 {
+    "log_file" : "./tests/testlog",
+    "log_level" : "debug",
     "pid_file" : "/var/run/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
     "backend_name" : "dummy",
@@ -40,8 +40,7 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:2526",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "max_clients": 2
         },
 
         {
@@ -54,8 +53,7 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:2527",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients":1,
-            "log_file":"/dev/stdout"
+            "max_clients":1
         },
 
         {
@@ -68,8 +66,7 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:9999",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "max_clients": 2
         },
 
         {
@@ -82,8 +79,7 @@ var configJsonA = `
             "listen_interface":"127.0.0.1:3333",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "max_clients": 2
         }
 
 
@@ -98,6 +94,8 @@ var configJsonA = `
 
 var configJsonB = `
 {
+    "log_file" : "./tests/testlog",
+    "log_level" : "debug",
     "pid_file" : "/var/run/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
     "backend_name" : "dummy",
@@ -116,8 +114,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:2526",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients": 3,
-            "log_file":"/var/log/smtpd.log"
+            "max_clients": 3
         },
         {
             "is_enabled" : true,
@@ -129,8 +126,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:2527",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "max_clients": 2
         },
 
         {
@@ -143,8 +139,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:4654",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":1,
-            "log_file":"/dev/stdout"
+            "max_clients":1
         },
 
         {
@@ -157,8 +152,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:3333",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "max_clients": 2
         }
     ]
 }
@@ -201,39 +195,33 @@ func TestSampleConfig(t *testing.T) {
 // make sure that we get all the config change events
 func TestConfigChangeEvents(t *testing.T) {
 
-	// hold the output of logs
-	var logBuffer bytes.Buffer
-	// logs redirected to this writer
-	var logOut *bufio.Writer
-	// read the logs
-	var logIn *bufio.Reader
-	logOut = bufio.NewWriter(&logBuffer)
-	logIn = bufio.NewReader(&logBuffer)
-	log.SetLevel(log.DebugLevel)
-	//log.SetOutput(os.Stdout)
-	log.SetOutput(logOut)
-
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
+	logger, _ := log.GetLogger(oldconf.LogFile)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, _ := backends.New("dummy", bcfg)
-	app, _ := New(oldconf, backend)
+	backend, _ := backends.New("dummy", bcfg, logger)
+	app, _ := New(oldconf, backend, logger)
 	// simulate timestamp change
 	time.Sleep(time.Second + time.Millisecond*500)
 	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
+	newconf.Servers[0].LogFile = "/dev/stderr" // test for log file change
+	newconf.LogLevel = "off"
+	newconf.LogFile = "off"
 	expectedEvents := map[string]bool{
-		"config_change:pid_file":                       false,
-		"config_change:allowed_hosts":                  false,
-		"server_change:new_server":                     false, // 127.0.0.1:4654 will be added
-		"server_change:remove_server":                  false, // 127.0.0.1:9999 server removed
-		"server_change:stop_server":                    false, // 127.0.0.1:3333: server (disabled)
-		"server_change:127.0.0.1:2526:new_log_file":    false,
-		"server_change:127.0.0.1:2527:reopen_log_file": false,
-		"server_change:timeout":                        false, // 127.0.0.1:2526 timeout
-		//"server_change:tls_config":      false, // 127.0.0.1:2526
+		"config_change:pid_file":        false,
+		"config_change:log_file":        false,
+		"config_change:log_level":       false,
+		"config_change:allowed_hosts":   false,
+		"server_change:new_server":      false, // 127.0.0.1:4654 will be added
+		"server_change:remove_server":   false, // 127.0.0.1:9999 server removed
+		"server_change:stop_server":     false, // 127.0.0.1:3333: server (disabled)
+		"server_change:new_log_file":    false, // 127.0.0.1:2526
+		"server_change:reopen_log_file": false, // 127.0.0.1:2527
+		"server_change:timeout":         false, // 127.0.0.1:2526 timeout
+		//"server_change:tls_config":    false, // 127.0.0.1:2526
 		"server_change:max_clients": false, // 127.0.0.1:2526
 		"server_change:tls_config":  false, // 127.0.0.1:2527 timestamp changed on certificates
 	}
@@ -279,6 +267,5 @@ func TestConfigChangeEvents(t *testing.T) {
 	}
 
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate(oldconf.LogFile, 0)
 }

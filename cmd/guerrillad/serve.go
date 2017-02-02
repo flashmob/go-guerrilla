@@ -4,20 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"reflect"
 )
 
 const (
@@ -36,9 +35,15 @@ var (
 
 	cmdConfig     = CmdConfig{}
 	signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUP
+	mainlog       log.Logger
 )
 
 func init() {
+	// log to stderr on startup
+	var logOpenError error
+	if mainlog, logOpenError = log.GetLogger(log.OutputStderr.String()); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger to %s", log.OutputStderr)
+	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		"goguerrilla.conf", "Path to the configuration file")
 	// intentionally didn't specify default pidFile; value from config is used if flag is empty
@@ -59,19 +64,19 @@ func sigHandler(app guerrilla.Guerrilla) {
 			newConfig := CmdConfig{}
 			err := readConfig(configPath, pidFile, &newConfig)
 			if err != nil {
-				log.WithError(err).Error("Error while ReadConfig (reload)")
+				mainlog.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
 				cmdConfig = newConfig
-				log.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
+				mainlog.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
 				cmdConfig.emitChangeEvents(&oldConfig, app)
 			}
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
-			log.Infof("Shutdown signal caught")
+			mainlog.Infof("Shutdown signal caught")
 			app.Shutdown()
-			log.Infof("Shutdown completd, exiting.")
+			mainlog.Infof("Shutdown completed, exiting.")
 			return
 		} else {
-			log.Infof("Shutdown, unknown signal caught")
+			mainlog.Infof("Shutdown, unknown signal caught")
 			return
 		}
 	}
@@ -80,17 +85,18 @@ func sigHandler(app guerrilla.Guerrilla) {
 func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
 
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
+		logger, _ := log.GetLogger(cmdConfig.LogFile)
 		var err error
 		if err = backend.Shutdown(); err != nil {
-			log.WithError(err).Warn("Backend failed to shutdown")
+			logger.WithError(err).Warn("Backend failed to shutdown")
 			return
 		}
-		backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig)
+		backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
 		if err != nil {
-			log.WithError(err).Fatalf("Error while loading the backend %q",
+			logger.WithError(err).Fatalf("Error while loading the backend %q",
 				cmdConfig.BackendName)
 		} else {
-			log.Info("Backend started:", cmdConfig.BackendName)
+			logger.Info("Backend started:", cmdConfig.BackendName)
 		}
 	})
 }
@@ -100,7 +106,7 @@ func serve(cmd *cobra.Command, args []string) {
 
 	err := readConfig(configPath, pidFile, &cmdConfig)
 	if err != nil {
-		log.WithError(err).Fatal("Error while reading config")
+		mainlog.WithError(err).Fatal("Error while reading config")
 	}
 
 	// Check that max clients is not greater than system open file limit.
@@ -112,26 +118,28 @@ func serve(cmd *cobra.Command, args []string) {
 			maxClients += s.MaxClients
 		}
 		if maxClients > fileLimit {
-			log.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			mainlog.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}
 
 	// Backend setup
 	var backend backends.Backend
-	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig)
+	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, mainlog)
 	if err != nil {
-		log.WithError(err).Fatalf("Error while loading the backend %q",
+		mainlog.WithError(err).Fatalf("Error while loading the backend %q",
 			cmdConfig.BackendName)
 	}
 
-	app, err := guerrilla.New(&cmdConfig.AppConfig, backend)
+	app, err := guerrilla.New(&cmdConfig.AppConfig, backend, mainlog)
 	if err != nil {
-		log.WithError(err).Error("Error(s) when creating new server(s)")
+		mainlog.WithError(err).Error("Error(s) when creating new server(s)")
 	}
+
+	// start the app
 	err = app.Start()
 	if err != nil {
-		log.WithError(err).Error("Error(s) when starting server(s)")
+		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
 	subscribeBackendEvent("config_change:backend_config", backend, app)
 	subscribeBackendEvent("config_change:backend_name", backend, app)
@@ -141,6 +149,13 @@ func serve(cmd *cobra.Command, args []string) {
 	app.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
 		writePid(ac.PidFile)
 	})
+	// change the logger from stdrerr to one from config
+	mainlog.Infof("main log configured to %s", cmdConfig.LogFile)
+	var logOpenError error
+	if mainlog, logOpenError = log.GetLogger(cmdConfig.LogFile); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed changing to a custom logger [%s]", cmdConfig.LogFile)
+	}
+	app.SetLogger(mainlog)
 	sigHandler(app)
 
 }
@@ -218,12 +233,12 @@ func writePid(pidFile string) {
 			pid := os.Getpid()
 			if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err == nil {
 				f.Sync()
-				log.Infof("pid_file (%s) written with pid:%v", pidFile, pid)
+				mainlog.Infof("pid_file (%s) written with pid:%v", pidFile, pid)
 			} else {
-				log.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
+				mainlog.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
 			}
 		} else {
-			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
+			mainlog.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
 		}
 	}
 }
