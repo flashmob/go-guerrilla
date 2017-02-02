@@ -58,7 +58,7 @@ type logStore struct {
 }
 
 // Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
-func (ls logStore) Get() log.Logger {
+func (ls *logStore) Get() log.Logger {
 	if v, ok := ls.Load().(log.Logger); ok {
 		return v
 	}
@@ -165,6 +165,7 @@ func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
 	return g.servers
 }
 
+// subscribeEvents subscribes event handlers for configuration change events
 func (g *guerrilla) subscribeEvents() {
 
 	// allowed_hosts changed, set for all servers
@@ -192,7 +193,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// re-open the main log file (file not changed)
-	g.Subscribe("config_change:log_file", func(c *AppConfig) {
+	g.Subscribe("config_change:reopen_log_file", func(c *AppConfig) {
 		g.mainlog.Get().Reopen()
 		g.mainlog.Get().Infof("re-opened main log file [%s]", c.LogFile)
 	})

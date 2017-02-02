@@ -106,7 +106,7 @@ type redisClient struct {
 type compressedData struct {
 	extraHeaders []byte
 	data         *bytes.Buffer
-	pool         sync.Pool
+	pool         *sync.Pool
 }
 
 // newCompressedData returns a new CompressedData
@@ -118,7 +118,7 @@ func newCompressedData() *compressedData {
 		},
 	}
 	return &compressedData{
-		pool: p,
+		pool: &p,
 	}
 }
 
@@ -319,7 +319,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 	var err error
 	db, err = g.mysqlConnect()
 	if err != nil {
-		mainlog.Fatalf("cannot open mysql", err)
+		mainlog.Fatalf("cannot open mysql: %s", err)
 	}
 
 	// start the query SQL batching where we will send data via the feeder channel
