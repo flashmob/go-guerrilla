@@ -55,7 +55,7 @@ func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
 		conn: conn,
 		Envelope: &envelope.Envelope{
-			RemoteAddress: conn.RemoteAddr().String(),
+			RemoteAddress: getRemoteAddr(conn),
 		},
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
@@ -172,10 +172,10 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.ID = clientID
 	c.TLS = false
 	c.errors = 0
-	//c.response.Reset()
 	c.Helo = ""
 	c.Header = nil
-	c.RemoteAddress = conn.RemoteAddr().String()
+	c.RemoteAddress = getRemoteAddr(conn)
+
 }
 
 // getID returns the client's unique ID
@@ -199,4 +199,13 @@ func (client *client) upgradeToTLS(tlsConfig *tls.Config) error {
 	client.bufin.Reset(client.conn)
 	client.TLS = true
 	return err
+}
+
+func getRemoteAddr(conn net.Conn) string {
+	if addr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		// we just want the IP (not the port)
+		return addr.IP.String()
+	} else {
+		return conn.RemoteAddr().Network()
+	}
 }
