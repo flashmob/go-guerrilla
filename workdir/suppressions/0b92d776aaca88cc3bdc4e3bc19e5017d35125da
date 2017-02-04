@@ -1,0 +1,4 @@
+panic: runtime error: invalid memory address or nil pointer dereference
+panic
+github.com/flashmob/go-guerrilla.(*server).handleClient
+github.com/flashmob/go-guerrilla.Fuzz.func2

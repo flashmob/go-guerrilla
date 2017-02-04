@@ -1,0 +1,9 @@
+HELple.com BODY=8BITMIME
+HELP
+NOOP
+RCPT TO:<test2@test.com>
+RCPT TO:<test3@test.com>
+DATA
+No subject
+..Now you're just somebody that i used to know
+.
