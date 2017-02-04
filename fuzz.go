@@ -115,6 +115,10 @@ func Fuzz(data []byte) int {
 	time.Sleep(time.Millisecond + 10)
 
 	for {
+		if mockClient.bufout.Buffered() == 0 {
+			break
+		}
+
 		b = make([]byte, 1024)
 		if n, err := conn.Client.Read(b); err != nil {
 			if isFuzzDebug {
@@ -131,9 +135,7 @@ func Fuzz(data []byte) int {
 		if isFuzzDebug {
 			fmt.Println("buffered:", mockClient.bufout.Buffered())
 		}
-		if mockClient.bufout.Buffered() == 0 {
-			break
-		}
+
 	}
 
 	return 1

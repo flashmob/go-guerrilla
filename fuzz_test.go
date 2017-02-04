@@ -192,3 +192,12 @@ func TestFuzz3(t *testing.T) {
 	}
 
 }
+
+func TestFuzz4(t *testing.T) {
+	isFuzzDebug = true
+	result := Fuzz([]byte("MAIL from: <\r"))
+	if result != 1 {
+		t.Error("Fuzz test did not return 1")
+	}
+
+}
