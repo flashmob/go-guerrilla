@@ -1,17 +1,15 @@
-// +build gofuzz
+// build gofuzz
 
 package guerrilla
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io"
-	"sync"
-
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mocks"
+	"io"
+	"sync"
 	"time"
 )
 
@@ -77,7 +75,6 @@ var isFuzzDebug bool
 func Fuzz(data []byte) int {
 
 	var wg sync.WaitGroup
-	isFuzzDebug := true
 	// grab a new mocked tcp connection, it consists of two pipes (io.Pipe)
 	conn := mocks.NewConn()
 
@@ -90,6 +87,7 @@ func Fuzz(data []byte) int {
 	}
 
 	defer func() {
+		conn.Close()
 		// wait for handleClient to exit
 		wg.Wait()
 		// return to the pool
@@ -101,47 +99,42 @@ func Fuzz(data []byte) int {
 		fuzzServer.handleClient(mockClient)
 		wg.Done()
 	}()
-	// Get the greeting from the server
-	r := bufio.NewReader(conn.Client)
-	line, _ := r.ReadString('\n')
-	if isFuzzDebug {
-		fmt.Println(line)
+	b := make([]byte, 1024)
+	if n, err := conn.Client.Read(b); err != nil {
+		return 0
+	} else if isFuzzDebug {
+		fmt.Println("Read", n, string(b))
 	}
 
 	// Feed the connection with fuzz data (we are the _client_ end of the connection)
-	bw := bufio.NewWriter(conn.Client)
-
-	if _, err = io.Copy(bw, bytes.NewReader(data)); err != nil {
-		panic(err)
-	}
-	if err = bw.Flush(); err != nil {
-		panic(err)
+	if _, err = io.Copy(conn.Client, bytes.NewReader(data)); err != nil {
+		return 0
 	}
 
-	time.Sleep(time.Millisecond * 1)
-
-	ret := 1
+	// allow handleClient to process
+	time.Sleep(time.Millisecond + 10)
 
 	for {
-
-		if line, err = r.ReadString('\n'); err != nil {
-			panic(err)
-			break
+		b = make([]byte, 1024)
+		if n, err := conn.Client.Read(b); err != nil {
+			if isFuzzDebug {
+				fmt.Println(string(b), err)
+			}
+			return 1
 		} else if isFuzzDebug {
-			fmt.Print(line)
-
+			if isFuzzDebug {
+				fmt.Println("Read", n, string(b))
+			}
 		}
-		//fmt.Println(r.Buffered(), mockClient.bufout.Buffered())
-		if r.Buffered() == 0 && mockClient.bufout.Buffered() == 0 {
-			conn.Close()
+		// allow handleClient to process
+		time.Sleep(time.Millisecond + 10)
+		if isFuzzDebug {
+			fmt.Println("buffered:", mockClient.bufout.Buffered())
+		}
+		if mockClient.bufout.Buffered() == 0 {
 			break
 		}
-		if mockClient.bufout.Buffered() > 0 {
-			// looks like the client still hasn't processed our command(s)
-			time.Sleep(time.Millisecond * 1)
-		}
-
 	}
 
-	return ret
+	return 1
 }

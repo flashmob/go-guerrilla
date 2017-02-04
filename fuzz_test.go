@@ -148,23 +148,47 @@ func TestGenerateCorpus(t *testing.T) {
 		"MAIL FROM: <test@test.com\r\n"
 	writeCorpos("20", []byte(str))
 
+	str = "DATA:\r\n"
+	writeCorpos("21", []byte(str))
+
+	str = "STARTTLS\r\n"
+	writeCorpos("22", []byte(str))
+
 }
 
-// Tests the Fuzz function. Note that to run this test, edit at the top of fuzz.go
-// +build gofuzz
-// change to:
-// build gofuzz
-// don'f forget to change back!
-//
-// uncomment once you've changed the line.
-/*
-func TestFuzz (t *testing.T) {
+// Tests the Fuzz function.
+
+func TestFuzz(t *testing.T) {
+	isFuzzDebug = true
+	result := Fuzz([]byte("MAIL from: <\r"))
+	if result != 0 {
+		t.Error("Fuzz test did not return 0")
+	}
+	result = Fuzz([]byte("MAIL from: <\r\nHELP\r\n"))
+	if result != 1 {
+		t.Error("Fuzz test did not return 1")
+	}
+	result = Fuzz([]byte("EHLO me\r\n"))
+	if result != 1 {
+		t.Error("Fuzz test did not return 1")
+	}
+
+}
+
+func TestFuzz2(t *testing.T) {
 	isFuzzDebug = true
 	result := Fuzz([]byte("MAIL from: <\r\nHELP\r\n"))
 	if result != 1 {
 		t.Error("Fuzz test did not return 1")
 	}
-	//fmt.Println(result)
 
 }
-*/
+
+func TestFuzz3(t *testing.T) {
+	isFuzzDebug = true
+	result := Fuzz([]byte("DATA\r\n"))
+	if result != 1 {
+		t.Error("Fuzz test did not return 1")
+	}
+
+}
