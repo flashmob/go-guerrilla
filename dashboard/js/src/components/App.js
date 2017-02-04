@@ -7,6 +7,7 @@ const styles = {
 	container: {
 		backgroundSize: 'cover',
 		display: 'flex',
+		padding: 64,
 		flexDirection: 'column'
 	},
 	chartContainer: {
@@ -20,8 +21,13 @@ class App extends Component {
 	constructor(props) {
 		super();
 		const ws = new WebSocket(WS_URL);
+		ws.onerror = err => console.log(err);
+		ws.onopen = event => console.log(event);
 		ws.onclose = event => console.log(event);
-		ws.onmessage = ({data}) => props.dispatch(tick(data));
+		ws.onmessage = event => {
+			const data = JSON.parse(event.data);
+			props.dispatch(tick(data));
+		};
 
 		this.state = {ws};
 	}
@@ -29,10 +35,15 @@ class App extends Component {
 	render() {
 		return (
 			<div style={styles.container}>
-				<LineChart />
+				<LineChart data={this.props.ram} />
 			</div>
 		);
 	}
 }
 
-export default connect()(App);
+const mapStateToProps = state => ({
+	ram: state.get('ram').toArray(),
+	nClients: state.get('nClients').toArray()
+});
+
+export default connect(mapStateToProps)(App);

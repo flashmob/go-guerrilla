@@ -4,8 +4,12 @@ import App from './components/App';
 import reducer from './reducer';
 import {applyMiddleware, createStore} from 'redux';
 import {Provider} from 'react-redux';
-import logger from 'redux-logger';
+import createLogger from 'redux-logger';
 import './index.css';
+
+const logger = createLogger({
+	stateTransformer: state => state.toJS()
+});
 
 const store = createStore(
 	reducer,

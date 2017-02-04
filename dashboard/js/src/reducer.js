@@ -1,6 +1,6 @@
 import Immutable from 'immutable';
 import ActionTypes from './action-types';
-console.log(ActionTypes);
+
 const initialState = Immutable.Map({
 	// Keep enough points for 24hrs at 30s resolution
 	maxPoints: 24 * 60 * 2,

@@ -72,7 +72,7 @@ func (ds *dataStore) notify(p *dataFrame) {
 }
 
 type point struct {
-	T time.Time `json:"t"`
+	X time.Time `json:"x"`
 	Y uint64    `json:"y"`
 }
 

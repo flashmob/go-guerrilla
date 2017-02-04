@@ -60,8 +60,8 @@ transmit:
 		select {
 		case p, ok := <-s.send:
 			data, err := json.Marshal(p)
-			log.Info("session:61", string(data), err)
-			log.Info("session:59", p.NClients, p.Ram)
+			log.Info("session:63", string(data), err)
+			log.Info("session:64", p.NClients, p.Ram)
 			s.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				s.ws.WriteMessage(websocket.CloseMessage, []byte{})

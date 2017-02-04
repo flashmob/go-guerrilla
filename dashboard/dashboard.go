@@ -10,7 +10,6 @@ import (
 	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/rakyll/statik/fs"
 )
 
 const (
@@ -29,6 +28,7 @@ var (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 type Config struct {
@@ -36,12 +36,12 @@ type Config struct {
 }
 
 func Run(c *Config) {
-	statikFS, _ := fs.New()
+	// statikFS, _ := fs.New()
 	config = c
 	sessions = map[string]*session{}
 	r := mux.NewRouter()
 	r.HandleFunc("/ws", webSocketHandler)
-	r.PathPrefix("/").Handler(http.FileServer(statikFS))
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("dashboard/js/build")))
 
 	rand.Seed(time.Now().UnixNano())
 
