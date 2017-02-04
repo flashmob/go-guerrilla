@@ -114,28 +114,14 @@ func Fuzz(data []byte) int {
 	// allow handleClient to process
 	time.Sleep(time.Millisecond + 10)
 
-	for {
-		if mockClient.bufout.Buffered() == 0 {
-			break
-		}
-
-		b = make([]byte, 1024)
-		if n, err := conn.Client.Read(b); err != nil {
-			if isFuzzDebug {
-				fmt.Println(string(b), err)
-			}
-			return 1
-		} else if isFuzzDebug {
-			if isFuzzDebug {
-				fmt.Println("Read", n, string(b))
-			}
-		}
-		// allow handleClient to process
-		time.Sleep(time.Millisecond + 10)
-		if isFuzzDebug {
-			fmt.Println("buffered:", mockClient.bufout.Buffered())
-		}
-
+	if mockClient.bufout.Buffered() == 0 {
+		// nothing to read - no complete commands sent?
+		return 0
+	}
+	if n, err := conn.Client.Read(b); err != nil {
+		return 0
+	} else if isFuzzDebug {
+		fmt.Println("Read", n, string(b))
 	}
 
 	return 1
