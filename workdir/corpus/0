@@ -1,7 +1,8 @@
-220 golang.org ESMTP Postfix
-250 Hello localhost
-250 Ok
-250 Ok
-354 End data with <CR><LF>.<CR><LF>
-250 Ok: queued as 45334
-221 Bye
+EHLO test.com
+MAIL FROM:<user@example.com>
+RCPT TO:<test@test.com>DATA
+Subject: Testing Subject
+
+..Some body
+..
+.
