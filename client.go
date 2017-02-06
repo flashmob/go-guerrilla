@@ -112,7 +112,7 @@ func (c *client) sendResponse(r ...interface{}) {
 // -End of DATA command
 // TLS handhsake
 func (c *client) resetTransaction() {
-	c.MailFrom = &envelope.EmailAddress{}
+	c.MailFrom = envelope.EmailAddress{}
 	c.RcptTo = []envelope.EmailAddress{}
 	c.Data.Reset()
 	c.Subject = ""
@@ -123,7 +123,7 @@ func (c *client) resetTransaction() {
 // A transaction starts after a MAIL command gets issued by the client.
 // Call resetTransaction to end the transaction
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := (c.MailFrom == nil || *c.MailFrom == (envelope.EmailAddress{}))
+	isMailFromEmpty := c.MailFrom == (envelope.EmailAddress{})
 	if isMailFromEmpty {
 		return false
 	}
