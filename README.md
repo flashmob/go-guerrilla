@@ -49,12 +49,20 @@ including the number of clients, memory usage, graph the number of
 connections/bytes/memory used for the last 24h.
 Show the top source clients by: IP, by domain & by HELO message.
 Using websocket via https & password protected.
+Update: Currently WIP, see branch https://github.com/flashmob/go-guerrilla/tree/dashboard.
 (1 BTC for a successful merge)
 
-- Testing: Automated test that can start the server and test end-to-end
-a few common cases, some unit tests would be good too. Automate to
- run when code is pushed to github
-(0.25 BTC for a successful merge)
+- Fuzz Testing: Using https://github.com/dvyukov/go-fuzz
+Implement a fuzzing client that will send input to the
+server's connection. 
+Maybe another area to fuzz would be the config file, 
+fuzz the config file and then send a sighup to the server to see if it 
+can crash? Please open an issue before to discuss scope
+(0.25 BTC for a successful merge / bugs found.)
+
+- Testing: Add some automated more tests to increase coverage.
+(0.1 BTC for a successful merge, judged to be a satisfactory increase
+in coverage. Please open an issue before to discuss scope)
 
 - Profiling: Simulate a configurable number of simultaneous clients 
 (eg 5000) which send commands at random speeds with messages of various 
@@ -62,7 +70,8 @@ lengths. Some connections to use TLS. Some connections may produce
 errors, eg. disconnect randomly after a few commands, issue unexpected
 input or timeout. Provide a report of all the bottlenecks and setup so 
 that the report can be run automatically run when code is pushed to 
-github.
+github. (Flame graph maybe? https://github.com/uber/go-torch 
+Please open an issue before to discuss scope)
 (0.25 BTC)
 
 - Looking for someone to do a code review & possibly fix any tidbits,
@@ -114,7 +123,7 @@ If you want to build on the sample `guerrilla-db-redis` module, setup the follow
 in MySQL:
 
 	CREATE TABLE IF NOT EXISTS `new_mail` (
-	  `mail_id` int(11) NOT NULL auto_increment,
+	  `mail_id` BIGINT(20) unsigned NOT NULL AUTO_INCREMENT,
 	  `date` datetime NOT NULL,
 	  `from` varchar(128) character set latin1 NOT NULL,
 	  `to` varchar(128) character set latin1 NOT NULL,
@@ -128,9 +137,8 @@ in MySQL:
 	  `recipient` varchar(128) character set latin1 NOT NULL,
 	  `has_attach` int(11) NOT NULL,
 	  `ip_addr` varchar(15) NOT NULL,
-	  `delivered` bit(1) NOT NULL default b'0',
-	  `attach_info` text NOT NULL,
-	  `dkim_valid` tinyint(4) default NULL,
+	  `return_path` VARCHAR(255) NOT NULL,
+	  `is_tls` BIT(1) DEFAULT b'0' NOT NULL,
 	  PRIMARY KEY  (`mail_id`),
 	  KEY `to` (`to`),
 	  KEY `hash` (`hash`),
@@ -139,7 +147,9 @@ in MySQL:
 
 The above table does not store the body of the email which makes it quick
 to query and join, while the body of the email is fetched from Redis
-if needed.
+for future processing. The `mail` field can contain data in case Redis is down.
+Otherwise, if data is in Redis, the `mail` will be blank, and
+the `body` field will contain the word 'redis'.
 
 You can implement your own saveMail function to use whatever storage /
 backend fits for you. Please share them ^_^, in particular, we would 
@@ -178,13 +188,13 @@ config := &guerrilla.AppConfig{
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}
-app := guerrilla.New(config, backend)
+app, err := guerrilla.New(config, backend)
 ```
 
 ## Start the app.
 `Start` is non-blocking, so make sure the main goroutine is kept busy
 ```go
-app.Start() (startErrors []error)
+startErrors := app.Start()
 ```
 
 ## Shutting down.
@@ -205,50 +215,51 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
     {
         "allowed_hosts": ["guerrillamail.com","guerrillamailblock.com","sharklasers.com","guerrillamail.net","guerrillamail.org"], // What hosts to accept
         "pid_file" : "/var/run/go-guerrilla.pid", // pid = process id, so that other programs can send signals to our server
-                "backend_name": "guerrilla-db-redis", // what backend to use for saving email. See /backends dir
-                "backend_config" :
-                    {
-                        "mysql_db":"gmail_mail",
-                        "mysql_host":"127.0.0.1:3306",
-                        "mysql_pass":"ok",
-                        "mysql_user":"root",
-                        "mail_table":"new_mail",
-                        "redis_interface" : "127.0.0.1:6379",
-                        "redis_expire_seconds" : 7200,
-                        "save_workers_size" : 3,
-                        "primary_mail_host":"sharklasers.com"
-                    },
-                "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
-                    {
-                        "is_enabled" : true, // boolean
-                        "host_name":"mail.test.com", // the hostname of the server as set by MX record
-                        "max_size": 1000000, // maximum size of an email in bytes
-                        "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
-                        "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
-                        "timeout":180, // timeout in number of seconds before an idle connection is closed
-                        "listen_interface":"127.0.0.1:25", // listen on ip and port
-                        "start_tls_on":true, // supports the STARTTLS command?
-                        "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
-                        "max_clients": 1000, // max clients at one time
-                        "log_file":"/dev/stdout" // where to log to (currently ignored)
-                    },
-                    // the following is a second server, but listening on port 465 and always using TLS
-                    {
-                        "is_enabled" : true,
-                        "host_name":"mail.test.com",
-                        "max_size":1000000,
-                        "private_key_file":"/path/to/pem/file/test.com.key",
-                        "public_key_file":"/path/to/pem/file/test.com.crt",
-                        "timeout":180,
-                        "listen_interface":"127.0.0.1:465",
-                        "start_tls_on":false,
-                        "tls_always_on":true,
-                        "max_clients":500,
-                        "log_file":"/dev/stdout"
-                    }
-                    // repeat as many servers as you need
-                ]
+        "log_file" : "stderr", // can be "off", "stderr", "stdout" or any path to a file
+        "log_level" : "info", // can be  "debug", "info", "error", "warn", "fatal", "panic"
+        "backend_name": "guerrilla-db-redis", // what backend to use for saving email. See /backends dir
+        "backend_config" :
+            {
+                "mysql_db":"gmail_mail",
+                "mysql_host":"127.0.0.1:3306",
+                "mysql_pass":"ok",
+                "mysql_user":"root",
+                "mail_table":"new_mail",
+                "redis_interface" : "127.0.0.1:6379",
+                "redis_expire_seconds" : 7200,
+                "save_workers_size" : 3,
+                "primary_mail_host":"sharklasers.com"
+            },
+        "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
+            {
+                "is_enabled" : true, // boolean
+                "host_name":"mail.test.com", // the hostname of the server as set by MX record
+                "max_size": 1000000, // maximum size of an email in bytes
+                "private_key_file":"/path/to/pem/file/test.com.key",  // full path to pem file private key
+                "public_key_file":"/path/to/pem/file/test.com.crt", // full path to pem file certificate
+                "timeout":180, // timeout in number of seconds before an idle connection is closed
+                "listen_interface":"127.0.0.1:25", // listen on ip and port
+                "start_tls_on":true, // supports the STARTTLS command?
+                "tls_always_on":false, // always connect using TLS? If true, start_tls_on will be false
+                "max_clients": 1000, // max clients at one time
+                "log_file":"/dev/stdout" // optional. Can be "off", "stderr", "stdout" or any path to a file. Will use global setting of empty.
+            },
+            // the following is a second server, but listening on port 465 and always using TLS
+            {
+                "is_enabled" : true,
+                "host_name":"mail.test.com",
+                "max_size":1000000,
+                "private_key_file":"/path/to/pem/file/test.com.key",
+                "public_key_file":"/path/to/pem/file/test.com.crt",
+                "timeout":180,
+                "listen_interface":"127.0.0.1:465",
+                "start_tls_on":false,
+                "tls_always_on":true,
+                "max_clients":500
             }
+            // repeat as many servers as you need
+        ]
+    }
     }
 
 The Json parser is very strict on syntax. If there's a parse error and it
@@ -276,6 +287,8 @@ Large refactoring of the code.
 - Logging functionality: logrus is now used for logging. Currently output is going to stdout
 - Incompatible change: Config's allowed_hosts is now an array
 - Incompatible change: The server's command is now a command called `guerrillad`
+- Config re-loading via SIGHUP: reload TLS, add/remove/enable/disable servers, change allowed hosts, timeout.
+- Begin writing automated tests
  
 
 1.5.1 - 4nd Nov 2016 (Latest tagged release)

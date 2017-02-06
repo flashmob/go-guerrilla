@@ -4,15 +4,18 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/response"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (*EmailAddress, error) {
-	email := &EmailAddress{}
+func extractEmail(str string) (envelope.EmailAddress, error) {
+	email := envelope.EmailAddress{}
 	var err error
 	if len(str) > RFC2821LimitPath {
-		return email, errors.New("501 Path too long")
+		return email, errors.New(response.Canned.FailPathTooLong)
 	}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
@@ -23,11 +26,11 @@ func extractEmail(str string) (*EmailAddress, error) {
 	}
 	err = nil
 	if email.User == "" || email.Host == "" {
-		err = errors.New("501 Invalid address")
+		err = errors.New(response.Canned.FailInvalidAddress)
 	} else if len(email.User) > RFC2832LimitLocalPart {
-		err = errors.New("501 Local part too long, cannot exceed 64 characters")
+		err = errors.New(response.Canned.FailLocalPartTooLong)
 	} else if len(email.Host) > RFC2821LimitDomain {
-		err = errors.New("501 Domain cannot exceed 255 characters")
+		err = errors.New(response.Canned.FailDomainTooLong)
 	}
 	return email, err
 }

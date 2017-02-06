@@ -1,39 +1,37 @@
 package backends
 
-import (
-	log "github.com/Sirupsen/logrus"
-
-	"github.com/flashmob/go-guerrilla"
-)
-
-type DummyBackend struct {
-	config dummyConfig
+func init() {
+	// decorator pattern
+	backends["dummy"] = &AbstractBackend{
+		extend: &DummyBackend{},
+	}
 }
 
+// custom configuration we will parse from the json
+// see guerrillaDBAndRedisConfig struct for a more complete example
 type dummyConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
 }
 
-func (b *DummyBackend) loadConfig(config map[string]interface{}) {
-	willLog, ok := config["log_received_mails"].(bool)
-	if !ok {
-		b.config = dummyConfig{false}
-	} else {
-		b.config = dummyConfig{willLog}
+// putting all the paces we need together
+type DummyBackend struct {
+	config dummyConfig
+	// embed functions form AbstractBackend so that DummyBackend satisfies the Backend interface
+	AbstractBackend
+}
+
+// Backends should implement this method and set b.config field with a custom config struct
+// Therefore, your implementation would have a custom config type instead of dummyConfig
+func (b *DummyBackend) loadConfig(backendConfig BackendConfig) (err error) {
+	// Load the backend config for the backend. It has already been unmarshalled
+	// from the main config file 'backend' config "backend_config"
+	// Now we need to convert each type and copy into the dummyConfig struct
+	configType := baseConfig(&dummyConfig{})
+	bcfg, err := b.extractConfig(backendConfig, configType)
+	if err != nil {
+		return err
 	}
-}
-
-func (b *DummyBackend) Initialize(config map[string]interface{}) {
-	b.loadConfig(config)
-}
-
-func (b *DummyBackend) Shutdown() error {
+	m := bcfg.(*dummyConfig)
+	b.config = *m
 	return nil
-}
-
-func (b *DummyBackend) Process(mail *guerrilla.Envelope) guerrilla.BackendResult {
-	if b.config.LogReceivedMails {
-		log.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
-	}
-	return guerrilla.NewBackendResult("250 OK")
 }

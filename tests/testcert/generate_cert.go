@@ -1,9 +1,8 @@
 // adopted from https://golang.org/src/crypto/tls/generate_cert.go?m=text
 
-// Generate a self-signed X.509 certificate for a TLS server. Outputs to
-// 'cert.pem' and 'key.pem' and will overwrite existing files.
+// Generate a self-signed X.509 certificate for a TLS server.
 
-package test
+package testcert
 
 import (
 	"crypto/ecdsa"
@@ -63,7 +62,7 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 
 // validFrom - Creation date formatted as Jan 1 15:04:05 2011 or ""
 
-func generateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string) {
+func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string, dirPrefix string) {
 
 	if len(host) == 0 {
 		log.Fatalf("Missing required --host parameter")
@@ -141,19 +140,20 @@ func generateCert(host string, validFrom string, validFor time.Duration, isCA bo
 		log.Fatalf("Failed to create certificate: %s", err)
 	}
 
-	certOut, err := os.Create("./" + host + ".cert.pem")
+	certOut, err := os.Create(dirPrefix + host + ".cert.pem")
 	if err != nil {
 		log.Fatalf("failed to open cert.pem for writing: %s", err)
 	}
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	certOut.Close()
 
-	keyOut, err := os.OpenFile("./"+host+".key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.OpenFile(dirPrefix+host+".key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Print("failed to open key.pem for writing:", err)
 		return
 	}
 	pem.Encode(keyOut, pemBlockForKey(priv))
+	keyOut.Sync()
 	keyOut.Close()
 
 }

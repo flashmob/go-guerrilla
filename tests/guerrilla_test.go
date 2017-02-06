@@ -4,8 +4,9 @@
 // The following are integration / smokeless, that test the overall server.
 // (Please put unit tests to go in a different file)
 // How it works:
-// Server's log output is redirected to the logBuffer which is then used by the tests to look for expected behaviour
-// the package sets up the logBuffer & redirection by the use of package init()
+// Server's log output is redirected to the testlog file which is then used by the tests to look for
+// expected behaviour.
+//
 // (self signed certs are also generated on each run)
 // server's responses from a connection are also used to check for expected behaviour
 // to run:
@@ -15,23 +16,25 @@ package test
 
 import (
 	"encoding/json"
-	log "github.com/Sirupsen/logrus"
 	"testing"
+
+	"time"
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	"time"
+	"github.com/flashmob/go-guerrilla/log"
 
 	"bufio"
 
-	"bytes"
 	"crypto/tls"
-	//	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"strings"
+
+	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"os"
 )
 
 type TestConfig struct {
@@ -41,32 +44,27 @@ type TestConfig struct {
 }
 
 var (
-	// hold the output of logs
-	logBuffer bytes.Buffer
-	// logs redirected to this writer
-	logOut *bufio.Writer
-	// read the logs
-	logIn *bufio.Reader
+
 	// app config loaded here
 	config *TestConfig
 
 	app guerrilla.Guerrilla
 
 	initErr error
+
+	logger log.Logger
 )
 
 func init() {
-	logOut = bufio.NewWriter(&logBuffer)
-	logIn = bufio.NewReader(&logBuffer)
-	log.SetLevel(log.DebugLevel)
-	log.SetOutput(logOut)
+
 	config = &TestConfig{}
 	if err := json.Unmarshal([]byte(configJson), config); err != nil {
-		initErr = errors.New("Could not unmartial config," + err.Error())
+		initErr = errors.New("Could not Unmarshal config," + err.Error())
 	} else {
 		setupCerts(config)
-		backend := getDummyBackend(config.BackendConfig)
-		app = guerrilla.New(&config.AppConfig, &backend)
+		logger, _ = log.GetLogger(config.LogFile)
+		backend, _ := getBackend("dummy", config.BackendConfig, logger)
+		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
 }
@@ -74,6 +72,8 @@ func init() {
 // a configuration file with a dummy backend
 var configJson = `
 {
+    "log_file" : "./testlog",
+    "log_level" : "debug",
     "pid_file" : "/var/run/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
     "backend_name" : "dummy",
@@ -93,7 +93,7 @@ var configJson = `
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "log_file" : ""
         },
 
         {
@@ -107,52 +107,22 @@ var configJson = `
             "start_tls_on":false,
             "tls_always_on":true,
             "max_clients":1,
-            "log_file":"/dev/stdout"
+            "log_file" : ""
         }
     ]
 }
 `
 
-func getDummyBackend(backendConfig map[string]interface{}) guerrilla.Backend {
-	var backend guerrilla.Backend
-	b := &backends.DummyBackend{}
-	b.Initialize(backendConfig)
-	backend = guerrilla.Backend(b)
-	return backend
+func getBackend(backendName string, backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
+	return backends.New(backendName, backendConfig, l)
 }
 
 func setupCerts(c *TestConfig) {
 	for i := range c.Servers {
-		generateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256")
+		testcert.GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
 		c.Servers[i].PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
 		c.Servers[i].PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
 	}
-}
-
-func connect(serverIndex int, deadline time.Duration) (net.Conn, *bufio.Reader, error) {
-	var bufin *bufio.Reader
-
-	conn, err := net.Dial("tcp", config.Servers[serverIndex].ListenInterface)
-	if err != nil {
-		// handle error
-		//t.Error("Cannot dial server", config.Servers[0].ListenInterface)
-		return conn, bufin, errors.New("Cannot dial server: " + config.Servers[serverIndex].ListenInterface + "," + err.Error())
-	}
-	bufin = bufio.NewReader(conn)
-
-	// should be ample time to complete the test
-	conn.SetDeadline(time.Now().Add(time.Duration(time.Second * deadline)))
-	// read greeting, ignore it
-	_, err = bufin.ReadString('\n')
-	return conn, bufin, err
-}
-
-func command(conn net.Conn, bufin *bufio.Reader, command string) (reply string, err error) {
-	_, err = fmt.Fprintln(conn, command+"\r")
-	if err == nil {
-		return bufin.ReadString('\n')
-	}
-	return "", err
 }
 
 // Testing start and stop of server
@@ -162,16 +132,14 @@ func TestStart(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors != nil {
-		for _, err := range startErrors {
-			t.Error(err)
-		}
+		t.Error(startErrors)
 		t.FailNow()
 	}
 	time.Sleep(time.Second)
 	app.Shutdown()
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
+		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:4654"); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:4654")
 		}
@@ -208,9 +176,8 @@ func TestStart(t *testing.T) {
 
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
 
+	os.Truncate("./testlog", 0)
 }
 
 // Simple smoke-test to see if the server can listen & issues a greeting on connect
@@ -270,24 +237,20 @@ func TestGreeting(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			t.FailNow()
 		}
 	}
 	app.Shutdown()
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 
 }
 
@@ -301,26 +264,27 @@ func TestShutDown(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 
 			// do a shutdown while the client is connected & in client state
 			go app.Shutdown()
+			time.Sleep(time.Millisecond * 150) // let server to Shutdown
 
 			// issue a command while shutting down
-			response, err := command(conn, bufin, "HELP")
+			response, err := Command(conn, bufin, "HELP")
 			if err != nil {
 				t.Error("Help command failed", err.Error())
 			}
-			expected := "421 Server is shutting down. Please try again later. Sayonara!"
+			expected := "421 4.3.0 Server is shutting down. Please try again later. Sayonara!"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not shut down with", expected, ", it said:"+response)
 			}
@@ -331,25 +295,21 @@ func TestShutDown(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
 	// assuming server has shutdown by now
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//	fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 
 }
 
@@ -360,28 +320,28 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 
 			for i := 0; i < 101; i++ {
-				if _, err := command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
+				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break
 				}
 			}
-			response, err := command(conn, bufin, "RCPT TO:last@grr.la")
+			response, err := Command(conn, bufin, "RCPT TO:last@grr.la")
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "452 Too many recipients"
+			expected := "452 4.5.3 Too many recipients"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -392,19 +352,14 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
 
-	logOut.Flush()
-
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // RCPT TO & MAIL FROM with 64 chars in local part, it should fail at 65
@@ -415,32 +370,32 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 	}
 
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 65)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 65)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "501 Local part too long"
+			expected := "550 5.5.4 Local part too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 			// what about if it's exactly 64?
 			// repeat > 64 characters in local part
-			response, err = command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 64)))
+			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 64)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.5 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -451,19 +406,14 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
 
-	logOut.Flush()
-
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 //RFC2821LimitPath fail if path > 256 but different error if below
@@ -474,32 +424,32 @@ func TestRFC2821LimitPath(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 256 characters in local part
-			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 257-7)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 257-7)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected := "501 Path too long"
+			expected := "550 5.5.4 Path too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 			// what about if it's exactly 256?
-			response, err = command(conn, bufin,
+			response, err = Command(conn, bufin,
 				fmt.Sprintf("RCPT TO:%s@%s.la", strings.Repeat("a", 64), strings.Repeat("b", 257-5-64)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
-			expected = "454 Error: Relay access denied"
+			expected = "454 4.1.1 Error: Relay access denied"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -508,17 +458,13 @@ func TestRFC2821LimitPath(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // RFC2821LimitDomain 501 Domain cannot exceed 255 characters
@@ -528,32 +474,32 @@ func TestRFC2821LimitDomain(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := command(conn, bufin, fmt.Sprintf("RCPT TO:a@%s.l", strings.Repeat("a", 255-2)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:a@%s.l", strings.Repeat("a", 255-2)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected := "501 Path too long"
+			expected := "550 5.5.4 Path too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 			// what about if it's exactly 255?
-			response, err = command(conn, bufin,
+			response, err = Command(conn, bufin,
 				fmt.Sprintf("RCPT TO:a@%s.la", strings.Repeat("b", 255-4)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "454 Error: Relay access denied"
+			expected = "454 4.1.1 Error: Relay access denied"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -562,17 +508,337 @@ func TestRFC2821LimitDomain(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
+}
+
+// Test several different inputs to MAIL FROM command
+func TestMailFromCmd(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+			// Basic valid address
+			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Basic valid address (RfC)
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Bounce
+			response, err = Command(conn, bufin, "MAIL FROM:<>")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// No mail from content
+			response, err = Command(conn, bufin, "MAIL FROM:")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Short mail from content
+			response, err = Command(conn, bufin, "MAIL FROM:<")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Short mail from content 2
+			response, err = Command(conn, bufin, "MAIL FROM:x")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// What?
+			response, err = Command(conn, bufin, "MAIL FROM:<<>>")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Invalid address?
+			response, err = Command(conn, bufin, "MAIL FROM:<justatest>")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "501 5.5.4 Invalid address"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// SMTPUTF8 not implemented for now, currently still accepted
+			response, err = Command(conn, bufin, "MAIL FROM:<anöthertest@grr.la>")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// 8BITMIME (RfC 6152)
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la> BODY=8BITMIME")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// 8BITMIME (RfC 6152) Bounce
+			response, err = Command(conn, bufin, "MAIL FROM:<> BODY=8BITMIME")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+
+}
+
+// Test several different inputs to MAIL FROM command
+func TestHeloEhlo(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		hostname := config.Servers[0].Hostname
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// Test HELO
+			response, err := Command(conn, bufin, "HELO localtester")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := fmt.Sprintf("250 %s Hello", hostname)
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Test EHLO
+			// This is tricky as it is a multiline response
+			var fullresp string
+			response, err = Command(conn, bufin, "EHLO localtester")
+			fullresp = fullresp + response
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			for err == nil {
+				response, err = bufin.ReadString('\n')
+				fullresp = fullresp + response
+				if strings.HasPrefix(response, "250 ") { // Last response has a whitespace and no "-"
+					break // bail
+				}
+			}
+
+			expected = fmt.Sprintf("250-%s Hello\r\n250-SIZE 100017\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-ENHANCEDSTATUSCODES\r\n250 HELP\r\n", hostname)
+			if fullresp != expected {
+				t.Error("Server did not respond with [" + expected + "], it said [" + fullresp + "]")
+			}
+			// be kind, QUIT. And we are sure that bufin does not contain fragments from the EHLO command.
+			response, err = Command(conn, bufin, "QUIT")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "221 2.0.0 Bye"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+
 }
 
 // It should error when MAIL FROM was given twice
@@ -582,56 +848,56 @@ func TestNestedMailCmd(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected := "503 Error: nested MAIL command"
+			expected := "503 5.5.1 Error: nested MAIL command"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 			// Plot twist: if you EHLO , it should allow MAIL FROM again
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
-			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 			// Plot twist: if you RSET , it should allow MAIL FROM again
-			response, err = command(conn, bufin, "RSET")
+			response, err = Command(conn, bufin, "RSET")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
-			response, err = command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 OK"
+			expected = "250 2.1.0 OK"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -641,17 +907,13 @@ func TestNestedMailCmd(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // It should error on a very long command line, exceeding CommandLineMaxLength 1024
@@ -662,23 +924,23 @@ func TestCommandLineMaxLength(t *testing.T) {
 	}
 
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 1024 characters
-			response, err := command(conn, bufin, strings.Repeat("s", guerrilla.CommandLineMaxLength+1))
+			response, err := Command(conn, bufin, strings.Repeat("s", guerrilla.CommandLineMaxLength+1))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 
-			expected := "500 Line too long"
+			expected := "554 5.5.1 Line too long"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -688,17 +950,13 @@ func TestCommandLineMaxLength(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // It should error on a very long message, exceeding servers config value
@@ -709,40 +967,40 @@ func TestDataMaxLength(t *testing.T) {
 	}
 
 	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := connect(0, 20)
+		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
 			// handle error
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
 			// client goes into command state
-			if _, err := command(conn, bufin, "HELO localtester"); err != nil {
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
 
-			response, err := command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = command(conn, bufin, "RCPT TO:test@grr.la")
+			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = command(conn, bufin, "DATA")
+			response, err = Command(conn, bufin, "DATA")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 
-			response, err = command(
+			response, err = Command(
 				conn,
 				bufin,
 				fmt.Sprintf("Subject:test\r\n\r\nHello %s\r\n.\r\n",
-					strings.Repeat("n", int(config.Servers[0].MaxSize-26))))
+					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 
 			//expected := "500 Line too long"
-			expected := "550 Error: Maximum line length exceeded"
+			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}
@@ -752,17 +1010,239 @@ func TestDataMaxLength(t *testing.T) {
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
-			for _, err := range startErrors {
-				t.Error(err)
-			}
+			t.Error(startErrors)
 			app.Shutdown()
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
-//
+func TestDataCommand(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	testHeader :=
+		"Subject: =?Shift_JIS?B?W4NYg06DRYNGg0GBRYNHg2qDYoNOg1ggg0GDSoNFg5ODZ12DQYNKg0WDk4Nn?=\r\n" +
+			"\t=?Shift_JIS?B?k2+YXoqul7mCzIKokm2C54K5?=\r\n"
+
+	email :=
+		"Delivered-To: test@sharklasers.com\r\n" +
+			"\tReceived: from mail.guerrillamail.com (mail.guerrillamail.com  [104.218.55.28:44246])\r\n" +
+			"\tby grr.la with SMTP id 2ab4220fdd6a7b877ae81241cd5a406a@grr.la;\r\n" +
+			"\tWed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"Received: by 192.99.19.220 with HTTP; Wed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"MIME-Version: 1.0\r\n" +
+			"Message-ID: <230b4719d1e4513654536bf00b90cfc18c33@guerrillamail.com>\r\n" +
+			"Date: Wed, 18 Jan 2017 15:43:29 +0000\r\n" +
+			"To: \"test@grr.la\" <test@grr.la>\r\n" +
+			"From: <62vk44+nziwnkw@guerrillamail.com>\r\n" +
+			"Subject: test\r\n" +
+			"X-Originating-IP: [60.241.160.150]\r\n" +
+			"Content-Type: text/plain; charset=\"utf-8\"\r\n" +
+			"Content-Transfer-Encoding: quoted-printable\r\n" +
+			"X-Domain-Signer: PHP mailDomainSigner 0.2-20110415 <http://code.google.com/p/php-mail-domain-signer/>\r\n" +
+			"DKIM-Signature: v=1; a=rsa-sha256; s=highgrade; d=guerrillamail.com; l=182;\r\n" +
+			"\tt=1484754209; c=relaxed/relaxed; h=to:from:subject;\r\n" +
+			"\tbh=GHSgjHpBp5QjNn9tzfug681+RcWMOUgpwAuTzppM5wY=;\r\n" +
+			"\tb=R7FxWgACnT+pKXqEg15qgzH4ywMFRx5pDlIFCnSt1BfwmLvZPZK7oOLrbiRoGGR2OJnSfyCxeASH\r\n" +
+			"\t019LNeLB/B8o+fMRX87m/tBpqIZ2vgXdT9rUCIbSDJnYoCHXakGcF+zGtTE3SEksMbeJQ76aGj6M\r\n" +
+			"\tG80p76IT2Xu3iDJLYYWxcAeX+7z4M/bbYNeqxMQcXYZp1wNYlSlHahL6RDUYdcqikDqKoXmzMNVd\r\n" +
+			"\tDr0EbH9iiu1DQtfUDzVE5LLus1yn36WU/2KJvEak45gJvm9s9J+Xrcb882CaYkxlAbgQDz1KeQLf\r\n" +
+			"\teUyNspyAabkh2yTg7kOvNZSOJtbMSQS6/GMxsg==\r\n" +
+			"\r\n" +
+			"test=0A.mooo=0A..mooo=0Atest=0A.=0A=0A=0A=0A=0A=0A----=0ASent using Guerril=\r\n" +
+			"lamail.com=0ABlock or report abuse: https://www.guerrillamail.com//abuse/?a=\r\n" +
+			"=3DVURnES0HUaZbhA8%3D=0A\r\n.\r\n"
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// client goes into command state
+			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
+				t.Error("Hello command failed", err.Error())
+			}
+
+			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			//fmt.Println(response)
+			response, err = Command(conn, bufin, "DATA")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			/*
+				response, err = Command(
+					conn,
+					bufin,
+					testHeader+"\r\nHello World\r\n.\r\n")
+			*/
+			_ = testHeader
+			response, err = Command(
+				conn,
+				bufin,
+				email+"\r\n.\r\n")
+			//expected := "500 Line too long"
+			expected := "250 2.0.0 OK : queued as s0m3l337Ha5hva1u3LOL"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}
+
+// Fuzzer crashed the server by submitting "DATA\r\n" as the first command
+func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				"DATA\r\n")
+			expected := "503 5.5.1 Error: No sender"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}
+
+// Appears to hang the fuzz test, but not server.
+func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	str := "X_\r\nMAIL FROM:<u\xfd\xfdrU" +
+		"\x10c22695140\xfd727235530" +
+		" Walter Sobchak\x1a\tDon" +
+		"ny, x_6_, Donnyre   " +
+		"\t\t outof89 !om>\r\nMAI" +
+		"L\t\t \t\tFROM:<C4o\xfd\xfdr@e" +
+		"xample.c22695140\xfd727" +
+		"235530 Walter Sobcha" +
+		"k: Donny, you>re out" +
+		" of your element!om>" +
+		"\r\nMAIL RCPT TO:t@IRS" +
+		"ETRCPTIRSETRCP:<\x00\xfd\xfdr" +
+		"@example 7A924_F__4_" +
+		"c22695140\xfd-061.0x30C" +
+		"8bC87fE4d3 Walter MA" +
+		"IL Donny, youiq__n_l" +
+		"wR8qs_0RBcw_0hIY_pS_" +
+		"___x9_E0___sL598_G82" +
+		"_6 out   your elemen" +
+		"t!>\r\nX _9KB___X_p:<o" +
+		"ut\xfd\xfdr@example9gTnr2N" +
+		"__Vl_T7U_AqfU_dPfJ_0" +
+		"HIqKK0037f6W_KGM_y_Z" +
+		"_9_96_w_815Q572py2_9" +
+		"F\xfd727235530Walter\tSo" +
+		"bchakRSET MAIL from:" +
+		" : cows eat\t\t  grass" +
+		" , _S___46_PbG03_iW'" +
+		"__v5L2_2L_J61u_38J55" +
+		"_PpwQ_Fs_7L_3p7S_t__" +
+		"g9XP48T_9HY_EDl_c_C3" +
+		"3_3b708EreT_OR out 9" +
+		"9_pUY4 \t\t\t     \x05om>\r" +
+		"\n FROM<u\xfd\xfdr@example." +
+		"<\xfd-05110602 Walter S" +
+		"obchak: Donny, \t\t  w" +
+		"50TI__m_5EsC___n_l_d" +
+		"__57GP9G02_32n_FR_xw" +
+		"_2_103___rnED5PGIKN7" +
+		"BBs3VIuNV_514qDBp_Gs" +
+		"_qj4\tre out all cows" +
+		" eatof your element\x03" +
+		"om>\r\n_2 FROM:<u\x10\xfdr@e" +
+		"xample.oQ_VLq909_E_5" +
+		"AQ7_4_\xfd1935012674150" +
+		"6773818422493001838." +
+		"-010\tWalter\tSobchak:" +
+		" Donny, youyouteIz2y" +
+		"__Z2q5_qoA're Q6MP2_" +
+		"CT_z70____0c0nU7_83d" +
+		"4jn_eFD7h_9MbPjr_s_L" +
+		"9_X23G_7 of _kU_L9Yz" +
+		"_K52345QVa902H1__Hj_" +
+		"Nl_PP2tW2ODi0_V80F15" +
+		"_i65i_V5uSQdiG eleme" +
+		"nt!om>\r\n"
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				str)
+			expected := "554 5.5.1 Unrecognized command"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}

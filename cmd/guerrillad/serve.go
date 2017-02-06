@@ -8,20 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/spf13/cobra"
-
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/spf13/cobra"
+)
+
+const (
+	defaultPidFile = "/var/run/go-guerrilla.pid"
 )
 
 var (
-	iface      string
 	configPath string
 	pidFile    string
 
@@ -33,13 +36,20 @@ var (
 
 	cmdConfig     = CmdConfig{}
 	signalChannel = make(chan os.Signal, 1) // for trapping SIG_HUP
+	mainlog       log.Logger
 )
 
 func init() {
+	// log to stderr on startup
+	var logOpenError error
+	if mainlog, logOpenError = log.GetLogger(log.OutputStderr.String()); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger to %s", log.OutputStderr)
+	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		"goguerrilla.conf", "Path to the configuration file")
-	serveCmd.PersistentFlags().StringVarP(&pidFile, "pid-file", "p",
-		"/var/run/go-guerrilla.pid", "Path to the pid file")
+	// intentionally didn't specify default pidFile; value from config is used if flag is empty
+	serveCmd.PersistentFlags().StringVarP(&pidFile, "pidFile", "p",
+		"", "Path to the pid file")
 
 	rootCmd.AddCommand(serveCmd)
 }
@@ -49,32 +59,55 @@ func sigHandler(app guerrilla.Guerrilla) {
 	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL)
 
 	for sig := range signalChannel {
-
 		if sig == syscall.SIGHUP {
-			err := readConfig(configPath, verbose, &cmdConfig)
+			// save old config & load in new one
+			oldConfig := cmdConfig
+			newConfig := CmdConfig{}
+			err := readConfig(configPath, pidFile, &newConfig)
 			if err != nil {
-				log.WithError(err).Error("Error while ReadConfig (reload)")
+				mainlog.WithError(err).Error("Error while ReadConfig (reload)")
 			} else {
-				log.Infof("Configuration is reloaded at %s", guerrilla.ConfigLoadTime)
+				cmdConfig = newConfig
+				mainlog.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
+				cmdConfig.emitChangeEvents(&oldConfig, app)
 			}
-			// TODO: reinitialize
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
-			log.Infof("Shutdown signal caught")
+			mainlog.Infof("Shutdown signal caught")
 			app.Shutdown()
-			log.Infof("Shutdown completd, exiting.")
-			os.Exit(0)
+			mainlog.Infof("Shutdown completed, exiting.")
+			return
 		} else {
-			os.Exit(0)
+			mainlog.Infof("Shutdown, unknown signal caught")
+			return
 		}
 	}
+}
+
+func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
+
+	app.Subscribe(event, func(cmdConfig *CmdConfig) {
+		logger, _ := log.GetLogger(cmdConfig.LogFile)
+		var err error
+		if err = backend.Shutdown(); err != nil {
+			logger.WithError(err).Warn("Backend failed to shutdown")
+			return
+		}
+		backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
+		if err != nil {
+			logger.WithError(err).Fatalf("Error while loading the backend %q",
+				cmdConfig.BackendName)
+		} else {
+			logger.Info("Backend started:", cmdConfig.BackendName)
+		}
+	})
 }
 
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 
-	err := readConfig(configPath, verbose, &cmdConfig)
+	err := readConfig(configPath, pidFile, &cmdConfig)
 	if err != nil {
-		log.WithError(err).Fatal("Error while reading config")
+		mainlog.WithError(err).Fatal("Error while reading config")
 	}
 
 	// Check that max clients is not greater than system open file limit.
@@ -86,47 +119,46 @@ func serve(cmd *cobra.Command, args []string) {
 			maxClients += s.MaxClients
 		}
 		if maxClients > fileLimit {
-			log.Warnf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			mainlog.Warnf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}
 
+	// Backend setup
+	var backend backends.Backend
+	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, mainlog)
+	if err != nil {
+		mainlog.WithError(err).Fatalf("Error while loading the backend %q",
+			cmdConfig.BackendName)
+	}
+
+	app, err := guerrilla.New(&cmdConfig.AppConfig, backend, mainlog)
+	if err != nil {
+		mainlog.WithError(err).Error("Error(s) when creating new server(s)")
+	}
+
+	// start the app
+	err = app.Start()
+	if err != nil {
+		mainlog.WithError(err).Error("Error(s) when starting server(s)")
+	}
+	subscribeBackendEvent("config_change:backend_config", backend, app)
+	subscribeBackendEvent("config_change:backend_name", backend, app)
 	// Write out our PID
-	if len(pidFile) > 0 {
-		if f, err := os.Create(pidFile); err == nil {
-			defer f.Close()
-			if _, err := f.WriteString(fmt.Sprintf("%d", os.Getpid())); err == nil {
-				f.Sync()
-			} else {
-				log.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
-			}
-		} else {
-			log.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
-		}
+	writePid(cmdConfig.PidFile)
+	// ...and write out our pid whenever the file name changes in the config
+	app.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
+		writePid(ac.PidFile)
+	})
+	// change the logger from stdrerr to one from config
+	mainlog.Infof("main log configured to %s", cmdConfig.LogFile)
+	var logOpenError error
+	if mainlog, logOpenError = log.GetLogger(cmdConfig.LogFile); logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed changing to a custom logger [%s]", cmdConfig.LogFile)
 	}
-	var backend guerrilla.Backend
-	switch cmdConfig.BackendName {
-	case "dummy":
-		b := &backends.DummyBackend{}
-		b.Initialize(cmdConfig.BackendConfig)
-		backend = guerrilla.Backend(b)
-	case "guerrilla-db-redis":
-		b := &backends.GuerrillaDBAndRedisBackend{}
-		err = b.Initialize(cmdConfig.BackendConfig)
-		if err != nil {
-			log.WithError(err).Errorf("Initalization of %s backend failed", cmdConfig.BackendName)
-		}
-
-		backend = guerrilla.Backend(b)
-	default:
-		log.Fatalf("Unknown backend: %s", cmdConfig.BackendName)
-	}
-	b := &backends.GuerrillaDBAndRedisBackend{}
-	err = b.Initialize(cmdConfig.BackendConfig)
-
-	app := guerrilla.New(&cmdConfig.AppConfig, &backend)
-	go app.Start()
+	app.SetLogger(mainlog)
 	sigHandler(app)
+
 }
 
 // Superset of `guerrilla.AppConfig` containing options specific
@@ -134,26 +166,50 @@ func serve(cmd *cobra.Command, args []string) {
 type CmdConfig struct {
 	guerrilla.AppConfig
 	BackendName   string                 `json:"backend_name"`
-	BackendConfig map[string]interface{} `json:"backend_config"`
+	BackendConfig backends.BackendConfig `json:"backend_config"`
+}
+
+func (c *CmdConfig) load(jsonBytes []byte) error {
+	c.AppConfig.Load(jsonBytes)
+	err := json.Unmarshal(jsonBytes, &c)
+	if err != nil {
+		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	}
+	return nil
+}
+
+func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
+	// has backend changed?
+	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
+		app.Publish("config_change:backend_config", c)
+	}
+	if c.BackendName != oldConfig.BackendName {
+		app.Publish("config_change:backend_name", c)
+	}
+	// call other emitChangeEvents
+	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
-func readConfig(path string, verbose bool, config *CmdConfig) error {
+func readConfig(path string, pidFile string, config *CmdConfig) error {
 	// load in the config.
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("Could not read config file: %s", err.Error())
 	}
-
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	if err := config.load(data); err != nil {
+		return err
+	}
+	// override config pidFile with with flag from the command line
+	if len(pidFile) > 0 {
+		config.AppConfig.PidFile = pidFile
+	} else if len(config.AppConfig.PidFile) == 0 {
+		config.AppConfig.PidFile = defaultPidFile
 	}
 
 	if len(config.AllowedHosts) == 0 {
 		return errors.New("Empty `allowed_hosts` is not allowed")
 	}
-
 	guerrilla.ConfigLoadTime = time.Now()
 	return nil
 }
@@ -164,11 +220,26 @@ func getFileLimit() int {
 	if err != nil {
 		return -1
 	}
-
 	limit, err := strconv.Atoi(strings.TrimSpace(string(out)))
 	if err != nil {
 		return -1
 	}
-
 	return limit
+}
+
+func writePid(pidFile string) {
+	if len(pidFile) > 0 {
+		if f, err := os.Create(pidFile); err == nil {
+			defer f.Close()
+			pid := os.Getpid()
+			if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err == nil {
+				f.Sync()
+				mainlog.Infof("pid_file (%s) written with pid:%v", pidFile, pid)
+			} else {
+				mainlog.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
+			}
+		} else {
+			mainlog.WithError(err).Fatalf("Error while creating pidFile (%s)", pidFile)
+		}
+	}
 }

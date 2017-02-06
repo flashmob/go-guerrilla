@@ -1,12 +1,14 @@
 {
+    "log_file" : "stderr",
+    "log_level" : "info",
     "allowed_hosts": [
       "guerrillamail.com",
-      "guerrillamailblock.com"
+      "guerrillamailblock.com",
       "sharklasers.com",
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "primary_mail_host": "sharklasers.com",
+    "pid_file" : "/var/run/go-guerrilla.pid",
     "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": true
@@ -22,7 +24,8 @@
             "listen_interface":"127.0.0.1:25",
             "start_tls_on":true,
             "tls_always_on":false,
-            "max_clients": 1000
+            "max_clients": 1000,
+            "log_file" : "stderr"
         },
         {
             "is_enabled" : true,
@@ -34,7 +37,8 @@
             "listen_interface":"127.0.0.1:465",
             "start_tls_on":false,
             "tls_always_on":true,
-            "max_clients":500
+            "max_clients":500,
+            "log_file" : "stderr"
         }
     ]
 }

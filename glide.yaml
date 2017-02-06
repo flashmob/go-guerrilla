@@ -19,3 +19,7 @@ import:
   version: ~0.1.0
   subpackages:
   - fs
+- package: github.com/asaskevich/EventBus
+  version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
+- package: github.com/go-sql-driver/mysql
+  version: ^1.3.0
