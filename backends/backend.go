@@ -8,10 +8,12 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
 )
+
+var mainlog log.Logger
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -31,10 +33,6 @@ type Backend interface {
 	testSettings() error
 	// parse the configuration files
 	loadConfig(BackendConfig) error
-}
-
-type configLoader interface {
-	loadConfig(backendConfig BackendConfig) (err error)
 }
 
 type BackendConfig map[string]interface{}
@@ -101,7 +99,7 @@ type BackendGateway struct {
 	b  Backend
 	// controls access to state
 	stateGuard sync.Mutex
-	State      int
+	State      backendState
 	config     BackendConfig
 }
 
@@ -112,10 +110,17 @@ const (
 	BackendStateError
 )
 
+type backendState int
+
+func (s backendState) String() string {
+	return strconv.Itoa(int(s))
+}
+
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
-func New(backendName string, backendConfig BackendConfig) (Backend, error) {
+func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	backend, found := backends[backendName]
+	mainlog = l
 	if !found {
 		return nil, fmt.Errorf("backend %q not found", backendName)
 	}
@@ -131,13 +136,7 @@ func New(backendName string, backendConfig BackendConfig) (Backend, error) {
 // Process distributes an envelope to one of the backend workers
 func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	if gw.State != BackendStateRunning {
-		resp := &response.Response{
-			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-			BasicCode:    554,
-			Class:        response.ClassPermanentFailure,
-			Comment:      "Transaction failed - backend not running " + strconv.Itoa(gw.State),
-		}
-		return NewBackendResult(resp.String())
+		return NewBackendResult(response.Canned.FailBackendNotRunning + gw.State.String())
 	}
 
 	to := e.RcptTo
@@ -146,37 +145,19 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
 	savedNotify := make(chan *saveStatus)
-	gw.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
+	gw.saveMailChan <- &savePayload{e, &from, &to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
 	case status := <-savedNotify:
 		if status.err != nil {
-			resp := &response.Response{
-				EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-				BasicCode:    554,
-				Class:        response.ClassPermanentFailure,
-				Comment:      "Error: " + status.err.Error(),
-			}
-			return NewBackendResult(resp.String())
+			return NewBackendResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
-		resp := &response.Response{
-			EnhancedCode: response.OtherStatus,
-			BasicCode:    250,
-			Class:        response.ClassSuccess,
-			Comment:      fmt.Sprintf("OK : queued as %s", status.hash),
-		}
-		return NewBackendResult(resp.String())
+		return NewBackendResult(response.Canned.SuccessMessageQueued + status.hash)
 
 	case <-time.After(time.Second * 30):
-		log.Infof("Backend has timed out")
-		resp := &response.Response{
-			EnhancedCode: response.OtherOrUndefinedProtocolStatus,
-			BasicCode:    554,
-			Class:        response.ClassPermanentFailure,
-			Comment:      "Error: transaction timeout",
-		}
-		return NewBackendResult(resp.String())
+		mainlog.Infof("Backend has timed out")
+		return NewBackendResult(response.Canned.FailBackendTimeout)
 	}
 }
 func (gw *BackendGateway) Shutdown() error {

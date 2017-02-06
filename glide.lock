@@ -1,5 +1,5 @@
-hash: 9d5e16555ee2b6363588a60d63b9ba42952cf8a77907b4629aca810f774e3f7b
-updated: 2017-01-06T01:17:48.317018392+11:00
+hash: 1a8fddacae80af03b3cb67287a2a39396a4b38a0c7f805f63325293a19230853
+updated: 2017-02-01T09:34:30.442747666+11:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
@@ -8,6 +8,8 @@ imports:
   subpackages:
   - internal
   - redis
+- name: github.com/go-sql-driver/mysql
+  version: a0583e0143b1624142adab07e0e97fe106d99561
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/Sirupsen/logrus

@@ -14,6 +14,8 @@ type AppConfig struct {
 	Servers      []ServerConfig `json:"servers"`
 	AllowedHosts []string       `json:"allowed_hosts"`
 	PidFile      string         `json:"pid_file"`
+	LogFile      string         `json:"log_file,omitempty"`
+	LogLevel     string         `json:"log_level,omitempty"`
 }
 
 // ServerConfig specifies config options for a single server
@@ -62,6 +64,17 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has pid file changed?
 	if strings.Compare(oldConfig.PidFile, c.PidFile) != 0 {
 		app.Publish("config_change:pid_file", c)
+	}
+	// has mainlog log changed?
+	if strings.Compare(oldConfig.LogFile, c.LogFile) != 0 {
+		app.Publish("config_change:log_file", c)
+	} else {
+		// since config file has not changed, we reload it
+		app.Publish("config_change:reopen_log_file", c)
+	}
+	// has log level changed?
+	if strings.Compare(oldConfig.LogLevel, c.LogLevel) != 0 {
+		app.Publish("config_change:log_level", c)
 	}
 	// server config changes
 	oldServers := oldConfig.getServers()
@@ -117,10 +130,10 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	}
 	// log file change?
 	if _, ok := changes["LogFile"]; ok {
-		app.Publish("server_change:"+sc.ListenInterface+":new_log_file", sc)
+		app.Publish("server_change:new_log_file", sc)
 	} else {
 		// since config file has not changed, we reload it
-		app.Publish("server_change:"+sc.ListenInterface+":reopen_log_file", sc)
+		app.Publish("server_change:reopen_log_file", sc)
 	}
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {

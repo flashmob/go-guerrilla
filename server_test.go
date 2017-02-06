@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mocks"
 )
 
@@ -26,7 +27,7 @@ func getMockServerConfig() *ServerConfig {
 		StartTLSOn:      true,
 		TLSAlwaysOn:     false,
 		MaxClients:      30, // not tested here
-		LogFile:         "/dev/stdout",
+		LogFile:         "./tests/testlog",
 	}
 	return sc
 }
@@ -35,14 +36,19 @@ func getMockServerConfig() *ServerConfig {
 // using the dummy backend
 // RCP TO command only allows test.com host
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
-
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true})
+	var logOpenError error
+	var mainlog log.Logger
+	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}
-	server, err := newServer(sc, backend)
+	server, err := newServer(sc, backend, mainlog)
 	if err != nil {
-		t.Error("new server failed because:", err)
+		//t.Error("new server failed because:", err)
 	} else {
 		server.setAllowedHosts([]string{"test.com"})
 	}
@@ -51,11 +57,16 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 }
 
 func TestHandleClient(t *testing.T) {
-
+	var mainlog log.Logger
+	var logOpenError error
 	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1)
+	client := NewClient(conn.Server, 1, mainlog)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

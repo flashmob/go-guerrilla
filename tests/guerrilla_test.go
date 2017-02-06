@@ -4,8 +4,9 @@
 // The following are integration / smokeless, that test the overall server.
 // (Please put unit tests to go in a different file)
 // How it works:
-// Server's log output is redirected to the logBuffer which is then used by the tests to look for expected behaviour
-// the package sets up the logBuffer & redirection by the use of package init()
+// Server's log output is redirected to the testlog file which is then used by the tests to look for
+// expected behaviour.
+//
 // (self signed certs are also generated on each run)
 // server's responses from a connection are also used to check for expected behaviour
 // to run:
@@ -17,16 +18,14 @@ import (
 	"encoding/json"
 	"testing"
 
-	log "github.com/Sirupsen/logrus"
-
 	"time"
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 
 	"bufio"
 
-	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -35,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"os"
 )
 
 type TestConfig struct {
@@ -44,32 +44,27 @@ type TestConfig struct {
 }
 
 var (
-	// hold the output of logs
-	logBuffer bytes.Buffer
-	// logs redirected to this writer
-	logOut *bufio.Writer
-	// read the logs
-	logIn *bufio.Reader
+
 	// app config loaded here
 	config *TestConfig
 
 	app guerrilla.Guerrilla
 
 	initErr error
+
+	logger log.Logger
 )
 
 func init() {
-	logOut = bufio.NewWriter(&logBuffer)
-	logIn = bufio.NewReader(&logBuffer)
-	log.SetLevel(log.DebugLevel)
-	log.SetOutput(logOut)
+
 	config = &TestConfig{}
 	if err := json.Unmarshal([]byte(configJson), config); err != nil {
-		initErr = errors.New("Could not unmartial config," + err.Error())
+		initErr = errors.New("Could not Unmarshal config," + err.Error())
 	} else {
 		setupCerts(config)
-		backend, _ := getBackend("dummy", config.BackendConfig)
-		app, _ = guerrilla.New(&config.AppConfig, backend)
+		logger, _ = log.GetLogger(config.LogFile)
+		backend, _ := getBackend("dummy", config.BackendConfig, logger)
+		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
 }
@@ -77,6 +72,8 @@ func init() {
 // a configuration file with a dummy backend
 var configJson = `
 {
+    "log_file" : "./testlog",
+    "log_level" : "debug",
     "pid_file" : "/var/run/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
     "backend_name" : "dummy",
@@ -96,7 +93,7 @@ var configJson = `
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 2,
-            "log_file":"/dev/stdout"
+            "log_file" : ""
         },
 
         {
@@ -110,14 +107,14 @@ var configJson = `
             "start_tls_on":false,
             "tls_always_on":true,
             "max_clients":1,
-            "log_file":"/dev/stdout"
+            "log_file" : ""
         }
     ]
 }
 `
 
-func getBackend(backendName string, backendConfig map[string]interface{}) (backends.Backend, error) {
-	return backends.New(backendName, backendConfig)
+func getBackend(backendName string, backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
+	return backends.New(backendName, backendConfig, l)
 }
 
 func setupCerts(c *TestConfig) {
@@ -140,9 +137,9 @@ func TestStart(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	app.Shutdown()
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
+		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:4654"); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:4654")
 		}
@@ -179,9 +176,8 @@ func TestStart(t *testing.T) {
 
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
 
+	os.Truncate("./testlog", 0)
 }
 
 // Simple smoke-test to see if the server can listen & issues a greeting on connect
@@ -246,17 +242,15 @@ func TestGreeting(t *testing.T) {
 		}
 	}
 	app.Shutdown()
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 
 }
 
@@ -307,17 +301,15 @@ func TestShutDown(t *testing.T) {
 		}
 	}
 	// assuming server has shutdown by now
-	logOut.Flush()
-	if read, err := ioutil.ReadAll(logIn); err == nil {
+	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//	fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1:"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 
 }
 
@@ -366,11 +358,8 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 		}
 	}
 
-	logOut.Flush()
-
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // RCPT TO & MAIL FROM with 64 chars in local part, it should fail at 65
@@ -423,11 +412,8 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 		}
 	}
 
-	logOut.Flush()
-
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 //RFC2821LimitPath fail if path > 256 but different error if below
@@ -477,10 +463,8 @@ func TestRFC2821LimitPath(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // RFC2821LimitDomain 501 Domain cannot exceed 255 characters
@@ -529,10 +513,8 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // Test several different inputs to MAIL FROM command
@@ -782,10 +764,7 @@ func TestMailFromCmd(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
-	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+
 }
 
 // Test several different inputs to MAIL FROM command
@@ -859,10 +838,7 @@ func TestHeloEhlo(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
-	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+
 }
 
 // It should error when MAIL FROM was given twice
@@ -936,10 +912,8 @@ func TestNestedMailCmd(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // It should error on a very long command line, exceeding CommandLineMaxLength 1024
@@ -981,10 +955,8 @@ func TestCommandLineMaxLength(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 // It should error on a very long message, exceeding servers config value
@@ -1043,10 +1015,8 @@ func TestDataMaxLength(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
 }
 
 func TestDataCommand(t *testing.T) {
@@ -1141,8 +1111,138 @@ func TestDataCommand(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	logOut.Flush()
 	// don't forget to reset
-	logBuffer.Reset()
-	logIn.Reset(&logBuffer)
+	os.Truncate("./testlog", 0)
+}
+
+// Fuzzer crashed the server by submitting "DATA\r\n" as the first command
+func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				"DATA\r\n")
+			expected := "503 5.5.1 Error: No sender"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}
+
+// Appears to hang the fuzz test, but not server.
+func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	str := "X_\r\nMAIL FROM:<u\xfd\xfdrU" +
+		"\x10c22695140\xfd727235530" +
+		" Walter Sobchak\x1a\tDon" +
+		"ny, x_6_, Donnyre   " +
+		"\t\t outof89 !om>\r\nMAI" +
+		"L\t\t \t\tFROM:<C4o\xfd\xfdr@e" +
+		"xample.c22695140\xfd727" +
+		"235530 Walter Sobcha" +
+		"k: Donny, you>re out" +
+		" of your element!om>" +
+		"\r\nMAIL RCPT TO:t@IRS" +
+		"ETRCPTIRSETRCP:<\x00\xfd\xfdr" +
+		"@example 7A924_F__4_" +
+		"c22695140\xfd-061.0x30C" +
+		"8bC87fE4d3 Walter MA" +
+		"IL Donny, youiq__n_l" +
+		"wR8qs_0RBcw_0hIY_pS_" +
+		"___x9_E0___sL598_G82" +
+		"_6 out   your elemen" +
+		"t!>\r\nX _9KB___X_p:<o" +
+		"ut\xfd\xfdr@example9gTnr2N" +
+		"__Vl_T7U_AqfU_dPfJ_0" +
+		"HIqKK0037f6W_KGM_y_Z" +
+		"_9_96_w_815Q572py2_9" +
+		"F\xfd727235530Walter\tSo" +
+		"bchakRSET MAIL from:" +
+		" : cows eat\t\t  grass" +
+		" , _S___46_PbG03_iW'" +
+		"__v5L2_2L_J61u_38J55" +
+		"_PpwQ_Fs_7L_3p7S_t__" +
+		"g9XP48T_9HY_EDl_c_C3" +
+		"3_3b708EreT_OR out 9" +
+		"9_pUY4 \t\t\t     \x05om>\r" +
+		"\n FROM<u\xfd\xfdr@example." +
+		"<\xfd-05110602 Walter S" +
+		"obchak: Donny, \t\t  w" +
+		"50TI__m_5EsC___n_l_d" +
+		"__57GP9G02_32n_FR_xw" +
+		"_2_103___rnED5PGIKN7" +
+		"BBs3VIuNV_514qDBp_Gs" +
+		"_qj4\tre out all cows" +
+		" eatof your element\x03" +
+		"om>\r\n_2 FROM:<u\x10\xfdr@e" +
+		"xample.oQ_VLq909_E_5" +
+		"AQ7_4_\xfd1935012674150" +
+		"6773818422493001838." +
+		"-010\tWalter\tSobchak:" +
+		" Donny, youyouteIz2y" +
+		"__Z2q5_qoA're Q6MP2_" +
+		"CT_z70____0c0nU7_83d" +
+		"4jn_eFD7h_9MbPjr_s_L" +
+		"9_X23G_7 of _kU_L9Yz" +
+		"_K52345QVa902H1__Hj_" +
+		"Nl_PP2tW2ODi0_V80F15" +
+		"_i65i_V5uSQdiG eleme" +
+		"nt!om>\r\n"
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				str)
+			expected := "554 5.5.1 Unrecognized command"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
 }
