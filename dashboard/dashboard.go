@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -28,7 +27,8 @@ var (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	// TODO below for testing w/ webpack only, change before merging
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 type Config struct {
@@ -36,11 +36,13 @@ type Config struct {
 }
 
 func Run(c *Config) {
+	// TODO below for testing w/ webpack only, change before merging
 	// statikFS, _ := fs.New()
 	config = c
 	sessions = map[string]*session{}
 	r := mux.NewRouter()
 	r.HandleFunc("/ws", webSocketHandler)
+	// TODO below for testing w/ webpack only, change before merging
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("dashboard/js/build")))
 
 	rand.Seed(time.Now().UnixNano())
@@ -62,7 +64,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
-	log.Info("dashboard:112")
 	cookie, err := r.Cookie("SID")
 	if err != nil {
 		// TODO error
@@ -85,6 +86,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	sess.send = c
 	// TODO send store contents at connection time
 	store.subscribe(sess.id, c)
+	store.initSession(sess)
 	go sess.receive()
 	go sess.transmit()
 }

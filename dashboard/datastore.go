@@ -73,6 +73,10 @@ func (ds *dataStore) notify(p *dataFrame) {
 	}
 }
 
+func (ds *dataStore) initSession(sess *session) {
+	// TODO implement
+}
+
 type point struct {
 	X time.Time `json:"x"`
 	Y uint64    `json:"y"`
