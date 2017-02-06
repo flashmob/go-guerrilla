@@ -11,8 +11,8 @@ import (
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (*envelope.EmailAddress, error) {
-	email := &envelope.EmailAddress{}
+func extractEmail(str string) (envelope.EmailAddress, error) {
+	email := envelope.EmailAddress{}
 	var err error
 	if len(str) > RFC2821LimitPath {
 		return email, errors.New(response.Canned.FailPathTooLong)

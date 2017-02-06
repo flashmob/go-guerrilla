@@ -19,7 +19,7 @@ package backends
 // - Changed the MySQL queries to insert in batch
 // - Made a Compressor that recycles buffers using sync.Pool
 // The result was around 400% speed improvement. If you know of any more improvements, please share!
-// - Added the recovery mechanisi,
+// - Added the recovery mechanism,
 
 import (
 	"fmt"
