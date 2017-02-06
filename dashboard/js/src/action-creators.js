@@ -10,7 +10,7 @@ export const tick = ({ram, n_clients}) => ({
 			x: Moment(ram.x, TIME_FORMAT),
 			y: ram.y
 		},
-		n_clients: {
+		nClients: {
 			x: Moment(n_clients.x, TIME_FORMAT),
 			y: n_clients.y
 		}

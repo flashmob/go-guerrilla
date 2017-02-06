@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"runtime"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -20,6 +21,7 @@ var (
 )
 
 type dataStore struct {
+	lock sync.Mutex
 	// List of samples of RAM usage
 	ramTicks []point
 	// List of samples of number of connected clients
@@ -118,6 +120,8 @@ func (h logHook) Fire(e *log.Entry) error {
 		return nil
 	}
 
+	store.lock.Lock()
+	defer store.lock.Unlock()
 	switch event {
 	case "connect":
 		store.nClients++
