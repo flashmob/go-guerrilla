@@ -145,7 +145,7 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 	// place on the channel so that one of the save mail workers can pick it up
 	// TODO: support multiple recipients
 	savedNotify := make(chan *saveStatus)
-	gw.saveMailChan <- &savePayload{e, from, &to[0], savedNotify}
+	gw.saveMailChan <- &savePayload{e, &from, &to[0], savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {

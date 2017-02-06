@@ -382,7 +382,7 @@ func (server *server) handleClient(client *client) {
 					break
 				}
 				mail := input[10:]
-				from := &envelope.EmailAddress{}
+				from := envelope.EmailAddress{}
 
 				if !(strings.Index(mail, "<>") == 0) &&
 					!(strings.Index(mail, " <>") == 0) {
@@ -409,7 +409,7 @@ func (server *server) handleClient(client *client) {
 					if !server.allowsHost(to.Host) {
 						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
-						client.RcptTo = append(client.RcptTo, *to)
+						client.RcptTo = append(client.RcptTo, to)
 						client.sendResponse(response.Canned.SuccessRcptCmd)
 					}
 				}

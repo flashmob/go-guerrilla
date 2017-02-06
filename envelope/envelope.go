@@ -35,7 +35,7 @@ type Envelope struct {
 	// Message sent in EHLO command
 	Helo string
 	// Sender
-	MailFrom *EmailAddress
+	MailFrom EmailAddress
 	// Recipients
 	RcptTo []EmailAddress
 	// Data stores the header and message body
