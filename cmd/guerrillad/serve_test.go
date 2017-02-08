@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -822,7 +823,7 @@ func TestBadTLSStart(t *testing.T) {
 		ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
 		conf := &CmdConfig{}           // blank one
 		conf.load([]byte(configJsonD)) // load configJsonD
-		conf.Servers[0].Timeout = 1
+
 		cmd := &cobra.Command{}
 		configPath = "configJsonD.json"
 		var serveWG sync.WaitGroup
@@ -833,6 +834,9 @@ func TestBadTLSStart(t *testing.T) {
 			serveWG.Done()
 		}()
 		time.Sleep(testPauseDuration)
+
+		sigKill()
+		serveWG.Wait()
 
 		return
 	}
@@ -908,6 +912,9 @@ func TestBadTLSReload(t *testing.T) {
 		}
 	}
 
+	sigKill()
+	serveWG.Wait()
+
 	// did config reload fail as expected?
 	fd, _ := os.Open("../../tests/testlog")
 	if read, err := ioutil.ReadAll(fd); err == nil {
@@ -976,7 +983,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	fd, _ := os.Open("../../tests/testlog")
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
+		fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
 			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
 		}
