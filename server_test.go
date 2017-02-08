@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"bufio"
-	"fmt"
 	"net/textproto"
 	"strings"
 	"sync"
@@ -76,14 +75,14 @@ func TestHandleClient(t *testing.T) {
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
 	line, _ := r.ReadLine()
-	fmt.Println(line)
+	//	fmt.Println(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	w.PrintfLine("HELO test.test.com")
 	line, _ = r.ReadLine()
-	fmt.Println(line)
+	//fmt.Println(line)
 	w.PrintfLine("QUIT")
 	line, _ = r.ReadLine()
-	fmt.Println("line is:", line)
+	//fmt.Println("line is:", line)
 	expected := "221 2.0.0 Bye"
 	if strings.Index(line, expected) != 0 {
 		t.Error("expected", expected, "but got:", line)

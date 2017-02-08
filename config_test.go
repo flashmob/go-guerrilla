@@ -207,7 +207,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
-	newconf.Servers[0].LogFile = "/dev/stderr" // test for log file change
+	newconf.Servers[0].LogFile = "off" // test for log file change
 	newconf.LogLevel = "off"
 	newconf.LogFile = "off"
 	expectedEvents := map[Event]bool{
