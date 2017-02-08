@@ -64,7 +64,10 @@ func sigHandler(app guerrilla.Guerrilla) {
 			newConfig := CmdConfig{}
 			err := readConfig(configPath, pidFile, &newConfig)
 			if err != nil {
+				// new config will not be applied
 				mainlog.WithError(err).Error("Error while ReadConfig (reload)")
+				// re-open logs
+				cmdConfig.EmitLogReopenEvents(app)
 			} else {
 				cmdConfig = newConfig
 				mainlog.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
@@ -82,7 +85,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
-func subscribeBackendEvent(event string, backend backends.Backend, app guerrilla.Guerrilla) {
+func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app guerrilla.Guerrilla) {
 
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
 		logger, _ := log.GetLogger(cmdConfig.LogFile)
@@ -141,12 +144,12 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
-	subscribeBackendEvent("config_change:backend_config", backend, app)
-	subscribeBackendEvent("config_change:backend_name", backend, app)
+	subscribeBackendEvent(guerrilla.EvConfigBackendConfig, backend, app)
+	subscribeBackendEvent(guerrilla.EvConfigBackendName, backend, app)
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config
-	app.Subscribe("config_change:pid_file", func(ac *guerrilla.AppConfig) {
+	app.Subscribe(guerrilla.EvConfigPidFile, func(ac *guerrilla.AppConfig) {
 		writePid(ac.PidFile)
 	})
 	// change the logger from stdrerr to one from config
@@ -169,21 +172,22 @@ type CmdConfig struct {
 }
 
 func (c *CmdConfig) load(jsonBytes []byte) error {
-	c.AppConfig.Load(jsonBytes)
 	err := json.Unmarshal(jsonBytes, &c)
 	if err != nil {
 		return fmt.Errorf("Could not parse config file: %s", err.Error())
+	} else {
+		// load in guerrilla.AppConfig
+		return c.AppConfig.Load(jsonBytes)
 	}
-	return nil
 }
 
 func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
 	// has backend changed?
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
-		app.Publish("config_change:backend_config", c)
+		app.Publish(guerrilla.EvConfigBackendConfig, c)
 	}
 	if c.BackendName != oldConfig.BackendName {
-		app.Publish("config_change:backend_name", c)
+		app.Publish(guerrilla.EvConfigBackendName, c)
 	}
 	// call other emitChangeEvents
 	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
