@@ -951,16 +951,6 @@ func TestSetTimeoutEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
-			expect := "250 mail.test.com Hello"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
-		}
-	}
 	// set the timeout to 1 second
 
 	newConf := conf // copy the cmdConfg
@@ -970,9 +960,32 @@ func TestSetTimeoutEvent(t *testing.T) {
 	} else {
 		t.Error(err)
 	}
+
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(time.Millisecond * 1200) // pause for connection to timeout
+	time.Sleep(testPauseDuration) // config reload
+
+	var waitTimeout sync.WaitGroup
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		waitTimeout.Add(1)
+		go func() {
+			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+				expect := "250 mail.test.com Hello"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected", expect, "but got", result)
+				} else {
+					b := make([]byte, 1024)
+					conn.Read(b)
+				}
+			}
+			waitTimeout.Done()
+		}()
+	}
+
+	// wait for timeout
+	waitTimeout.Wait()
 
 	// so the connection we have opened should timeout by now
 
