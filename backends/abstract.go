@@ -10,13 +10,29 @@ import (
 )
 
 type AbstractBackend struct {
-	config abstractConfig
-	Extend Worker
-	p      Processor
+	config        abstractConfig
+	Extend        Worker
+	p             Processor
+	configLoaders []ConfigLoaderFunc
+	configTesters []ConfigTesterFunc
 }
 
 type abstractConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
+}
+
+var ab AbstractBackend
+
+type ConfigLoaderFunc func(backendConfig BackendConfig) error
+
+func (b *AbstractBackend) AddConfigLoader(f ConfigLoaderFunc) {
+	b.configLoaders = append(b.configLoaders, f)
+}
+
+type ConfigTesterFunc func(backendConfig BackendConfig) error
+
+func (b *AbstractBackend) AddConfigTester(f ConfigTesterFunc) {
+	b.configTesters = append(b.configTesters, f)
 }
 
 // Your backend should implement this method and set b.config field with a custom config struct
@@ -37,7 +53,6 @@ func (b *AbstractBackend) loadConfig(backendConfig BackendConfig) (err error) {
 }
 
 func (b *AbstractBackend) SetProcessors(p ...Decorator) {
-	// This backend will parse headers and then debugger
 	if b.Extend != nil {
 		b.Extend.SetProcessors(p...)
 		return
@@ -46,6 +61,10 @@ func (b *AbstractBackend) SetProcessors(p ...Decorator) {
 }
 
 func (b *AbstractBackend) Initialize(config BackendConfig) error {
+	for _, loader := range b.configLoaders {
+		loader(config)
+	}
+	return nil
 	if b.Extend != nil {
 		return b.Extend.loadConfig(config)
 	}
@@ -156,6 +175,13 @@ func (h *AbstractBackend) extractConfig(configData BackendConfig, configType bas
 		if f.Type().Name() == "string" {
 			if stringVal, converted := configData[field_name].(string); converted {
 				s.Field(i).SetString(stringVal)
+			} else {
+				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+			}
+		}
+		if f.Type().Name() == "bool" {
+			if boolVal, converted := configData[field_name].(bool); converted {
+				s.Field(i).SetBool(boolVal)
 			} else {
 				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
 			}
