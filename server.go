@@ -65,8 +65,8 @@ type server struct {
 }
 
 type allowedHosts struct {
-	table map[string]bool // host lookup table
-	m     sync.Mutex      // guard access to the map
+	table      map[string]bool // host lookup table
+	sync.Mutex                 // guard access to the map
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
@@ -156,8 +156,8 @@ func (server *server) isEnabled() bool {
 
 // Set the allowed hosts for the server
 func (server *server) setAllowedHosts(allowedHosts []string) {
-	defer server.hosts.m.Unlock()
-	server.hosts.m.Lock()
+	server.hosts.Lock()
+	defer server.hosts.Unlock()
 	server.hosts.table = make(map[string]bool, len(allowedHosts))
 	for _, h := range allowedHosts {
 		server.hosts.table[strings.ToLower(h)] = true
@@ -239,8 +239,8 @@ func (server *server) GetActiveClientsCount() int {
 
 // Verifies that the host is a valid recipient.
 func (server *server) allowsHost(host string) bool {
-	defer server.hosts.m.Unlock()
-	server.hosts.m.Lock()
+	server.hosts.Lock()
+	defer server.hosts.Unlock()
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
