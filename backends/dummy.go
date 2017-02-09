@@ -1,12 +1,10 @@
 package backends
 
 func init() {
-	backends["dummy"] = &AbstractBackend{
-		Extend: &DummyBackend{},
-	}
-
-	backends["dummy"].SetProcessors(Debugger(), HeadersParser())
-
+	backends["dummy"] = &AbstractBackend{}
+	cb := &DecoratorCallbacks{}
+	backends["dummy"].SetProcessors(Debugger(cb), HeadersParser())
+	backends["dummy"].AddConfigLoader(cb.loader)
 }
 
 // custom configuration we will parse from the json

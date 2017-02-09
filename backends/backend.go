@@ -31,11 +31,19 @@ type Worker interface {
 	// parse the configuration files
 	loadConfig(BackendConfig) error
 
+	AddConfigLoader(f ConfigLoaderFunc)
+	AddConfigTester(f ConfigTesterFunc)
+
 	Shutdown() error
 	Process(*envelope.Envelope) BackendResult
 	Initialize(BackendConfig) error
 
 	SetProcessors(p ...Decorator)
+}
+
+type DecoratorCallbacks struct {
+	loader ConfigLoaderFunc
+	tester ConfigTesterFunc
 }
 
 type BackendConfig map[string]interface{}
