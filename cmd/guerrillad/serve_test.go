@@ -3,6 +3,13 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -12,13 +19,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	test "github.com/flashmob/go-guerrilla/tests"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
-	"github.com/spf13/cobra"
 )
 
 var configJsonA = `
@@ -252,10 +252,10 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	newerconf := &CmdConfig{}
 	newerconf.load([]byte(configJsonC))
 
-	expectedEvents := map[string]bool{
-		"config_change:backend_config": false,
-		"config_change:backend_name":   false,
-		"server_change:new_server":     false,
+	expectedEvents := map[guerrilla.Event]bool{
+		guerrilla.EvConfigBackendConfig: false,
+		guerrilla.EvConfigBackendName:   false,
+		guerrilla.EvConfigEvServerNew:   false,
 	}
 	mainlog, _ = log.GetLogger("off")
 
@@ -265,14 +265,14 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	if err != nil {
 		//log.Info("Failed to create new app", err)
 	}
-	toUnsubscribe := map[string]func(c *CmdConfig){}
-	toUnsubscribeS := map[string]func(c *guerrilla.ServerConfig){}
+	toUnsubscribe := map[guerrilla.Event]func(c *CmdConfig){}
+	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
 
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
-		func(e string) {
+		func(e guerrilla.Event) {
 
-			if strings.Index(e, "server_change") == 0 {
+			if strings.Index(e.String(), "server_change") == 0 {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
@@ -689,7 +689,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "allowed_hosts config changed, a new list was set"); i < 0 {
-			t.Error("did not change allowed_hosts, most likely because Bus.Subscribe(\"config_change:allowed_hosts\" didnt fire")
+			t.Errorf("did not change allowed_hosts, most likely because Bus.Subscribe(\"%s\" didnt fire",
+				guerrilla.EvConfigAllowedHosts)
 		}
 	}
 	// cleanup
@@ -805,104 +806,58 @@ func TestTLSConfigEvent(t *testing.T) {
 
 }
 
-// Test for missing TLS certificate, when starting or config reload
-
-func TestBadTLS(t *testing.T) {
-	mainlog, _ = log.GetLogger("../../tests/testlog")
-	if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
-		mainlog.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
-	} else {
-		mainlog.Info("removed ./../../tests/mail2.guerrillamail.com.cert.pem")
-	}
-	// start the server by emulating the serve command
-	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
-	conf.Servers[0].Timeout = 1
-	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
-	var serveWG sync.WaitGroup
-
-	serveWG.Add(1)
-	go func() {
-		serve(cmd, []string{})
-		serveWG.Done()
-	}()
-	time.Sleep(testPauseDuration)
-
-	// Test STARTTLS handshake
-	testTlsHandshake := func() {
-		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+// Testing starting a server with a bad TLS config
+// It should not start, return exit code 1
+func TestBadTLSStart(t *testing.T) {
+	// Need to run the test in a different process by executing a command
+	// because the serve() does os.Exit when starting with a bad TLS config
+	if os.Getenv("BE_CRASHER") == "1" {
+		// do the test
+		// first, remove the good certs, if any
+		if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+			mainlog.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
 		} else {
-			conn.SetDeadline(time.Now().Add(time.Second))
-			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
-				expect := "250 mail.test.com Hello"
-				if strings.Index(result, expect) != 0 {
-					t.Error("Expected", expect, "but got", result)
-				} else {
-					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 2.0.0 Ready to start TLS"
-						if strings.Index(result, expect) != 0 {
-							t.Error("Expected:", expect, "but got:", result)
-						} else {
-							tlsConn := tls.Client(conn, &tls.Config{
-								InsecureSkipVerify: true,
-								ServerName:         "127.0.0.1",
-							})
-							if err := tlsConn.Handshake(); err != nil {
-								mainlog.Info("TLS Handshake failed")
-							} else {
-								t.Error("Handshake succeeded, expected it to fail", conf.AppConfig.Servers[0].ListenInterface)
-								conn = tlsConn
-
-							}
-
-						}
-					}
-				}
-			}
-			conn.Close()
+			mainlog.Info("removed ./../../tests/mail2.guerrillamail.com.cert.pem")
 		}
+		// next run the server
+		ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+		conf := &CmdConfig{}           // blank one
+		conf.load([]byte(configJsonD)) // load configJsonD
+
+		cmd := &cobra.Command{}
+		configPath = "configJsonD.json"
+		var serveWG sync.WaitGroup
+
+		serveWG.Add(1)
+		go func() {
+			serve(cmd, []string{})
+			serveWG.Done()
+		}()
+		time.Sleep(testPauseDuration)
+
+		sigKill()
+		serveWG.Wait()
+
+		return
 	}
-	testTlsHandshake()
-
-	// write some trash data
-	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.cert.pem", []byte("trash data"), 0664)
-	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.key.pem", []byte("trash data"), 0664)
-
-	// generate a new cert
-	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
-	sigHup()
-
-	time.Sleep(testPauseDuration) // pause for config to reload
-	testTlsHandshake()
-
-	time.Sleep(testPauseDuration)
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
-	// did backend started as expected?
-	fd, _ := os.Open("../../tests/testlog")
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "failed to load the new TLS configuration"); i < 0 {
-			t.Error("did not detect TLS load failure")
-		}
+	cmd := exec.Command(os.Args[0], "-test.run=TestBadTLSStart")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+		return
 	}
+	t.Error("Server started with a bad TLS config, was expecting exit status 1")
 	// cleanup
 	os.Truncate("../../tests/testlog", 0)
 	os.Remove("configJsonD.json")
 	os.Remove("./pidfile.pid")
-
 }
 
-// Test for when the server config Timeout value changes
-// Start with configJsonD.json
-
-func TestSetTimeoutEvent(t *testing.T) {
-	//mainlog, _ = log.GetLogger("../../tests/testlog")
+// Test config reload with a bad TLS config
+// It should ignore the config reload, keep running with old settings
+func TestBadTLSReload(t *testing.T) {
+	mainlog, _ = log.GetLogger("../../tests/testlog")
+	// start with a good vert
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
@@ -929,6 +884,73 @@ func TestSetTimeoutEvent(t *testing.T) {
 			}
 		}
 	}
+	// write some trash data
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.cert.pem", []byte("trash data"), 0664)
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.key.pem", []byte("trash data"), 0664)
+
+	newConf := conf // copy the cmdConfg
+
+	if jsonbytes, err := json.Marshal(newConf); err == nil {
+		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
+	} else {
+		t.Error(err)
+	}
+	// send a sighup signal to the server to reload config
+	sigHup()
+	time.Sleep(testPauseDuration) // pause for config to reload
+
+	// we should still be able to to talk to it
+
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mail.test.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		}
+	}
+
+	sigKill()
+	serveWG.Wait()
+
+	// did config reload fail as expected?
+	fd, _ := os.Open("../../tests/testlog")
+	if read, err := ioutil.ReadAll(fd); err == nil {
+		logOutput := string(read)
+		//fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "cannot use TLS config for"); i < 0 {
+			t.Error("[127.0.0.1:2552] did not reject our tls config as expected")
+		}
+	}
+	// cleanup
+	os.Truncate("../../tests/testlog", 0)
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+}
+
+// Test for when the server config Timeout value changes
+// Start with configJsonD.json
+
+func TestSetTimeoutEvent(t *testing.T) {
+	mainlog, _ = log.GetLogger("../../tests/testlog")
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &CmdConfig{}           // blank one
+	conf.load([]byte(configJsonD)) // load configJsonD
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(testPauseDuration)
+
 	// set the timeout to 1 second
 
 	newConf := conf // copy the cmdConfg
@@ -938,9 +960,32 @@ func TestSetTimeoutEvent(t *testing.T) {
 	} else {
 		t.Error(err)
 	}
+
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(time.Millisecond * 1200) // pause for connection to timeout
+	time.Sleep(testPauseDuration) // config reload
+
+	var waitTimeout sync.WaitGroup
+	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	} else {
+		waitTimeout.Add(1)
+		go func() {
+			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+				expect := "250 mail.test.com Hello"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected", expect, "but got", result)
+				} else {
+					b := make([]byte, 1024)
+					conn.Read(b)
+				}
+			}
+			waitTimeout.Done()
+		}()
+	}
+
+	// wait for timeout
+	waitTimeout.Wait()
 
 	// so the connection we have opened should timeout by now
 
@@ -951,7 +996,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	fd, _ := os.Open("../../tests/testlog")
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
+		fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
 			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
 		}
