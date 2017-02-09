@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"reflect"
+	"runtime/debug"
 	"strings"
 )
 
 type AbstractBackend struct {
 	config abstractConfig
-	extend Backend
+	Extend Worker
+	p      Processor
 }
 
 type abstractConfig struct {
@@ -30,12 +32,22 @@ func (b *AbstractBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	}
 	m := bcfg.(*abstractConfig)
 	b.config = *m
+
 	return nil
 }
 
+func (b *AbstractBackend) SetProcessors(p ...Decorator) {
+	// This backend will parse headers and then debugger
+	if b.Extend != nil {
+		b.Extend.SetProcessors(p...)
+		return
+	}
+	b.p = Decorate(DefaultProcessor{}, p...)
+}
+
 func (b *AbstractBackend) Initialize(config BackendConfig) error {
-	if b.extend != nil {
-		return b.extend.loadConfig(config)
+	if b.Extend != nil {
+		return b.Extend.loadConfig(config)
 	}
 	err := b.loadConfig(config)
 	if err != nil {
@@ -45,35 +57,31 @@ func (b *AbstractBackend) Initialize(config BackendConfig) error {
 }
 
 func (b *AbstractBackend) Shutdown() error {
-	if b.extend != nil {
-		return b.extend.Shutdown()
+	if b.Extend != nil {
+		return b.Extend.Shutdown()
 	}
 	return nil
 }
 
 func (b *AbstractBackend) Process(mail *envelope.Envelope) BackendResult {
-	if b.extend != nil {
-		return b.extend.Process(mail)
+	if b.Extend != nil {
+		return b.Extend.Process(mail)
 	}
-	mail.ParseHeaders()
-
-	if b.config.LogReceivedMails {
-		mainlog.Infof("Mail from: %s / to: %v", mail.MailFrom.String(), mail.RcptTo)
-		mainlog.Info("Headers are: %s", mail.Header)
-
-	}
+	// call the decorated process function
+	b.p.Process(mail)
 	return NewBackendResult("250 OK")
 }
 
 func (b *AbstractBackend) saveMailWorker(saveMailChan chan *savePayload) {
-	if b.extend != nil {
-		b.extend.saveMailWorker(saveMailChan)
+	if b.Extend != nil {
+		b.Extend.saveMailWorker(saveMailChan)
 		return
 	}
 	defer func() {
 		if r := recover(); r != nil {
 			// recover form closed channel
-			fmt.Println("Recovered in f", r)
+			fmt.Println("Recovered in f", r, string(debug.Stack()))
+			mainlog.Error("Recovered form panic:", r, string(debug.Stack()))
 		}
 		// close any connections / files
 		// ...
@@ -98,15 +106,15 @@ func (b *AbstractBackend) saveMailWorker(saveMailChan chan *savePayload) {
 }
 
 func (b *AbstractBackend) getNumberOfWorkers() int {
-	if b.extend != nil {
-		return b.extend.getNumberOfWorkers()
+	if b.Extend != nil {
+		return b.Extend.getNumberOfWorkers()
 	}
 	return 1
 }
 
 func (b *AbstractBackend) testSettings() error {
-	if b.extend != nil {
-		return b.extend.testSettings()
+	if b.Extend != nil {
+		return b.Extend.testSettings()
 	}
 	return nil
 }

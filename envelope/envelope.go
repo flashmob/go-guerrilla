@@ -64,7 +64,8 @@ func (e *Envelope) ParseHeaders() error {
 	if len(all) < max {
 		max = len(all) - 1
 	}
-	headerEnd := bytes.Index(all[:max], []byte("\n\n"))
+	str := string(all[:max])
+	headerEnd := strings.Index(str, "\n\n")
 
 	if headerEnd > -1 {
 		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(all[0:headerEnd])))

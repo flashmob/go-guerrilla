@@ -48,7 +48,7 @@ const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
 
 func init() {
 	backends["guerrilla-db-redis"] = &AbstractBackend{
-		extend: &GuerrillaDBAndRedisBackend{}}
+		Extend: &GuerrillaDBAndRedisBackend{}}
 }
 
 type GuerrillaDBAndRedisBackend struct {
@@ -362,9 +362,9 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			return
 		}
 		mainlog.Debug("Got mail from chan", payload.mail.RemoteAddress)
-		to = trimToLimit(strings.TrimSpace(payload.recipient.User)+"@"+g.config.PrimaryHost, 255)
+		to = trimToLimit(strings.TrimSpace(payload.mail.RcptTo[0].User)+"@"+g.config.PrimaryHost, 255)
 		payload.mail.Helo = trimToLimit(payload.mail.Helo, 255)
-		payload.recipient.Host = trimToLimit(payload.recipient.Host, 255)
+		host := trimToLimit(payload.mail.RcptTo[0].Host, 255)
 		ts := fmt.Sprintf("%d", time.Now().UnixNano())
 		payload.mail.ParseHeaders()
 		hash := MD5Hex(
@@ -376,7 +376,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 		var addHead string
 		addHead += "Delivered-To: " + to + "\r\n"
 		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
-		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
+		addHead += "	by " + host + " with SMTP id " + hash + "@" + host + ";\r\n"
 		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
 		// data will be compressed when printed, with addHead added to beginning

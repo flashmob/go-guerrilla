@@ -1,10 +1,12 @@
 package backends
 
 func init() {
-	// decorator pattern
 	backends["dummy"] = &AbstractBackend{
-		extend: &DummyBackend{},
+		Extend: &DummyBackend{},
 	}
+
+	backends["dummy"].SetProcessors(Debugger(), HeadersParser())
+
 }
 
 // custom configuration we will parse from the json
