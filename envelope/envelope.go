@@ -46,6 +46,10 @@ type Envelope struct {
 	TLS bool
 	// Header stores the results from ParseHeaders()
 	Header textproto.MIMEHeader
+	// Hold the metadat
+	Meta map[string]interface{}
+	// Hashes of each email on the rcpt
+	Hashes []string
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -57,18 +61,19 @@ func (e *Envelope) ParseHeaders() error {
 	if e.Header != nil {
 		return errors.New("Headers already parsed")
 	}
-	all := e.Data.Bytes()
-
+	b2 := bytes.NewBuffer(e.Data.Bytes())
 	// find where the header ends, assuming that over 30 kb would be max
 	max := 1024 * 30
-	if len(all) < max {
-		max = len(all) - 1
+	if b2.Len() < max {
+		max = b2.Len()
 	}
-	str := string(all[:max])
-	headerEnd := strings.Index(str, "\n\n")
-
+	// read in the chunk which we'll scan for the header
+	chunk := make([]byte, max)
+	b2.Read(chunk)
+	headerEnd := strings.Index(string(chunk), "\n\n") // the first two new-lines is the end of header
 	if headerEnd > -1 {
-		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(all[0:headerEnd])))
+		header := chunk[0:headerEnd]
+		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
 		e.Header, err = headerReader.ReadMIMEHeader()
 		if err != nil {
 			// decode the subject

@@ -33,6 +33,7 @@ type Worker interface {
 
 	AddConfigLoader(f ConfigLoaderFunc)
 	AddConfigTester(f ConfigTesterFunc)
+	AddInitializer(f DecoratorinitializeFunc)
 
 	Shutdown() error
 	Process(*envelope.Envelope) BackendResult
@@ -42,8 +43,9 @@ type Worker interface {
 }
 
 type DecoratorCallbacks struct {
-	loader ConfigLoaderFunc
-	tester ConfigTesterFunc
+	loader     ConfigLoaderFunc
+	tester     ConfigTesterFunc
+	initialize DecoratorinitializeFunc
 }
 
 type BackendConfig map[string]interface{}

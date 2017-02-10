@@ -3,8 +3,11 @@ package backends
 func init() {
 	backends["dummy"] = &AbstractBackend{}
 	cb := &DecoratorCallbacks{}
-	backends["dummy"].SetProcessors(Debugger(cb), HeadersParser())
+	guerrillaDBcb := &DecoratorCallbacks{}
+	backends["dummy"].SetProcessors(GuerrillaDB(guerrillaDBcb), Hasher(), Debugger(cb), HeadersParser())
 	backends["dummy"].AddConfigLoader(cb.loader)
+	backends["dummy"].AddConfigLoader(guerrillaDBcb.loader)
+	backends["dummy"].AddInitializer(guerrillaDBcb.initialize)
 }
 
 // custom configuration we will parse from the json

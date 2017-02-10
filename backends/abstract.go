@@ -15,6 +15,7 @@ type AbstractBackend struct {
 	p             Processor
 	configLoaders []ConfigLoaderFunc
 	configTesters []ConfigTesterFunc
+	initializers  []DecoratorinitializeFunc
 }
 
 type abstractConfig struct {
@@ -33,6 +34,12 @@ type ConfigTesterFunc func(backendConfig BackendConfig) error
 
 func (b *AbstractBackend) AddConfigTester(f ConfigTesterFunc) {
 	b.configTesters = append(b.configTesters, f)
+}
+
+type DecoratorinitializeFunc func() error
+
+func (b *AbstractBackend) AddInitializer(f DecoratorinitializeFunc) {
+	b.initializers = append(b.initializers, f)
 }
 
 // Your backend should implement this method and set b.config field with a custom config struct
@@ -64,7 +71,12 @@ func (b *AbstractBackend) Initialize(config BackendConfig) error {
 	for _, loader := range b.configLoaders {
 		loader(config)
 	}
+	for i := range b.initializers {
+		b.initializers[i]()
+	}
 	return nil
+
+	// TODO delete
 	if b.Extend != nil {
 		return b.Extend.loadConfig(config)
 	}

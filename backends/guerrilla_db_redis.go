@@ -307,7 +307,7 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
+func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *savePayload) {
 	var to, body string
 
 	var redisErr error
