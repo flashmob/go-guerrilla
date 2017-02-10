@@ -2,12 +2,14 @@ package backends
 
 func init() {
 	backends["dummy"] = &AbstractBackend{}
-	cb := &DecoratorCallbacks{}
-	guerrillaDBcb := &DecoratorCallbacks{}
-	backends["dummy"].SetProcessors(GuerrillaDB(guerrillaDBcb), Hasher(), Debugger(cb), HeadersParser())
-	backends["dummy"].AddConfigLoader(cb.loader)
-	backends["dummy"].AddConfigLoader(guerrillaDBcb.loader)
-	backends["dummy"].AddInitializer(guerrillaDBcb.initialize)
+	debuggercb := &DecoratorCallbacks{}
+	headerCB := &DecoratorCallbacks{}
+	redisCB := &DecoratorCallbacks{}
+	backends["dummy"].SetProcessors(
+		MySql(), Redis(redisCB), Compressor(), Header(headerCB), Hasher(), Debugger(debuggercb), HeadersParser())
+	backends["dummy"].AddConfigLoader(debuggercb.loader)
+	backends["dummy"].AddConfigLoader(headerCB.loader)
+	backends["dummy"].AddConfigLoader(redisCB.loader)
 }
 
 // custom configuration we will parse from the json

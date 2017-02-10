@@ -8,10 +8,11 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/flashmob/go-guerrilla/ev"
 	"runtime/debug"
 )
 
-type guerrillaDBConfig struct {
+type MysqlProcessorConfig struct {
 	NumberOfWorkers    int    `json:"save_workers_size"`
 	MysqlTable         string `json:"mail_table"`
 	MysqlDB            string `json:"mysql_db"`
@@ -23,13 +24,13 @@ type guerrillaDBConfig struct {
 	PrimaryHost        string `json:"primary_mail_host"`
 }
 
-type guerrillaDBDecorator struct {
+type MysqlProcessorDecorator struct {
 	cache  stmtCache
-	config *guerrillaDBConfig
+	config *MysqlProcessorConfig
 }
 
 // prepares the sql query with the number of rows that can be batched with it
-func (g *guerrillaDBDecorator) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
+func (g *MysqlProcessorDecorator) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	if rows == 0 {
 		panic("rows argument cannot be 0")
 	}
@@ -57,7 +58,7 @@ func (g *guerrillaDBDecorator) prepareInsertQuery(rows int, db *sql.DB) *sql.Stm
 	return stmt
 }
 
-func (g *guerrillaDBDecorator) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
+func (g *MysqlProcessorDecorator) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
@@ -81,25 +82,14 @@ func (g *guerrillaDBDecorator) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, 
 	}
 }
 
-func GuerrillaDB(dc *DecoratorCallbacks) Decorator {
+func MySql() Decorator {
 
-	decorator := guerrillaDBDecorator{}
+	decorator := MysqlProcessorDecorator{}
 
-	var config *guerrillaDBConfig
-	dc.loader = func(backendConfig BackendConfig) error {
-		configType := baseConfig(&guerrillaDBConfig{})
-		bcfg, err := ab.extractConfig(backendConfig, configType)
-		if err != nil {
-			return err
-		}
-		config = bcfg.(*guerrillaDBConfig)
-		decorator.config = config
-		return nil
-	}
+	var config *MysqlProcessorConfig
 
 	var vals []interface{}
 	var db *sql.DB
-	var err error
 
 	mysqlConnect := func() (*sql.DB, error) {
 		conf := mysql.Config{
@@ -121,14 +111,21 @@ func GuerrillaDB(dc *DecoratorCallbacks) Decorator {
 		}
 
 	}
+	Service.Subscribe(ev.BackendProcInitialize, func(backendConfig BackendConfig) {
 
-	dc.initialize = func() error {
+		configType := baseConfig(&MysqlProcessorConfig{})
+		// TODO deal with error (supressed) push them on a channel? eg, Service.Errors <- service.ErrConfigLoad
+		bcfg, _ := ab.extractConfig(backendConfig, configType)
+		config = bcfg.(*MysqlProcessorConfig)
+		decorator.config = config
+
+		// todo backendErrors chan error
+		var err error
 		db, err = mysqlConnect()
 		if err != nil {
 			mainlog.Fatalf("cannot open mysql: %s", err)
 		}
-		return err
-	}
+	})
 
 	return func(c Processor) Processor {
 		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
@@ -139,16 +136,17 @@ func GuerrillaDB(dc *DecoratorCallbacks) Decorator {
 				hash = e.Hashes[0]
 			}
 
-			var compressor *compressedData
+			var co *compressor
 			// a compressor was set
-			if c, ok := e.Meta["gzip"]; ok {
-				body = "gzip"
-				compressor = c.(*compressedData)
-			}
-
-			// was saved in redis
-			if _, ok := e.Meta["redis"]; ok {
-				body = "redis"
+			if e.Meta != nil {
+				if c, ok := e.Meta["zlib-compressor"]; ok {
+					body = "gzip"
+					co = c.(*compressor)
+				}
+				// was saved in redis
+				if _, ok := e.Meta["redis"]; ok {
+					body = "redis"
+				}
 			}
 
 			// build the values for the query
@@ -158,12 +156,15 @@ func GuerrillaDB(dc *DecoratorCallbacks) Decorator {
 				trimToLimit(e.MailFrom.String(), 255),
 				trimToLimit(e.Subject, 255),
 				body)
-			if compressor != nil {
-				// use a compressor
-				vals = append(vals,
-					compressor.String())
+			if body == "redis" {
+				// data already saved in redis
+				vals = append(vals, "")
+			} else if co != nil {
+				// use a compressor (automatically adds e.DeliveryHeader)
+				vals = append(vals, co.String())
+				//co.clear()
 			} else {
-				vals = append(vals, e.Data.String())
+				vals = append(vals, e.DeliveryHeader+e.Data.String())
 			}
 
 			vals = append(vals,

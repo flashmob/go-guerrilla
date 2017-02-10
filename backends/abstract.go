@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/ev"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -74,6 +75,8 @@ func (b *AbstractBackend) Initialize(config BackendConfig) error {
 	for i := range b.initializers {
 		b.initializers[i]()
 	}
+	//Service.Publish(ev.BackendProcConfigLoad, config)
+	Service.Publish(ev.BackendProcInitialize, config)
 	return nil
 
 	// TODO delete

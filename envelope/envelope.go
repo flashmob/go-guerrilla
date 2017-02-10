@@ -50,6 +50,8 @@ type Envelope struct {
 	Meta map[string]interface{}
 	// Hashes of each email on the rcpt
 	Hashes []string
+	//
+	DeliveryHeader string
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.

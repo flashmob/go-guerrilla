@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/ev"
 	"os"
 	"reflect"
 	"strings"
@@ -37,72 +38,6 @@ type ServerConfig struct {
 	_publicKeyFile_mtime  int
 }
 
-type Event int
-
-const (
-	// when a new config was loaded
-	EvConfigNewConfig Event = iota
-	// when allowed_hosts changed
-	EvConfigAllowedHosts
-	// when pid_file changed
-	EvConfigPidFile
-	// when log_file changed
-	EvConfigLogFile
-	// when it's time to reload the main log file
-	EvConfigLogReopen
-	// when log level changed
-	EvConfigLogLevel
-	// when the backend changed
-	EvConfigBackendName
-	// when the backend's config changed
-	EvConfigBackendConfig
-	// when a new server was added
-	EvConfigEvServerNew
-	// when an existing server was removed
-	EvConfigServerRemove
-	// when a new server config was detected (general event)
-	EvConfigServerConfig
-	// when a server was enabled
-	EvConfigServerStart
-	// when a server was disabled
-	EvConfigServerStop
-	// when a server's log file changed
-	EvConfigServerLogFile
-	// when it's time to reload the server's log
-	EvConfigServerLogReopen
-	// when a server's timeout changed
-	EvConfigServerTimeout
-	// when a server's max clients changed
-	EvConfigServerMaxClients
-	// when a server's TLS config changed
-	EvConfigServerTLSConfig
-)
-
-var configEvents = [...]string{
-	"config_change:new_config",
-	"config_change:allowed_hosts",
-	"config_change:pid_file",
-	"config_change:log_file",
-	"config_change:reopen_log_file",
-	"config_change:log_level",
-	"config_change:backend_config",
-	"config_change:backend_name",
-	"server_change:new_server",
-	"server_change:remove_server",
-	"server_change:update_config",
-	"server_change:start_server",
-	"server_change:stop_server",
-	"server_change:new_log_file",
-	"server_change:reopen_log_file",
-	"server_change:timeout",
-	"server_change:max_clients",
-	"server_change:tls_config",
-}
-
-func (e Event) String() string {
-	return configEvents[e]
-}
-
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
 // also does validation, returns error if validation failed or something went wrong
 func (c *AppConfig) Load(jsonBytes []byte) error {
@@ -132,26 +67,26 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has config changed, general check
 	if !reflect.DeepEqual(oldConfig, c) {
-		app.Publish(EvConfigNewConfig, c)
+		app.Publish(ev.ConfigNewConfig, c)
 	}
 	// has 'allowed hosts' changed?
 	if !reflect.DeepEqual(oldConfig.AllowedHosts, c.AllowedHosts) {
-		app.Publish(EvConfigAllowedHosts, c)
+		app.Publish(ev.ConfigAllowedHosts, c)
 	}
 	// has pid file changed?
 	if strings.Compare(oldConfig.PidFile, c.PidFile) != 0 {
-		app.Publish(EvConfigPidFile, c)
+		app.Publish(ev.ConfigPidFile, c)
 	}
 	// has mainlog log changed?
 	if strings.Compare(oldConfig.LogFile, c.LogFile) != 0 {
-		app.Publish(EvConfigLogFile, c)
+		app.Publish(ev.ConfigLogFile, c)
 	} else {
 		// since config file has not changed, we reload it
-		app.Publish(EvConfigLogReopen, c)
+		app.Publish(ev.ConfigLogReopen, c)
 	}
 	// has log level changed?
 	if strings.Compare(oldConfig.LogLevel, c.LogLevel) != 0 {
-		app.Publish(EvConfigLogLevel, c)
+		app.Publish(ev.ConfigLogLevel, c)
 	}
 	// server config changes
 	oldServers := oldConfig.getServers()
@@ -164,21 +99,21 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 			newServer.emitChangeEvents(oldServer, app)
 		} else {
 			// start new server
-			app.Publish(EvConfigEvServerNew, newServer)
+			app.Publish(ev.ConfigEvServerNew, newServer)
 		}
 
 	}
 	// remove any servers that don't exist anymore
 	for _, oldserver := range oldServers {
-		app.Publish(EvConfigServerRemove, oldserver)
+		app.Publish(ev.ConfigServerRemove, oldserver)
 	}
 }
 
 // EmitLogReopen emits log reopen events using existing config
 func (c *AppConfig) EmitLogReopenEvents(app Guerrilla) {
-	app.Publish(EvConfigLogReopen, c)
+	app.Publish(ev.ConfigLogReopen, c)
 	for _, sc := range c.getServers() {
-		app.Publish(EvConfigServerLogReopen, sc)
+		app.Publish(ev.ConfigServerLogReopen, sc)
 	}
 }
 
@@ -201,33 +136,33 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	)
 	if len(changes) > 0 {
 		// something changed in the server config
-		app.Publish(EvConfigServerConfig, sc)
+		app.Publish(ev.ConfigServerConfig, sc)
 	}
 
 	// enable or disable?
 	if _, ok := changes["IsEnabled"]; ok {
 		if sc.IsEnabled {
-			app.Publish(EvConfigServerStart, sc)
+			app.Publish(ev.ConfigServerStart, sc)
 		} else {
-			app.Publish(EvConfigServerStop, sc)
+			app.Publish(ev.ConfigServerStop, sc)
 		}
 		// do not emit any more events when IsEnabled changed
 		return
 	}
 	// log file change?
 	if _, ok := changes["LogFile"]; ok {
-		app.Publish(EvConfigServerLogFile, sc)
+		app.Publish(ev.ConfigServerLogFile, sc)
 	} else {
 		// since config file has not changed, we reload it
-		app.Publish(EvConfigServerLogReopen, sc)
+		app.Publish(ev.ConfigServerLogReopen, sc)
 	}
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {
-		app.Publish(EvConfigServerTimeout, sc)
+		app.Publish(ev.ConfigServerTimeout, sc)
 	}
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
-		app.Publish(EvConfigServerMaxClients, sc)
+		app.Publish(ev.ConfigServerMaxClients, sc)
 	}
 
 	// tls changed
@@ -246,7 +181,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		}
 		return false
 	}(); ok {
-		app.Publish(EvConfigServerTLSConfig, sc)
+		app.Publish(ev.ConfigServerTLSConfig, sc)
 	}
 }
 

@@ -3,12 +3,19 @@ package backends
 import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/ev"
 	"github.com/flashmob/go-guerrilla/log"
 	"strconv"
 	"strings"
 )
 
 var mainlog log.Logger
+
+var Service BackendService
+
+func init() {
+	Service = BackendService{}
+}
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -98,4 +105,8 @@ func (br backendResult) Code() int {
 
 func NewBackendResult(message string) BackendResult {
 	return backendResult(message)
+}
+
+type BackendService struct {
+	ev.EventHandler
 }
