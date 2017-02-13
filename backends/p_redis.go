@@ -1,9 +1,12 @@
 package backends
 
 import (
+	"fmt"
+
 	"github.com/flashmob/go-guerrilla/envelope"
 
 	"github.com/flashmob/go-guerrilla/response"
+	"github.com/garyburd/redigo/redis"
 )
 
 type RedisProcessorConfig struct {
@@ -11,22 +14,51 @@ type RedisProcessorConfig struct {
 	RedisInterface     string `json:"redis_interface"`
 }
 
+type RedisProcessor struct {
+	isConnected bool
+	conn        redis.Conn
+}
+
+func (r *RedisProcessor) redisConnection(redisInterface string) (err error) {
+	if r.isConnected == false {
+		r.conn, err = redis.Dial("tcp", redisInterface)
+		if err != nil {
+			// handle error
+			return err
+		}
+		r.isConnected = true
+	}
+	return nil
+}
+
 // The redis decorator stores the email data in redis
 
-func Redis(dc *DecoratorCallbacks) Decorator {
+func Redis() Decorator {
 
 	var config *RedisProcessorConfig
-	redisClient := &redisClient{}
-	dc.loader = func(backendConfig BackendConfig) error {
+	redisClient := &RedisProcessor{}
+	// read the config into RedisProcessorConfig
+	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&RedisProcessorConfig{})
 		bcfg, err := ab.extractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
 		config = bcfg.(*RedisProcessorConfig)
-
+		if redisErr := redisClient.redisConnection(config.RedisInterface); redisErr != nil {
+			err := fmt.Errorf("Redis cannot connect, check your settings: %s", redisErr)
+			return err
+		}
 		return nil
-	}
+	}))
+	// When shutting down
+	Service.AddShutdowner(Shutdown(func() error {
+		if redisClient.isConnected {
+			redisClient.conn.Close()
+		}
+		return nil
+	}))
+
 	var redisErr error
 
 	return func(c Processor) Processor {

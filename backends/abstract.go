@@ -4,19 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
-	"github.com/flashmob/go-guerrilla/ev"
 	"reflect"
 	"runtime/debug"
 	"strings"
 )
 
 type AbstractBackend struct {
-	config        abstractConfig
-	Extend        Worker
-	p             Processor
-	configLoaders []ConfigLoaderFunc
-	configTesters []ConfigTesterFunc
-	initializers  []DecoratorinitializeFunc
+	config abstractConfig
+	Extend Worker
+	p      Processor
 }
 
 type abstractConfig struct {
@@ -24,24 +20,6 @@ type abstractConfig struct {
 }
 
 var ab AbstractBackend
-
-type ConfigLoaderFunc func(backendConfig BackendConfig) error
-
-func (b *AbstractBackend) AddConfigLoader(f ConfigLoaderFunc) {
-	b.configLoaders = append(b.configLoaders, f)
-}
-
-type ConfigTesterFunc func(backendConfig BackendConfig) error
-
-func (b *AbstractBackend) AddConfigTester(f ConfigTesterFunc) {
-	b.configTesters = append(b.configTesters, f)
-}
-
-type DecoratorinitializeFunc func() error
-
-func (b *AbstractBackend) AddInitializer(f DecoratorinitializeFunc) {
-	b.initializers = append(b.initializers, f)
-}
 
 // Your backend should implement this method and set b.config field with a custom config struct
 // Therefore, your implementation would have your own custom config type instead of dummyConfig
@@ -69,14 +47,9 @@ func (b *AbstractBackend) SetProcessors(p ...Decorator) {
 }
 
 func (b *AbstractBackend) Initialize(config BackendConfig) error {
-	for _, loader := range b.configLoaders {
-		loader(config)
-	}
-	for i := range b.initializers {
-		b.initializers[i]()
-	}
-	//Service.Publish(ev.BackendProcConfigLoad, config)
-	Service.Publish(ev.BackendProcInitialize, config)
+
+	Service.Initialize(config)
+
 	return nil
 
 	// TODO delete

@@ -11,20 +11,20 @@ type HeaderConfig struct {
 }
 
 // Generate the MTA delivery header
-// Sets e.DeliveryHeader with the result
-func Header(dc *DecoratorCallbacks) Decorator {
+// Sets e.DeliveryHeader part of the envelope with the generated header
+func Header() Decorator {
 
 	var config *HeaderConfig
-	dc.loader = func(backendConfig BackendConfig) error {
+
+	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&HeaderConfig{})
 		bcfg, err := ab.extractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
 		config = bcfg.(*HeaderConfig)
-
 		return nil
-	}
+	}))
 
 	return func(c Processor) Processor {
 		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {

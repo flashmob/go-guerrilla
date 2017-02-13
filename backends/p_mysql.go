@@ -8,7 +8,6 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/flashmob/go-guerrilla/ev"
 	"runtime/debug"
 )
 
@@ -24,13 +23,35 @@ type MysqlProcessorConfig struct {
 	PrimaryHost        string `json:"primary_mail_host"`
 }
 
-type MysqlProcessorDecorator struct {
+type MysqlProcessor struct {
 	cache  stmtCache
 	config *MysqlProcessorConfig
 }
 
+func (m *MysqlProcessor) connect(config *MysqlProcessorConfig) (*sql.DB, error) {
+	var db *sql.DB
+	var err error
+	conf := mysql.Config{
+		User:         config.MysqlUser,
+		Passwd:       config.MysqlPass,
+		DBName:       config.MysqlDB,
+		Net:          "tcp",
+		Addr:         config.MysqlHost,
+		ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		Params:       map[string]string{"collation": "utf8_general_ci"},
+	}
+	if db, err = sql.Open("mysql", conf.FormatDSN()); err != nil {
+		mainlog.Error("cannot open mysql", err)
+		return nil, err
+	}
+	mainlog.Info("connected to mysql on tcp ", config.MysqlHost)
+	return db, err
+
+}
+
 // prepares the sql query with the number of rows that can be batched with it
-func (g *MysqlProcessorDecorator) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
+func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	if rows == 0 {
 		panic("rows argument cannot be 0")
 	}
@@ -58,7 +79,7 @@ func (g *MysqlProcessorDecorator) prepareInsertQuery(rows int, db *sql.DB) *sql.
 	return stmt
 }
 
-func (g *MysqlProcessorDecorator) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
+func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
@@ -84,48 +105,34 @@ func (g *MysqlProcessorDecorator) doQuery(c int, db *sql.DB, insertStmt *sql.Stm
 
 func MySql() Decorator {
 
-	decorator := MysqlProcessorDecorator{}
-
 	var config *MysqlProcessorConfig
-
 	var vals []interface{}
 	var db *sql.DB
+	mp := &MysqlProcessor{}
 
-	mysqlConnect := func() (*sql.DB, error) {
-		conf := mysql.Config{
-			User:         config.MysqlUser,
-			Passwd:       config.MysqlPass,
-			DBName:       config.MysqlDB,
-			Net:          "tcp",
-			Addr:         config.MysqlHost,
-			ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
-			WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
-			Params:       map[string]string{"collation": "utf8_general_ci"},
-		}
-		if db, err := sql.Open("mysql", conf.FormatDSN()); err != nil {
-			mainlog.Error("cannot open mysql", err)
-			return nil, err
-		} else {
-			mainlog.Info("connected to mysql on tcp ", config.MysqlHost)
-			return db, nil
-		}
-
-	}
-	Service.Subscribe(ev.BackendProcInitialize, func(backendConfig BackendConfig) {
-
+	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&MysqlProcessorConfig{})
-		// TODO deal with error (supressed) push them on a channel? eg, Service.Errors <- service.ErrConfigLoad
-		bcfg, _ := ab.extractConfig(backendConfig, configType)
+		bcfg, err := ab.extractConfig(backendConfig, configType)
+		if err != nil {
+			return err
+		}
 		config = bcfg.(*MysqlProcessorConfig)
-		decorator.config = config
-
-		// todo backendErrors chan error
-		var err error
-		db, err = mysqlConnect()
+		mp.config = config
+		db, err = mp.connect(config)
 		if err != nil {
 			mainlog.Fatalf("cannot open mysql: %s", err)
+			return err
 		}
-	})
+		return nil
+	}))
+
+	// shutdown
+	Service.AddShutdowner(Shutdown(func() error {
+		if db != nil {
+			db.Close()
+		}
+		return nil
+	}))
 
 	return func(c Processor) Processor {
 		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
@@ -174,8 +181,8 @@ func MySql() Decorator {
 				trimToLimit(e.MailFrom.String(), 255),
 				e.TLS)
 
-			stmt := decorator.prepareInsertQuery(1, db)
-			decorator.doQuery(1, db, stmt, &vals)
+			stmt := mp.prepareInsertQuery(1, db)
+			mp.doQuery(1, db, stmt, &vals)
 			// continue to the next Processor in the decorator chain
 			return c.Process(e)
 		})

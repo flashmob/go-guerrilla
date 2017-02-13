@@ -12,7 +12,7 @@ type Processor interface {
 // Signature of DoFunc
 type ProcessorFunc func(*envelope.Envelope) (BackendResult, error)
 
-// Add method to DoFunc type to satisfy Client interface
+// Make ProcessorFunc will satisfy the Processor interface
 func (f ProcessorFunc) Process(e *envelope.Envelope) (BackendResult, error) {
 	return f(e)
 }

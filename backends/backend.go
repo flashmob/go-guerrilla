@@ -3,7 +3,6 @@ package backends
 import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
-	"github.com/flashmob/go-guerrilla/ev"
 	"github.com/flashmob/go-guerrilla/log"
 	"strconv"
 	"strings"
@@ -11,10 +10,10 @@ import (
 
 var mainlog log.Logger
 
-var Service BackendService
+var Service *BackendService
 
 func init() {
-	Service = BackendService{}
+	Service = &BackendService{}
 }
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
@@ -38,21 +37,11 @@ type Worker interface {
 	// parse the configuration files
 	loadConfig(BackendConfig) error
 
-	AddConfigLoader(f ConfigLoaderFunc)
-	AddConfigTester(f ConfigTesterFunc)
-	AddInitializer(f DecoratorinitializeFunc)
-
 	Shutdown() error
 	Process(*envelope.Envelope) BackendResult
 	Initialize(BackendConfig) error
 
 	SetProcessors(p ...Decorator)
-}
-
-type DecoratorCallbacks struct {
-	loader     ConfigLoaderFunc
-	tester     ConfigTesterFunc
-	initialize DecoratorinitializeFunc
 }
 
 type BackendConfig map[string]interface{}
@@ -107,6 +96,55 @@ func NewBackendResult(message string) BackendResult {
 	return backendResult(message)
 }
 
+type ProcessorInitializer interface {
+	Initialize(backendConfig BackendConfig) error
+}
+
+type ProcessorShutdowner interface {
+	Shutdown() error
+}
+
+type Initialize func(backendConfig BackendConfig) error
+type Shutdown func() error
+
+// Satisfy ProcessorInitializer interface
+// So we can now pass an anonymous function that implements ProcessorInitializer
+func (i Initialize) Initialize(backendConfig BackendConfig) error {
+	// delegate to the anonymous function
+	return i(backendConfig)
+}
+
+// satisfy ProcessorShutdowner interface, same concept as Initialize type
+func (s Shutdown) Shutdown() error {
+	// delegate
+	return s()
+}
+
 type BackendService struct {
-	ev.EventHandler
+	ProcessorHandlers
+}
+
+type ProcessorHandlers struct {
+	Initializers []ProcessorInitializer
+	Shutdowners  []ProcessorShutdowner
+}
+
+func (b *BackendService) AddInitializer(i ProcessorInitializer) {
+	b.Initializers = append(b.Initializers, i)
+}
+
+func (b *BackendService) AddShutdowner(i ProcessorShutdowner) {
+	b.Shutdowners = append(b.Shutdowners, i)
+}
+
+func (b *BackendService) Initialize(backend BackendConfig) {
+	for i := range b.Initializers {
+		b.Initializers[i].Initialize(backend)
+	}
+}
+
+func (b *BackendService) Shutdown() {
+	for i := range b.Shutdowners {
+		b.Shutdowners[i].Shutdown()
+	}
 }

@@ -1,4 +1,4 @@
-package ev
+package guerrilla
 
 import (
 	evbus "github.com/asaskevich/EventBus"
@@ -8,48 +8,41 @@ type Event int
 
 const (
 	// when a new config was loaded
-	ConfigNewConfig Event = iota
+	EventConfigNewConfig Event = iota
 	// when allowed_hosts changed
-	ConfigAllowedHosts
+	EventConfigAllowedHosts
 	// when pid_file changed
-	ConfigPidFile
+	EventConfigPidFile
 	// when log_file changed
-	ConfigLogFile
+	EventConfigLogFile
 	// when it's time to reload the main log file
-	ConfigLogReopen
+	EventConfigLogReopen
 	// when log level changed
-	ConfigLogLevel
+	EventConfigLogLevel
 	// when the backend changed
-	ConfigBackendName
+	EventConfigBackendName
 	// when the backend's config changed
-	ConfigBackendConfig
+	EventConfigBackendConfig
 	// when a new server was added
-	ConfigEvServerNew
+	EventConfigEvServerNew
 	// when an existing server was removed
-	ConfigServerRemove
+	EventConfigServerRemove
 	// when a new server config was detected (general event)
-	ConfigServerConfig
+	EventConfigServerConfig
 	// when a server was enabled
-	ConfigServerStart
+	EventConfigServerStart
 	// when a server was disabled
-	ConfigServerStop
+	EventConfigServerStop
 	// when a server's log file changed
-	ConfigServerLogFile
+	EventConfigServerLogFile
 	// when it's time to reload the server's log
-	ConfigServerLogReopen
+	EventConfigServerLogReopen
 	// when a server's timeout changed
-	ConfigServerTimeout
+	EventConfigServerTimeout
 	// when a server's max clients changed
-	ConfigServerMaxClients
+	EventConfigServerMaxClients
 	// when a server's TLS config changed
-	ConfigServerTLSConfig
-
-	// Load a backend processor's config todo: dont need it?
-	BackendProcConfigLoad
-	// initialize a backend processor
-	BackendProcInitialize
-	// shutdown a backend processor
-	BackendProcShutdown
+	EventConfigServerTLSConfig
 )
 
 var eventList = [...]string{

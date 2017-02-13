@@ -3,7 +3,6 @@ package guerrilla
 import (
 	"errors"
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/ev"
 	"github.com/flashmob/go-guerrilla/log"
 	"sync"
 	"sync/atomic"
@@ -36,9 +35,9 @@ func (e Errors) Error() string {
 type Guerrilla interface {
 	Start() error
 	Shutdown()
-	Subscribe(topic ev.Event, fn interface{}) error
-	Publish(topic ev.Event, args ...interface{})
-	Unsubscribe(topic ev.Event, handler interface{}) error
+	Subscribe(topic Event, fn interface{}) error
+	Publish(topic Event, args ...interface{})
+	Unsubscribe(topic Event, handler interface{}) error
 	SetLogger(log.Logger)
 }
 
@@ -49,7 +48,7 @@ type guerrilla struct {
 	// guard controls access to g.servers
 	guard sync.Mutex
 	state int8
-	ev.EventHandler
+	EventHandler
 	logStore
 }
 
@@ -173,12 +172,12 @@ func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
 func (g *guerrilla) subscribeEvents() {
 
 	// main config changed
-	g.Subscribe(ev.ConfigNewConfig, func(c *AppConfig) {
+	g.Subscribe(EventConfigNewConfig, func(c *AppConfig) {
 		g.setConfig(c)
 	})
 
 	// allowed_hosts changed, set for all servers
-	g.Subscribe(ev.ConfigAllowedHosts, func(c *AppConfig) {
+	g.Subscribe(EventConfigAllowedHosts, func(c *AppConfig) {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
 		})
@@ -186,7 +185,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// the main log file changed
-	g.Subscribe(ev.ConfigLogFile, func(c *AppConfig) {
+	g.Subscribe(EventConfigLogFile, func(c *AppConfig) {
 		var err error
 		var l log.Logger
 		if l, err = log.GetLogger(c.LogFile); err == nil {
@@ -203,13 +202,13 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// re-open the main log file (file not changed)
-	g.Subscribe(ev.ConfigLogReopen, func(c *AppConfig) {
+	g.Subscribe(EventConfigLogReopen, func(c *AppConfig) {
 		g.mainlog().Reopen()
 		g.mainlog().Infof("re-opened main log file [%s]", c.LogFile)
 	})
 
 	// when log level changes, apply to mainlog and server logs
-	g.Subscribe(ev.ConfigLogLevel, func(c *AppConfig) {
+	g.Subscribe(EventConfigLogLevel, func(c *AppConfig) {
 		g.mainlog().SetLevel(c.LogLevel)
 		g.mapServers(func(server *server) {
 			server.log.SetLevel(c.LogLevel)
@@ -218,12 +217,12 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// server config was updated
-	g.Subscribe(ev.ConfigServerConfig, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerConfig, func(sc *ServerConfig) {
 		g.setServerConfig(sc)
 	})
 
 	// add a new server to the config & start
-	g.Subscribe(ev.ConfigEvServerNew, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigEvServerNew, func(sc *ServerConfig) {
 		if _, err := g.findServer(sc.ListenInterface); err != nil {
 			// not found, lets add it
 			if err := g.makeServers(); err != nil {
@@ -240,7 +239,7 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// start a server that already exists in the config and has been enabled
-	g.Subscribe(ev.ConfigServerStart, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerStart, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
 				g.mainlog().Infof("Starting server [%s]", server.listenInterface)
@@ -252,7 +251,7 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// stop running a server
-	g.Subscribe(ev.ConfigServerStop, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerStop, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if server.state == ServerStateRunning {
 				server.Shutdown()
@@ -261,7 +260,7 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// server was removed from config
-	g.Subscribe(ev.ConfigServerRemove, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerRemove, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			server.Shutdown()
 			g.removeServer(sc.ListenInterface)
@@ -270,7 +269,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// TLS changes
-	g.Subscribe(ev.ConfigServerTLSConfig, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerTLSConfig, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if err := server.configureSSL(); err == nil {
 				g.mainlog().Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
@@ -280,19 +279,19 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// when server's timeout change.
-	g.Subscribe(ev.ConfigServerTimeout, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerTimeout, func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			server.setTimeout(sc.Timeout)
 		})
 	})
 	// when server's max clients change.
-	g.Subscribe(ev.ConfigServerMaxClients, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerMaxClients, func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			// TODO resize the pool somehow
 		})
 	})
 	// when a server's log file changes
-	g.Subscribe(ev.ConfigServerLogFile, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerLogFile, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			var err error
 			var l log.Logger
@@ -314,7 +313,7 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// when the daemon caught a sighup, event for individual server
-	g.Subscribe(ev.ConfigServerLogReopen, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerLogReopen, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			server.log.Reopen()
 			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)

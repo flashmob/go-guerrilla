@@ -2,14 +2,8 @@ package backends
 
 func init() {
 	backends["dummy"] = &AbstractBackend{}
-	debuggercb := &DecoratorCallbacks{}
-	headerCB := &DecoratorCallbacks{}
-	redisCB := &DecoratorCallbacks{}
 	backends["dummy"].SetProcessors(
-		MySql(), Redis(redisCB), Compressor(), Header(headerCB), Hasher(), Debugger(debuggercb), HeadersParser())
-	backends["dummy"].AddConfigLoader(debuggercb.loader)
-	backends["dummy"].AddConfigLoader(headerCB.loader)
-	backends["dummy"].AddConfigLoader(redisCB.loader)
+		MySql(), Redis(), Compressor(), Header(), Hasher(), Debugger(), HeadersParser())
 }
 
 // custom configuration we will parse from the json

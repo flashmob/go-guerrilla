@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/ev"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -86,7 +85,7 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
-func subscribeBackendEvent(event ev.Event, backend backends.Backend, app guerrilla.Guerrilla) {
+func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app guerrilla.Guerrilla) {
 
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
 		logger, _ := log.GetLogger(cmdConfig.LogFile)
@@ -145,12 +144,12 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
-	subscribeBackendEvent(ev.ConfigBackendConfig, backend, app)
-	subscribeBackendEvent(ev.ConfigBackendName, backend, app)
+	subscribeBackendEvent(guerrilla.EventConfigBackendConfig, backend, app)
+	subscribeBackendEvent(guerrilla.EventConfigBackendName, backend, app)
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config
-	app.Subscribe(ev.ConfigPidFile, func(ac *guerrilla.AppConfig) {
+	app.Subscribe(guerrilla.EventConfigPidFile, func(ac *guerrilla.AppConfig) {
 		writePid(ac.PidFile)
 	})
 	// change the logger from stdrerr to one from config
@@ -185,10 +184,10 @@ func (c *CmdConfig) load(jsonBytes []byte) error {
 func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
 	// has backend changed?
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
-		app.Publish(ev.ConfigBackendConfig, c)
+		app.Publish(guerrilla.EventConfigBackendConfig, c)
 	}
 	if c.BackendName != oldConfig.BackendName {
-		app.Publish(ev.ConfigBackendName, c)
+		app.Publish(guerrilla.EventConfigBackendName, c)
 	}
 	// call other emitChangeEvents
 	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)

@@ -8,10 +8,9 @@ type debuggerConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
 }
 
-func Debugger(dc *DecoratorCallbacks) Decorator {
-
+func Debugger() Decorator {
 	var config *debuggerConfig
-	dc.loader = func(backendConfig BackendConfig) error {
+	initFunc := Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&debuggerConfig{})
 		bcfg, err := ab.extractConfig(backendConfig, configType)
 		if err != nil {
@@ -19,8 +18,8 @@ func Debugger(dc *DecoratorCallbacks) Decorator {
 		}
 		config = bcfg.(*debuggerConfig)
 		return nil
-	}
-
+	})
+	Service.AddInitializer(initFunc)
 	return func(c Processor) Processor {
 		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
 			if config.LogReceivedMails {

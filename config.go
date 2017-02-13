@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/ev"
 	"os"
 	"reflect"
 	"strings"
@@ -67,26 +66,26 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has config changed, general check
 	if !reflect.DeepEqual(oldConfig, c) {
-		app.Publish(ev.ConfigNewConfig, c)
+		app.Publish(EventConfigNewConfig, c)
 	}
 	// has 'allowed hosts' changed?
 	if !reflect.DeepEqual(oldConfig.AllowedHosts, c.AllowedHosts) {
-		app.Publish(ev.ConfigAllowedHosts, c)
+		app.Publish(EventConfigAllowedHosts, c)
 	}
 	// has pid file changed?
 	if strings.Compare(oldConfig.PidFile, c.PidFile) != 0 {
-		app.Publish(ev.ConfigPidFile, c)
+		app.Publish(EventConfigPidFile, c)
 	}
 	// has mainlog log changed?
 	if strings.Compare(oldConfig.LogFile, c.LogFile) != 0 {
-		app.Publish(ev.ConfigLogFile, c)
+		app.Publish(EventConfigLogFile, c)
 	} else {
 		// since config file has not changed, we reload it
-		app.Publish(ev.ConfigLogReopen, c)
+		app.Publish(EventConfigLogReopen, c)
 	}
 	// has log level changed?
 	if strings.Compare(oldConfig.LogLevel, c.LogLevel) != 0 {
-		app.Publish(ev.ConfigLogLevel, c)
+		app.Publish(EventConfigLogLevel, c)
 	}
 	// server config changes
 	oldServers := oldConfig.getServers()
@@ -99,21 +98,21 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 			newServer.emitChangeEvents(oldServer, app)
 		} else {
 			// start new server
-			app.Publish(ev.ConfigEvServerNew, newServer)
+			app.Publish(EventConfigEvServerNew, newServer)
 		}
 
 	}
 	// remove any servers that don't exist anymore
 	for _, oldserver := range oldServers {
-		app.Publish(ev.ConfigServerRemove, oldserver)
+		app.Publish(EventConfigServerRemove, oldserver)
 	}
 }
 
 // EmitLogReopen emits log reopen events using existing config
 func (c *AppConfig) EmitLogReopenEvents(app Guerrilla) {
-	app.Publish(ev.ConfigLogReopen, c)
+	app.Publish(EventConfigLogReopen, c)
 	for _, sc := range c.getServers() {
-		app.Publish(ev.ConfigServerLogReopen, sc)
+		app.Publish(EventConfigServerLogReopen, sc)
 	}
 }
 
@@ -136,33 +135,33 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	)
 	if len(changes) > 0 {
 		// something changed in the server config
-		app.Publish(ev.ConfigServerConfig, sc)
+		app.Publish(EventConfigServerConfig, sc)
 	}
 
 	// enable or disable?
 	if _, ok := changes["IsEnabled"]; ok {
 		if sc.IsEnabled {
-			app.Publish(ev.ConfigServerStart, sc)
+			app.Publish(EventConfigServerStart, sc)
 		} else {
-			app.Publish(ev.ConfigServerStop, sc)
+			app.Publish(EventConfigServerStop, sc)
 		}
 		// do not emit any more events when IsEnabled changed
 		return
 	}
 	// log file change?
 	if _, ok := changes["LogFile"]; ok {
-		app.Publish(ev.ConfigServerLogFile, sc)
+		app.Publish(EventConfigServerLogFile, sc)
 	} else {
 		// since config file has not changed, we reload it
-		app.Publish(ev.ConfigServerLogReopen, sc)
+		app.Publish(EventConfigServerLogReopen, sc)
 	}
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {
-		app.Publish(ev.ConfigServerTimeout, sc)
+		app.Publish(EventConfigServerTimeout, sc)
 	}
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
-		app.Publish(ev.ConfigServerMaxClients, sc)
+		app.Publish(EventConfigServerMaxClients, sc)
 	}
 
 	// tls changed
@@ -181,7 +180,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		}
 		return false
 	}(); ok {
-		app.Publish(ev.ConfigServerTLSConfig, sc)
+		app.Publish(EventConfigServerTLSConfig, sc)
 	}
 }
 
