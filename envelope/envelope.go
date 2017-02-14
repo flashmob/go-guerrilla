@@ -96,6 +96,11 @@ func (e *Envelope) ParseHeaders() error {
 	return err
 }
 
+// String converts the email to string. Typically, you would want to use the compressor processor for more efficiency
+func (e *Envelope) String() string {
+	return e.DeliveryHeader + e.Data.String()
+}
+
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
 
 // Decode strings in Mime header format

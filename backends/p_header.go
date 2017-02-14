@@ -10,6 +10,20 @@ type HeaderConfig struct {
 	PrimaryHost string `json:"primary_mail_host"`
 }
 
+// ----------------------------------------------------------------------------------
+// Processor Name: header
+// ----------------------------------------------------------------------------------
+// Description   : Adds delivery information headers to e.DeliveryHeader
+// ----------------------------------------------------------------------------------
+// Config Options: none
+// --------------:-------------------------------------------------------------------
+// Input         : e.Helo
+//               : e.RemoteAddress
+//               : e.RcptTo
+//               : e.Hashes
+// ----------------------------------------------------------------------------------
+// Output        : Sets e.DeliveryHeader with additional delivery info
+// ----------------------------------------------------------------------------------
 func init() {
 	Processors["header"] = func() Decorator {
 		return Header()
@@ -40,12 +54,12 @@ func Header() Decorator {
 				hash = e.Hashes[0]
 			}
 			var addHead string
-			addHead += "Delivered-To: " + to + "\r\n"
-			addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\r\n"
+			addHead += "Delivered-To: " + to + "\n"
+			addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\n"
 			if len(e.RcptTo) > 0 {
-				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
+				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
 			}
-			addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
+			addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
 			// save the result
 			e.DeliveryHeader = addHead
 			// next processor
