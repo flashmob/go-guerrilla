@@ -400,6 +400,7 @@ func (g *guerrilla) Shutdown() {
 
 // SetLogger sets the logger for the app and propagates it to sub-packages (eg.
 func (g *guerrilla) SetLogger(l log.Logger) {
+	l.SetLevel(g.Config.LogLevel)
 	g.storeMainlog(l)
 	backends.Service.StoreMainlog(l)
 }
