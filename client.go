@@ -53,16 +53,15 @@ type client struct {
 // Allocate a new client
 func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
-		conn: conn,
-		Envelope: &envelope.Envelope{
-			RemoteAddress: getRemoteAddr(conn),
-		},
+		conn:        conn,
+		Envelope:    envelope.NewEnvelope(getRemoteAddr(conn)),
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
 		log:         logger,
 	}
+
 	// used for reading the DATA state
 	c.smtpReader = textproto.NewReader(c.bufin.Reader)
 	return c

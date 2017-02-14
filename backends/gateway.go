@@ -10,6 +10,7 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
+	"strings"
 )
 
 // A backend gateway is a proxy that implements the Backend interface.
@@ -17,15 +18,21 @@ import (
 // via a channel. Shutting down via Shutdown() will stop all workers.
 // The rest of this program always talks to the backend via this gateway.
 type BackendGateway struct {
-	AbstractBackend
 	saveMailChan chan *savePayload
 	// waits for backend workers to start/stop
 	wg sync.WaitGroup
-	b  Worker
+	w  *Worker
+	b  Backend
 	// controls access to state
 	stateGuard sync.Mutex
 	State      backendState
 	config     BackendConfig
+	gwConfig   *GatewayConfig
+}
+
+type GatewayConfig struct {
+	WorkersSize   int    `json:"save_workers_size,omitempty"`
+	ProcessorLine string `json:"process_line,omitempty"`
 }
 
 // possible values for state
@@ -44,17 +51,17 @@ func (s backendState) String() string {
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
 func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
-	backend, found := backends[backendName]
 	mainlog = l
-	if !found {
-		return nil, fmt.Errorf("backend %q not found", backendName)
+	gateway := &BackendGateway{config: backendConfig}
+	if backend, found := backends[backendName]; found {
+		gateway.b = backend
 	}
-	gateway := &BackendGateway{b: backend, config: backendConfig}
 	err := gateway.Initialize(backendConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
 	gateway.State = BackendStateRunning
+
 	return gateway, nil
 }
 
@@ -84,13 +91,10 @@ func (gw *BackendGateway) Shutdown() error {
 	gw.stateGuard.Lock()
 	defer gw.stateGuard.Unlock()
 	if gw.State != BackendStateShuttered {
-		err := gw.b.Shutdown()
-		if err == nil {
-			close(gw.saveMailChan) // workers will stop
-			gw.wg.Wait()
-			gw.State = BackendStateShuttered
-		}
-		return err
+		close(gw.saveMailChan) // workers will stop
+		gw.wg.Wait()
+		gw.State = BackendStateShuttered
+		Service.Shutdown()
 	}
 	return nil
 }
@@ -108,29 +112,65 @@ func (gw *BackendGateway) Reinitialize() error {
 	return err
 }
 
+func (gw *BackendGateway) newProcessorLine() Processor {
+	var decorators []Decorator
+	if len(gw.gwConfig.ProcessorLine) == 0 {
+		return nil
+	}
+	line := strings.Split(strings.ToLower(gw.gwConfig.ProcessorLine), "|")
+	for i := range line {
+		name := line[len(line)-1-i] // reverse order, since decorators are stacked
+		if makeFunc, ok := Processors[name]; ok {
+			decorators = append(decorators, makeFunc())
+		}
+	}
+	p := Decorate(DefaultProcessor{}, decorators...)
+	return p
+}
+
+func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
+	configType := baseConfig(&GatewayConfig{})
+	bcfg, err := Service.extractConfig(cfg, configType)
+	if err != nil {
+		return err
+	}
+	gw.gwConfig = bcfg.(*GatewayConfig)
+	return nil
+}
+
 func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
-	err := gw.b.Initialize(cfg)
+	err := gw.loadConfig(cfg)
 	if err == nil {
-		workersSize := gw.b.getNumberOfWorkers()
+		workersSize := gw.getNumberOfWorkers()
 		if workersSize < 1 {
 			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
-		if err := gw.b.testSettings(); err != nil {
-			gw.State = BackendStateError
-			return err
+		var lines []Processor
+		for i := 0; i < workersSize; i++ {
+			lines = append(lines, gw.newProcessorLine())
 		}
+		// initialize processors
+		Service.Initialize(cfg)
 		gw.saveMailChan = make(chan *savePayload, workersSize)
 		// start our savemail workers
 		gw.wg.Add(workersSize)
 		for i := 0; i < workersSize; i++ {
-			go func() {
-				gw.b.saveMailWorker(gw.saveMailChan)
+			go func(workerId int) {
+				gw.w.saveMailWorker(gw.saveMailChan, lines[workerId], workerId+1)
 				gw.wg.Done()
-			}()
+			}(i)
 		}
+
 	} else {
 		gw.State = BackendStateError
 	}
 	return err
+}
+
+func (gw *BackendGateway) getNumberOfWorkers() int {
+	if gw.gwConfig.WorkersSize == 0 {
+		return 1
+	}
+	return gw.gwConfig.WorkersSize
 }

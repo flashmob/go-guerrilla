@@ -33,6 +33,7 @@ import (
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/go-sql-driver/mysql"
 	"io"
 	"runtime/debug"
@@ -47,12 +48,10 @@ const GuerrillaDBAndRedisBatchMax = 2
 const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
 
 func init() {
-	backends["guerrilla-db-redis"] = &AbstractBackend{
-		Extend: &GuerrillaDBAndRedisBackend{}}
+	backends["guerrilla-db-redis"] = &GuerrillaDBAndRedisBackend{}
 }
 
 type GuerrillaDBAndRedisBackend struct {
-	AbstractBackend
 	config    guerrillaDBAndRedisConfig
 	batcherWg sync.WaitGroup
 	// cache prepared queries
@@ -81,9 +80,10 @@ func convertError(name string) error {
 // Load the backend config for the backend. It has already been unmarshalled
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
+
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := baseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := g.extractConfig(backendConfig, configType)
+	bcfg, err := Service.extractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
@@ -445,4 +445,24 @@ func (g *GuerrillaDBAndRedisBackend) testSettings() (err error) {
 	}
 
 	return
+}
+
+func (g *GuerrillaDBAndRedisBackend) Initialize(config BackendConfig) error {
+	err := g.loadConfig(config)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+// does nothing
+func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) BackendResult {
+	return NewBackendResult("250 OK")
+}
+
+// does nothing
+func (g *GuerrillaDBAndRedisBackend) Shutdown() error {
+
+	return nil
 }

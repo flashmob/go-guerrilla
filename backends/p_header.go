@@ -10,6 +10,12 @@ type HeaderConfig struct {
 	PrimaryHost string `json:"primary_mail_host"`
 }
 
+func init() {
+	Processors["header"] = func() Decorator {
+		return Header()
+	}
+}
+
 // Generate the MTA delivery header
 // Sets e.DeliveryHeader part of the envelope with the generated header
 func Header() Decorator {
@@ -18,7 +24,7 @@ func Header() Decorator {
 
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&HeaderConfig{})
-		bcfg, err := ab.extractConfig(backendConfig, configType)
+		bcfg, err := Service.extractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}

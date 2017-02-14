@@ -9,6 +9,12 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+func init() {
+	Processors["redis"] = func() Decorator {
+		return Redis()
+	}
+}
+
 type RedisProcessorConfig struct {
 	RedisExpireSeconds int    `json:"redis_expire_seconds"`
 	RedisInterface     string `json:"redis_interface"`
@@ -40,7 +46,7 @@ func Redis() Decorator {
 	// read the config into RedisProcessorConfig
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&RedisProcessorConfig{})
-		bcfg, err := ab.extractConfig(backendConfig, configType)
+		bcfg, err := Service.extractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -69,12 +75,8 @@ func Redis() Decorator {
 
 				var cData *compressor
 				// a compressor was set
-				if e.Meta != nil {
-					if c, ok := e.Meta["zlib-compressor"]; ok {
-						cData = c.(*compressor)
-					}
-				} else {
-					e.Meta = make(map[string]interface{})
+				if c, ok := e.Info["zlib-compressor"]; ok {
+					cData = c.(*compressor)
 				}
 
 				redisErr = redisClient.redisConnection(config.RedisInterface)
@@ -98,7 +100,7 @@ func Redis() Decorator {
 					result := NewBackendResult(response.Canned.FailBackendTransaction)
 					return result, redisErr
 				} else {
-					e.Meta["redis"] = "redis" // the backend system will know to look in redis for the message data
+					e.Info["redis"] = "redis" // the backend system will know to look in redis for the message data
 				}
 			} else {
 				mainlog.Error("Redis needs a Hash() process before it")

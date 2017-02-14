@@ -46,12 +46,19 @@ type Envelope struct {
 	TLS bool
 	// Header stores the results from ParseHeaders()
 	Header textproto.MIMEHeader
-	// Hold the metadat
-	Meta map[string]interface{}
+	// Hold the information generated when processing the envelope by the backend
+	Info map[string]interface{}
 	// Hashes of each email on the rcpt
 	Hashes []string
 	//
 	DeliveryHeader string
+}
+
+func NewEnvelope(remoteAddr string) *Envelope {
+	return &Envelope{
+		RemoteAddress: remoteAddr,
+		Info:          make(map[string]interface{}),
+	}
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.

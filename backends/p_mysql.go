@@ -11,6 +11,12 @@ import (
 	"runtime/debug"
 )
 
+func init() {
+	Processors["mysql"] = func() Decorator {
+		return MySql()
+	}
+}
+
 type MysqlProcessorConfig struct {
 	NumberOfWorkers    int    `json:"save_workers_size"`
 	MysqlTable         string `json:"mail_table"`
@@ -112,7 +118,7 @@ func MySql() Decorator {
 
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := baseConfig(&MysqlProcessorConfig{})
-		bcfg, err := ab.extractConfig(backendConfig, configType)
+		bcfg, err := Service.extractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -145,15 +151,13 @@ func MySql() Decorator {
 
 			var co *compressor
 			// a compressor was set
-			if e.Meta != nil {
-				if c, ok := e.Meta["zlib-compressor"]; ok {
-					body = "gzip"
-					co = c.(*compressor)
-				}
-				// was saved in redis
-				if _, ok := e.Meta["redis"]; ok {
-					body = "redis"
-				}
+			if c, ok := e.Info["zlib-compressor"]; ok {
+				body = "gzip"
+				co = c.(*compressor)
+			}
+			// was saved in redis
+			if _, ok := e.Info["redis"]; ok {
+				body = "redis"
 			}
 
 			// build the values for the query

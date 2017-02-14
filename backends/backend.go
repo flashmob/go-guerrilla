@@ -4,16 +4,23 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"reflect"
 	"strconv"
 	"strings"
 )
 
-var mainlog log.Logger
-
-var Service *BackendService
+var (
+	mainlog log.Logger
+	Service *BackendService
+	// deprecated backends system
+	backends = map[string]Backend{}
+	// new backends system
+	Processors map[string]ProcessorConstructor
+)
 
 func init() {
 	Service = &BackendService{}
+	Processors = make(map[string]ProcessorConstructor)
 }
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
@@ -27,13 +34,13 @@ type Backend interface {
 	Shutdown() error
 }
 
+/*
 type Worker interface {
 	// start save mail worker(s)
 	saveMailWorker(chan *savePayload)
 	// get the number of workers that will be stared
 	getNumberOfWorkers() int
 	// test database settings, permissions, correct paths, etc, before starting workers
-	testSettings() error
 	// parse the configuration files
 	loadConfig(BackendConfig) error
 
@@ -43,10 +50,10 @@ type Worker interface {
 
 	SetProcessors(p ...Decorator)
 }
-
+*/
 type BackendConfig map[string]interface{}
 
-var backends = map[string]Worker{}
+type ProcessorConstructor func() Decorator
 
 type baseConfig interface{}
 
@@ -147,4 +154,56 @@ func (b *BackendService) Shutdown() {
 	for i := range b.Shutdowners {
 		b.Shutdowners[i].Shutdown()
 	}
+}
+
+// extractConfig loads the backend config. It has already been unmarshalled
+// configData contains data from the main config file's "backend_config" value
+// configType is a Processor's specific config value.
+// The reason why using reflection is because we'll get a nice error message if the field is missing
+// the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
+// error messages
+func (b *BackendService) extractConfig(configData BackendConfig, configType baseConfig) (interface{}, error) {
+	// Use reflection so that we can provide a nice error message
+	s := reflect.ValueOf(configType).Elem() // so that we can set the values
+	m := reflect.ValueOf(configType).Elem()
+	t := reflect.TypeOf(configType).Elem()
+	typeOfT := s.Type()
+
+	for i := 0; i < m.NumField(); i++ {
+		f := s.Field(i)
+		// read the tags of the config struct
+		field_name := t.Field(i).Tag.Get("json")
+		if len(field_name) > 0 {
+			// parse the tag to
+			// get the field name from struct tag
+			split := strings.Split(field_name, ",")
+			field_name = split[0]
+		} else {
+			// could have no tag
+			// so use the reflected field name
+			field_name = typeOfT.Field(i).Name
+		}
+		if f.Type().Name() == "int" {
+			if intVal, converted := configData[field_name].(float64); converted {
+				s.Field(i).SetInt(int64(intVal))
+			} else {
+				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
+			}
+		}
+		if f.Type().Name() == "string" {
+			if stringVal, converted := configData[field_name].(string); converted {
+				s.Field(i).SetString(stringVal)
+			} else {
+				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+			}
+		}
+		if f.Type().Name() == "bool" {
+			if boolVal, converted := configData[field_name].(bool); converted {
+				s.Field(i).SetBool(boolVal)
+			} else {
+				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+			}
+		}
+	}
+	return configType, nil
 }
