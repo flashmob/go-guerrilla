@@ -153,7 +153,7 @@ func MySql() Decorator {
 	// shutdown
 	Service.AddShutdowner(Shutdown(func() error {
 		if db != nil {
-			db.Close()
+			return db.Close()
 		}
 		return nil
 	}))

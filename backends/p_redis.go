@@ -77,7 +77,7 @@ func Redis() Decorator {
 	// When shutting down
 	Service.AddShutdowner(Shutdown(func() error {
 		if redisClient.isConnected {
-			redisClient.conn.Close()
+			return redisClient.conn.Close()
 		}
 		return nil
 	}))

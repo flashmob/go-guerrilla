@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
@@ -22,6 +23,8 @@ func init() {
 	Service = &BackendService{}
 	Processors = make(map[string]ProcessorConstructor)
 }
+
+type ProcessorConstructor func() Decorator
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -52,8 +55,6 @@ type Worker interface {
 }
 */
 type BackendConfig map[string]interface{}
-
-type ProcessorConstructor func() Decorator
 
 type baseConfig interface{}
 
@@ -129,6 +130,7 @@ func (s Shutdown) Shutdown() error {
 
 type BackendService struct {
 	ProcessorHandlers
+	sync.Mutex
 }
 
 type ProcessorHandlers struct {
@@ -136,24 +138,39 @@ type ProcessorHandlers struct {
 	Shutdowners  []ProcessorShutdowner
 }
 
+// AddInitializer adds a function that impliments ProcessorShutdowner to be called when initializing
 func (b *BackendService) AddInitializer(i ProcessorInitializer) {
+	b.Lock()
+	defer b.Unlock()
 	b.Initializers = append(b.Initializers, i)
 }
 
+// AddShutdowner adds a function that impliments ProcessorShutdowner to be called when shutting down
 func (b *BackendService) AddShutdowner(i ProcessorShutdowner) {
+	b.Lock()
+	defer b.Unlock()
 	b.Shutdowners = append(b.Shutdowners, i)
 }
 
+// Initialize initializes all the processors by
 func (b *BackendService) Initialize(backend BackendConfig) {
+	b.Lock()
+	defer b.Unlock()
 	for i := range b.Initializers {
 		b.Initializers[i].Initialize(backend)
 	}
 }
 
+// Shutdown shuts down all the processor by calling their shutdowners
+// It also clears the initializers and shutdowners that were set with AddInitializer and AddShutdowner
 func (b *BackendService) Shutdown() {
+	b.Lock()
+	defer b.Unlock()
 	for i := range b.Shutdowners {
 		b.Shutdowners[i].Shutdown()
 	}
+	b.Initializers = make([]ProcessorInitializer, 0)
+	b.Shutdowners = make([]ProcessorShutdowner, 0)
 }
 
 // extractConfig loads the backend config. It has already been unmarshalled

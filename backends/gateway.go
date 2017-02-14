@@ -87,14 +87,16 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 		return NewBackendResult(response.Canned.FailBackendTimeout)
 	}
 }
+
+// Shutdown shuts down the backend and leaves it in BackendStateShuttered state
 func (gw *BackendGateway) Shutdown() error {
 	gw.stateGuard.Lock()
 	defer gw.stateGuard.Unlock()
 	if gw.State != BackendStateShuttered {
 		close(gw.saveMailChan) // workers will stop
 		gw.wg.Wait()
-		gw.State = BackendStateShuttered
 		Service.Shutdown()
+		gw.State = BackendStateShuttered
 	}
 	return nil
 }
@@ -112,6 +114,10 @@ func (gw *BackendGateway) Reinitialize() error {
 	return err
 }
 
+// newProcessorLine creates a new stack of decorators and returns as a single Processor
+// Decorators are functions of Decorator type, source files prefixed with p_*
+// Each decorator does a specific task during the processing stage.
+// This function uses the config value process_line to figure out which Decorator to use
 func (gw *BackendGateway) newProcessorLine() Processor {
 	var decorators []Decorator
 	if len(gw.gwConfig.ProcessorLine) == 0 {
@@ -124,10 +130,12 @@ func (gw *BackendGateway) newProcessorLine() Processor {
 			decorators = append(decorators, makeFunc())
 		}
 	}
+	// build the call-stack of decorators
 	p := Decorate(DefaultProcessor{}, decorators...)
 	return p
 }
 
+// loadConfig loads the config for the GatewayConfig
 func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	configType := baseConfig(&GatewayConfig{})
 	bcfg, err := Service.extractConfig(cfg, configType)
@@ -138,6 +146,7 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	return nil
 }
 
+// Initialize builds the workers and starts each worker in a thread
 func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	err := gw.loadConfig(cfg)
 	if err == nil {
@@ -168,6 +177,8 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	return err
 }
 
+// getNumberOfWorkers gets the number of workers to use for saving email by reading the save_workers_size config value
+// Returns 1 if no config value was set
 func (gw *BackendGateway) getNumberOfWorkers() int {
 	if gw.gwConfig.WorkersSize == 0 {
 		return 1
