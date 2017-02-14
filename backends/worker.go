@@ -6,8 +6,7 @@ import (
 	"runtime/debug"
 )
 
-type Worker struct {
-}
+type Worker struct{}
 
 func (w *Worker) saveMailWorker(saveMailChan chan *savePayload, p Processor, workerId int) {
 
@@ -15,17 +14,17 @@ func (w *Worker) saveMailWorker(saveMailChan chan *savePayload, p Processor, wor
 		if r := recover(); r != nil {
 			// recover form closed channel
 			fmt.Println("Recovered in f", r, string(debug.Stack()))
-			mainlog.Error("Recovered form panic:", r, string(debug.Stack()))
+			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 		}
 		// close any connections / files
 		Service.Shutdown()
 
 	}()
-	mainlog.Infof("Save mail worker started (#%d)", workerId)
+	Log().Infof("Save mail worker started (#%d)", workerId)
 	for {
 		payload := <-saveMailChan
 		if payload == nil {
-			mainlog.Debug("No more saveMailChan payload")
+			Log().Debug("No more saveMailChan payload")
 			return
 		}
 		// process the email here

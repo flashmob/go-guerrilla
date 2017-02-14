@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 var (
-	mainlog log.Logger
 	Service *BackendService
 	// deprecated backends system
 	backends = map[string]Backend{}
@@ -37,37 +37,14 @@ type Backend interface {
 	Shutdown() error
 }
 
-/*
-type Worker interface {
-	// start save mail worker(s)
-	saveMailWorker(chan *savePayload)
-	// get the number of workers that will be stared
-	getNumberOfWorkers() int
-	// test database settings, permissions, correct paths, etc, before starting workers
-	// parse the configuration files
-	loadConfig(BackendConfig) error
-
-	Shutdown() error
-	Process(*envelope.Envelope) BackendResult
-	Initialize(BackendConfig) error
-
-	SetProcessors(p ...Decorator)
-}
-*/
 type BackendConfig map[string]interface{}
 
+// All config structs extend from this
 type baseConfig interface{}
 
 type saveStatus struct {
 	err  error
 	hash string
-}
-
-type savePayload struct {
-	mail *envelope.Envelope
-	//from        *envelope.EmailAddress
-	//recipient   *envelope.EmailAddress
-	savedNotify chan *saveStatus
 }
 
 // BackendResult represents a response to an SMTP client after receiving DATA.
@@ -129,13 +106,23 @@ func (s Shutdown) Shutdown() error {
 }
 
 type BackendService struct {
-	ProcessorHandlers
-	sync.Mutex
-}
-
-type ProcessorHandlers struct {
 	Initializers []ProcessorInitializer
 	Shutdowners  []ProcessorShutdowner
+	sync.Mutex
+	mainlog atomic.Value
+}
+
+// Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
+func Log() log.Logger {
+	if v, ok := Service.mainlog.Load().(log.Logger); ok {
+		return v
+	}
+	l, _ := log.GetLogger(log.OutputStderr.String())
+	return l
+}
+
+func (b *BackendService) StoreMainlog(l log.Logger) {
+	b.mainlog.Store(l)
 }
 
 // AddInitializer adds a function that impliments ProcessorShutdowner to be called when initializing

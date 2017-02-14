@@ -24,15 +24,22 @@ type BackendGateway struct {
 	w  *Worker
 	b  Backend
 	// controls access to state
-	stateGuard sync.Mutex
-	State      backendState
-	config     BackendConfig
-	gwConfig   *GatewayConfig
+	sync.Mutex
+	State    backendState
+	config   BackendConfig
+	gwConfig *GatewayConfig
 }
 
 type GatewayConfig struct {
 	WorkersSize   int    `json:"save_workers_size,omitempty"`
 	ProcessorLine string `json:"process_line,omitempty"`
+}
+
+// savePayload is what get placed on the BackendGateway.saveMailChan channel
+type savePayload struct {
+	mail *envelope.Envelope
+	// savedNotify is used to notify that the save operation completed
+	savedNotify chan *saveStatus
 }
 
 // possible values for state
@@ -51,7 +58,7 @@ func (s backendState) String() string {
 // New retrieve a backend specified by the backendName, and initialize it using
 // backendConfig
 func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
-	mainlog = l
+	Service.StoreMainlog(l)
 	gateway := &BackendGateway{config: backendConfig}
 	if backend, found := backends[backendName]; found {
 		gateway.b = backend
@@ -83,17 +90,19 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 		return NewBackendResult(response.Canned.SuccessMessageQueued + status.hash)
 
 	case <-time.After(time.Second * 30):
-		mainlog.Infof("Backend has timed out")
+		Log().Infof("Backend has timed out")
 		return NewBackendResult(response.Canned.FailBackendTimeout)
 	}
+
 }
 
 // Shutdown shuts down the backend and leaves it in BackendStateShuttered state
 func (gw *BackendGateway) Shutdown() error {
-	gw.stateGuard.Lock()
-	defer gw.stateGuard.Unlock()
+	gw.Lock()
+	defer gw.Unlock()
 	if gw.State != BackendStateShuttered {
 		close(gw.saveMailChan) // workers will stop
+		// wait for workers to stop
 		gw.wg.Wait()
 		Service.Shutdown()
 		gw.State = BackendStateShuttered
@@ -103,6 +112,8 @@ func (gw *BackendGateway) Shutdown() error {
 
 // Reinitialize starts up a backend gateway that was shutdown before
 func (gw *BackendGateway) Reinitialize() error {
+	gw.Lock()
+	defer gw.Unlock()
 	if gw.State != BackendStateShuttered {
 		return errors.New("backend must be in BackendStateshuttered state to Reinitialize")
 	}
@@ -114,7 +125,7 @@ func (gw *BackendGateway) Reinitialize() error {
 	return err
 }
 
-// newProcessorLine creates a new stack of decorators and returns as a single Processor
+// newProcessorLine creates a new call-stack of decorators and returns as a single Processor
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
 // This function uses the config value process_line to figure out which Decorator to use
@@ -146,8 +157,10 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	return nil
 }
 
-// Initialize builds the workers and starts each worker in a thread
+// Initialize builds the workers and starts each worker in a goroutine
 func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
+	gw.Lock()
+	defer gw.Unlock()
 	err := gw.loadConfig(cfg)
 	if err == nil {
 		workersSize := gw.getNumberOfWorkers()
@@ -170,7 +183,6 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 				gw.wg.Done()
 			}(i)
 		}
-
 	} else {
 		gw.State = BackendStateError
 	}

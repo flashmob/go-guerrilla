@@ -297,8 +297,10 @@ func (g *guerrilla) subscribeEvents() {
 			var l log.Logger
 			if l, err = log.GetLogger(sc.LogFile); err == nil {
 				g.storeMainlog(l)
+				backends.Service.StoreMainlog(l)
 				// it will change to the new logger on the next accepted client
 				server.logStore.Store(l)
+
 				g.mainlog().Infof("Server [%s] changed, new clients will log to: [%s]",
 					sc.ListenInterface,
 					sc.LogFile,
@@ -396,6 +398,8 @@ func (g *guerrilla) Shutdown() {
 	}
 }
 
+// SetLogger sets the logger for the app and propagates it to sub-packages (eg.
 func (g *guerrilla) SetLogger(l log.Logger) {
 	g.storeMainlog(l)
+	backends.Service.StoreMainlog(l)
 }

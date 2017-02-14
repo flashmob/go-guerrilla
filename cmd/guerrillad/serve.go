@@ -111,6 +111,7 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainlog.WithError(err).Fatal("Error while reading config")
 	}
+	mainlog.SetLevel(cmdConfig.LogLevel)
 
 	// Check that max clients is not greater than system open file limit.
 	fileLimit := getFileLimit()

@@ -1,6 +1,9 @@
 package backends
 
 // This backend is presented here as an example only, please modify it to your needs.
+//
+// Deprecated: as of 14th Feb 2017, backends are composed via config, by chaining Processors (files prefixed with p_*)
+//
 // The backend stores the email data in Redis.
 // Other meta-information is stored in MySQL to be joined later.
 // A lot of email gets discarded without viewing on Guerrilla Mail,
@@ -31,7 +34,6 @@ import (
 	"bytes"
 	"compress/zlib"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/go-sql-driver/mysql"
@@ -178,7 +180,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	}
 	stmt, sqlErr := db.Prepare(sqlstr)
 	if sqlErr != nil {
-		mainlog.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+		Log().WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
 	}
 	// cache it
 	g.cache[rows-1] = stmt
@@ -190,14 +192,14 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	defer func() {
 		if r := recover(); r != nil {
 			//logln(1, fmt.Sprintf("Recovered in %v", r))
-			mainlog.Error("Recovered form panic:", r, string(debug.Stack()))
+			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			mainlog.Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
 			panic("query failed")
 		}
 	}()
@@ -205,7 +207,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	if execErr != nil {
-		mainlog.WithError(execErr).Error("There was a problem the insert")
+		Log().WithError(execErr).Error("There was a problem the insert")
 	}
 }
 
@@ -239,7 +241,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			mainlog.Error("insertQueryBatcher caught a panic", r)
+			Log().Error("insertQueryBatcher caught a panic", r)
 		}
 	}()
 	// Keep getting values from feeder and add to batch.
@@ -251,14 +253,14 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
 		case row, feederOk := <-feeder:
 			if row == nil {
-				mainlog.Info("Query batchaer exiting")
+				Log().Info("Query batchaer exiting")
 				// Insert any remaining rows
 				insert(count)
 				return feederOk
 			}
 			vals = append(vals, row...)
 			count++
-			mainlog.Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
+			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
 			if count >= GuerrillaDBAndRedisBatchMax {
 				insert(GuerrillaDBAndRedisBatchMax)
 			}
@@ -299,7 +301,7 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 		Params:       map[string]string{"collation": "utf8_general_ci"},
 	}
 	if db, err := sql.Open("mysql", conf.FormatDSN()); err != nil {
-		mainlog.Error("cannot open mysql", err)
+		Log().Error("cannot open mysql", err)
 		return nil, err
 	} else {
 		return db, nil
@@ -307,7 +309,7 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *savePayload) {
+func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
 	var to, body string
 
 	var redisErr error
@@ -319,7 +321,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *saveP
 	var err error
 	db, err = g.mysqlConnect()
 	if err != nil {
-		mainlog.Fatalf("cannot open mysql: %s", err)
+		Log().Fatalf("cannot open mysql: %s", err)
 	}
 
 	// start the query SQL batching where we will send data via the feeder channel
@@ -327,11 +329,11 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *saveP
 	go func() {
 		for {
 			if feederOK := g.insertQueryBatcher(feeder, db); !feederOK {
-				mainlog.Debug("insertQueryBatcher exited")
+				Log().Debug("insertQueryBatcher exited")
 				return
 			}
 			// if insertQueryBatcher panics, it can recover and go in again
-			mainlog.Debug("resuming insertQueryBatcher")
+			Log().Debug("resuming insertQueryBatcher")
 		}
 
 	}()
@@ -339,11 +341,11 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *saveP
 	defer func() {
 		if r := recover(); r != nil {
 			//recover form closed channel
-			mainlog.Error("panic recovered in saveMailWorker", r)
+			Log().Error("panic recovered in saveMailWorker", r)
 		}
 		db.Close()
 		if redisClient.conn != nil {
-			mainlog.Infof("closed redis")
+			Log().Infof("closed redis")
 			redisClient.conn.Close()
 		}
 		// close the feeder & wait for query batcher to exit.
@@ -358,10 +360,10 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *saveP
 	for {
 		payload := <-saveMailChan
 		if payload == nil {
-			mainlog.Debug("No more saveMailChan payload")
+			Log().Debug("No more saveMailChan payload")
 			return
 		}
-		mainlog.Debug("Got mail from chan", payload.mail.RemoteAddress)
+		Log().Debug("Got mail from chan", payload.mail.RemoteAddress)
 		to = trimToLimit(strings.TrimSpace(payload.mail.RcptTo[0].User)+"@"+g.config.PrimaryHost, 255)
 		payload.mail.Helo = trimToLimit(payload.mail.Helo, 255)
 		host := trimToLimit(payload.mail.RcptTo[0].Host, 255)
@@ -395,7 +397,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker_old(saveMailChan chan *saveP
 				data.clear()   // blank
 			}
 		} else {
-			mainlog.WithError(redisErr).Warn("Error while connecting redis")
+			Log().WithError(redisErr).Warn("Error while connecting redis")
 		}
 
 		vals = []interface{}{} // clear the vals

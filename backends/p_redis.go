@@ -107,14 +107,14 @@ func Redis() Decorator {
 					}
 				}
 				if redisErr != nil {
-					mainlog.WithError(redisErr).Warn("Error while talking to redis")
+					Log().WithError(redisErr).Warn("Error while talking to redis")
 					result := NewBackendResult(response.Canned.FailBackendTransaction)
 					return result, redisErr
 				} else {
 					e.Info["redis"] = "redis" // the backend system will know to look in redis for the message data
 				}
 			} else {
-				mainlog.Error("Redis needs a Hash() process before it")
+				Log().Error("Redis needs a Hash() process before it")
 			}
 
 			return c.Process(e)

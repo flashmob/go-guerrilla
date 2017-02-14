@@ -66,10 +66,10 @@ func (m *MysqlProcessor) connect(config *MysqlProcessorConfig) (*sql.DB, error) 
 		Params:       map[string]string{"collation": "utf8_general_ci"},
 	}
 	if db, err = sql.Open("mysql", conf.FormatDSN()); err != nil {
-		mainlog.Error("cannot open mysql", err)
+		Log().Error("cannot open mysql", err)
 		return nil, err
 	}
-	mainlog.Info("connected to mysql on tcp ", config.MysqlHost)
+	Log().Info("connected to mysql on tcp ", config.MysqlHost)
 	return db, err
 
 }
@@ -96,7 +96,7 @@ func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	}
 	stmt, sqlErr := db.Prepare(sqlstr)
 	if sqlErr != nil {
-		mainlog.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+		Log().WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
 	}
 	// cache it
 	g.cache[rows-1] = stmt
@@ -107,15 +107,14 @@ func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
-			//logln(1, fmt.Sprintf("Recovered in %v", r))
-			mainlog.Error("Recovered form panic:", r, string(debug.Stack()))
+			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			mainlog.Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
 			panic("query failed")
 		}
 	}()
@@ -123,7 +122,7 @@ func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	if execErr != nil {
-		mainlog.WithError(execErr).Error("There was a problem the insert")
+		Log().WithError(execErr).Error("There was a problem the insert")
 	}
 }
 
@@ -144,7 +143,7 @@ func MySql() Decorator {
 		mp.config = config
 		db, err = mp.connect(config)
 		if err != nil {
-			mainlog.Fatalf("cannot open mysql: %s", err)
+			Log().Fatalf("cannot open mysql: %s", err)
 			return err
 		}
 		return nil

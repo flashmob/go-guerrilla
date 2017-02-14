@@ -40,8 +40,8 @@ func Debugger() Decorator {
 	return func(c Processor) Processor {
 		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
 			if config.LogReceivedMails {
-				mainlog.Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
-				mainlog.Info("Headers are:", e.Header)
+				Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
+				Log().Info("Headers are:", e.Header)
 			}
 			// continue to the next Processor in the decorator chain
 			return c.Process(e)
