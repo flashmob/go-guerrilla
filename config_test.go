@@ -211,19 +211,19 @@ func TestConfigChangeEvents(t *testing.T) {
 	newconf.LogLevel = "off"
 	newconf.LogFile = "off"
 	expectedEvents := map[Event]bool{
-		EvConfigPidFile:         false,
-		EvConfigLogFile:         false,
-		EvConfigLogLevel:        false,
-		EvConfigAllowedHosts:    false,
-		EvConfigEvServerNew:     false, // 127.0.0.1:4654 will be added
-		EvConfigServerRemove:    false, // 127.0.0.1:9999 server removed
-		EvConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
-		EvConfigServerLogFile:   false, // 127.0.0.1:2526
-		EvConfigServerLogReopen: false, // 127.0.0.1:2527
-		EvConfigServerTimeout:   false, // 127.0.0.1:2526 timeout
+		EventConfigPidFile:         false,
+		EventConfigLogFile:         false,
+		EventConfigLogLevel:        false,
+		EventConfigAllowedHosts:    false,
+		EventConfigEvServerNew:     false, // 127.0.0.1:4654 will be added
+		EventConfigServerRemove:    false, // 127.0.0.1:9999 server removed
+		EventConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
+		EventConfigServerLogFile:   false, // 127.0.0.1:2526
+		EventConfigServerLogReopen: false, // 127.0.0.1:2527
+		EventConfigServerTimeout:   false, // 127.0.0.1:2526 timeout
 		//"server_change:tls_config":    false, // 127.0.0.1:2526
-		EvConfigServerMaxClients: false, // 127.0.0.1:2526
-		EvConfigServerTLSConfig:  false, // 127.0.0.1:2527 timestamp changed on certificates
+		EventConfigServerMaxClients: false, // 127.0.0.1:2526
+		EventConfigServerTLSConfig:  false, // 127.0.0.1:2527 timestamp changed on certificates
 	}
 	toUnsubscribe := map[Event]func(c *AppConfig){}
 	toUnsubscribeSrv := map[Event]func(c *ServerConfig){}

@@ -188,7 +188,6 @@ func TestGreeting(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-
 		// 1. plaintext connection
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
 		if err != nil {
@@ -236,6 +235,7 @@ func TestGreeting(t *testing.T) {
 		conn.Close()
 
 	} else {
+		fmt.Println("Nope", startErrors)
 		if startErrors := app.Start(); startErrors != nil {
 			t.Error(startErrors)
 			t.FailNow()
@@ -1096,7 +1096,7 @@ func TestDataCommand(t *testing.T) {
 				bufin,
 				email+"\r\n.\r\n")
 			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK : queued as s0m3l337Ha5hva1u3LOL"
+			expected := "250 2.0.0 OK : queued as "
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}

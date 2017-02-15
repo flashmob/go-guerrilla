@@ -87,7 +87,7 @@ func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
 		if status.err != nil {
 			return NewBackendResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
-		return NewBackendResult(response.Canned.SuccessMessageQueued + status.hash)
+		return NewBackendResult(response.Canned.SuccessMessageQueued + status.queuedID)
 
 	case <-time.After(time.Second * 30):
 		Log().Infof("Backend has timed out")
@@ -112,8 +112,6 @@ func (gw *BackendGateway) Shutdown() error {
 
 // Reinitialize starts up a backend gateway that was shutdown before
 func (gw *BackendGateway) Reinitialize() error {
-	gw.Lock()
-	defer gw.Unlock()
 	if gw.State != BackendStateShuttered {
 		return errors.New("backend must be in BackendStateshuttered state to Reinitialize")
 	}
@@ -121,6 +119,7 @@ func (gw *BackendGateway) Reinitialize() error {
 	if err != nil {
 		return fmt.Errorf("error while initializing the backend: %s", err)
 	}
+
 	gw.State = BackendStateRunning
 	return err
 }
@@ -149,6 +148,12 @@ func (gw *BackendGateway) newProcessorLine() Processor {
 // loadConfig loads the config for the GatewayConfig
 func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	configType := baseConfig(&GatewayConfig{})
+	if _, ok := cfg["process_line"]; !ok {
+		cfg["process_line"] = "Debugger"
+	}
+	if _, ok := cfg["save_workers_size"]; !ok {
+		cfg["save_workers_size"] = 1
+	}
 	bcfg, err := Service.extractConfig(cfg, configType)
 	if err != nil {
 		return err

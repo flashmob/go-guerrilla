@@ -31,7 +31,7 @@ func (w *Worker) saveMailWorker(saveMailChan chan *savePayload, p Processor, wor
 		result, _ := p.Process(payload.mail)
 		// if all good
 		if result.Code() < 300 {
-			payload.savedNotify <- &saveStatus{nil, payload.mail.Hashes[0]}
+			payload.savedNotify <- &saveStatus{nil, payload.mail.QueuedId}
 		} else {
 			payload.savedNotify <- &saveStatus{errors.New(result.String()), ""}
 		}

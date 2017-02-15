@@ -3,6 +3,7 @@ package envelope
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // EmailAddress encodes an email address of the form `<user@host>`
@@ -50,14 +52,21 @@ type Envelope struct {
 	Info map[string]interface{}
 	// Hashes of each email on the rcpt
 	Hashes []string
-	//
+	// additional delivery header that may be added
 	DeliveryHeader string
+	// Email(s) will be queued with this id
+	QueuedId string
+	// ClientID is a unique id given to the client on connect
+	ClientID uint64
 }
 
-func NewEnvelope(remoteAddr string) *Envelope {
+func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
+
 	return &Envelope{
 		RemoteAddress: remoteAddr,
 		Info:          make(map[string]interface{}),
+		QueuedId:      fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID)))),
+		ClientID:      clientID,
 	}
 }
 

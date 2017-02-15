@@ -43,8 +43,8 @@ type BackendConfig map[string]interface{}
 type baseConfig interface{}
 
 type saveStatus struct {
-	err  error
-	hash string
+	err      error
+	queuedID string
 }
 
 // BackendResult represents a response to an SMTP client after receiving DATA.
@@ -188,7 +188,10 @@ func (b *BackendService) extractConfig(configData BackendConfig, configType base
 			field_name = typeOfT.Field(i).Name
 		}
 		if f.Type().Name() == "int" {
+			// in json, there is no int, only floats...
 			if intVal, converted := configData[field_name].(float64); converted {
+				s.Field(i).SetInt(int64(intVal))
+			} else if intVal, converted := configData[field_name].(int); converted {
 				s.Field(i).SetInt(int64(intVal))
 			} else {
 				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())

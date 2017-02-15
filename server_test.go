@@ -41,7 +41,10 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
+	backend, err := backends.New(
+		"dummy",
+		backends.BackendConfig{"log_received_mails": true, "save_workers_size": 1},
+		mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}

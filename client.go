@@ -54,7 +54,7 @@ type client struct {
 func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
 		conn:        conn,
-		Envelope:    envelope.NewEnvelope(getRemoteAddr(conn)),
+		Envelope:    envelope.NewEnvelope(getRemoteAddr(conn), clientID),
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),

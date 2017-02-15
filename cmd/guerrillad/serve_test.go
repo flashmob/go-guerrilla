@@ -253,9 +253,9 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	newerconf.load([]byte(configJsonC))
 
 	expectedEvents := map[guerrilla.Event]bool{
-		guerrilla.EvConfigBackendConfig: false,
-		guerrilla.EvConfigBackendName:   false,
-		guerrilla.EvConfigEvServerNew:   false,
+		guerrilla.EventConfigBackendConfig: false,
+		guerrilla.EventConfigBackendName:   false,
+		guerrilla.EventConfigEvServerNew:   false,
 	}
 	mainlog, _ = log.GetLogger("off")
 
@@ -690,7 +690,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "allowed_hosts config changed, a new list was set"); i < 0 {
 			t.Errorf("did not change allowed_hosts, most likely because Bus.Subscribe(\"%s\" didnt fire",
-				guerrilla.EvConfigAllowedHosts)
+				guerrilla.EventConfigAllowedHosts)
 		}
 	}
 	// cleanup
