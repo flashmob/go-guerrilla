@@ -37,8 +37,8 @@ func Header() Decorator {
 	var config *HeaderConfig
 
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
-		configType := baseConfig(&HeaderConfig{})
-		bcfg, err := Service.extractConfig(backendConfig, configType)
+		configType := BaseConfig(&HeaderConfig{})
+		bcfg, err := Service.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}

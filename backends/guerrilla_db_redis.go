@@ -84,8 +84,8 @@ func convertError(name string) error {
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
-	configType := baseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Service.extractConfig(backendConfig, configType)
+	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
+	bcfg, err := Service.ExtractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}

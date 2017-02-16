@@ -94,11 +94,14 @@ func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app 
 			logger.WithError(err).Warn("Backend failed to shutdown")
 			return
 		}
-		backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
-		if err != nil {
-			logger.WithError(err).Fatalf("Error while loading the backend %q",
+		newBackend, newErr := backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
+		if newErr != nil {
+			// this will continue using old backend
+			logger.WithError(newErr).Error("Error while loading the backend %q",
 				cmdConfig.BackendName)
 		} else {
+			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
+			backend = newBackend
 			logger.Info("Backend started:", cmdConfig.BackendName)
 		}
 	})

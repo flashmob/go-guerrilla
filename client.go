@@ -111,11 +111,7 @@ func (c *client) sendResponse(r ...interface{}) {
 // -End of DATA command
 // TLS handhsake
 func (c *client) resetTransaction() {
-	c.MailFrom = envelope.EmailAddress{}
-	c.RcptTo = []envelope.EmailAddress{}
-	c.Data.Reset()
-	c.Subject = ""
-	c.Header = nil
+	c.Envelope.ResetTransaction()
 }
 
 // isInTransaction returns true if the connection is inside a transaction.
@@ -162,18 +158,13 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	// reset our reader & writer
 	c.bufout.Reset(conn)
 	c.bufin.Reset(conn)
-	// reset the data buffer, keep it allocated
-	c.Data.Reset()
 	// reset session data
 	c.state = 0
 	c.KilledAt = time.Time{}
 	c.ConnectedAt = time.Now()
 	c.ID = clientID
-	c.TLS = false
 	c.errors = 0
-	c.Helo = ""
-	c.Header = nil
-	c.RemoteAddress = getRemoteAddr(conn)
+	c.Envelope.Reseed(getRemoteAddr(conn), clientID)
 
 }
 

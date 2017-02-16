@@ -147,14 +147,14 @@ func (gw *BackendGateway) newProcessorLine() Processor {
 
 // loadConfig loads the config for the GatewayConfig
 func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
-	configType := baseConfig(&GatewayConfig{})
+	configType := BaseConfig(&GatewayConfig{})
 	if _, ok := cfg["process_line"]; !ok {
 		cfg["process_line"] = "Debugger"
 	}
 	if _, ok := cfg["save_workers_size"]; !ok {
 		cfg["save_workers_size"] = 1
 	}
-	bcfg, err := Service.extractConfig(cfg, configType)
+	bcfg, err := Service.ExtractConfig(cfg, configType)
 	if err != nil {
 		return err
 	}

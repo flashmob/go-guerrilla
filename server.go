@@ -476,6 +476,7 @@ func (server *server) handleClient(client *client) {
 					client.kill()
 				}
 				server.log.WithError(err).Warn("Error reading data")
+				client.resetTransaction()
 				break
 			}
 

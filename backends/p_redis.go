@@ -62,8 +62,8 @@ func Redis() Decorator {
 	redisClient := &RedisProcessor{}
 	// read the config into RedisProcessorConfig
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
-		configType := baseConfig(&RedisProcessorConfig{})
-		bcfg, err := Service.extractConfig(backendConfig, configType)
+		configType := BaseConfig(&RedisProcessorConfig{})
+		bcfg, err := Service.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}

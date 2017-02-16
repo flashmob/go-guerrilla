@@ -28,8 +28,8 @@ type debuggerConfig struct {
 func Debugger() Decorator {
 	var config *debuggerConfig
 	initFunc := Initialize(func(backendConfig BackendConfig) error {
-		configType := baseConfig(&debuggerConfig{})
-		bcfg, err := Service.extractConfig(backendConfig, configType)
+		configType := BaseConfig(&debuggerConfig{})
+		bcfg, err := Service.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}

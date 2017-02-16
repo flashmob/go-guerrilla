@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
+	"io"
 	"io/ioutil"
 	"net/textproto"
 	"regexp"
 	"strings"
 	"time"
 )
+
+const maxHeaderChunk = iota + (1<<10)*3 // 3KB
 
 // EmailAddress encodes an email address of the form `<user@host>`
 type EmailAddress struct {
@@ -56,8 +59,6 @@ type Envelope struct {
 	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
-	// ClientID is a unique id given to the client on connect
-	ClientID uint64
 }
 
 func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
@@ -65,9 +66,12 @@ func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
 	return &Envelope{
 		RemoteAddress: remoteAddr,
 		Info:          make(map[string]interface{}),
-		QueuedId:      fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID)))),
-		ClientID:      clientID,
+		QueuedId:      queuedID(clientID),
 	}
+}
+
+func queuedID(clientID uint64) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -79,16 +83,16 @@ func (e *Envelope) ParseHeaders() error {
 	if e.Header != nil {
 		return errors.New("Headers already parsed")
 	}
-	b2 := bytes.NewBuffer(e.Data.Bytes())
+	buf := bytes.NewBuffer(e.Data.Bytes())
 	// find where the header ends, assuming that over 30 kb would be max
-	max := 1024 * 30
-	if b2.Len() < max {
-		max = b2.Len()
+	max := maxHeaderChunk
+	if buf.Len() < max {
+		max = buf.Len()
 	}
 	// read in the chunk which we'll scan for the header
 	chunk := make([]byte, max)
-	b2.Read(chunk)
-	headerEnd := strings.Index(string(chunk), "\n\n") // the first two new-lines is the end of header
+	buf.Read(chunk)
+	headerEnd := strings.Index(string(chunk), "\n\n") // the first two new-lines chars are the End Of Header
 	if headerEnd > -1 {
 		header := chunk[0:headerEnd]
 		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
@@ -105,15 +109,46 @@ func (e *Envelope) ParseHeaders() error {
 	return err
 }
 
-// String converts the email to string. Typically, you would want to use the compressor processor for more efficiency
+// Returns a new reader for reading the email contents, including the delivery headers
+func (e *Envelope) NewReader() io.Reader {
+	return io.MultiReader(
+		strings.NewReader(e.DeliveryHeader),
+		bytes.NewReader(e.Data.Bytes()),
+	)
+}
+
+// String converts the email to string.
+// Typically, you would want to use the compressor guerrilla.Processor for more efficiency, or use NewReader
 func (e *Envelope) String() string {
 	return e.DeliveryHeader + e.Data.String()
+}
+
+// ResetTransaction is called when the transaction is reset (but save connection)
+func (e *Envelope) ResetTransaction() {
+	e.MailFrom = EmailAddress{}
+	e.RcptTo = []EmailAddress{}
+	// reset the data buffer, keep it allocated
+	e.Data.Reset()
+}
+
+// Seed is called when used with a new connection, once it's accepted
+func (e *Envelope) Reseed(remoteAddr string, clientID uint64) {
+	e.Subject = ""
+	e.RemoteAddress = remoteAddr
+	e.Helo = ""
+	e.Header = nil
+	e.TLS = false
+	e.Hashes = make([]string, 0)
+	e.DeliveryHeader = ""
+	e.Info = make(map[string]interface{})
+	e.QueuedId = queuedID(clientID)
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
 
 // Decode strings in Mime header format
 // eg. =?ISO-2022-JP?B?GyRCIVo9dztSOWJAOCVBJWMbKEI=?=
+// This function uses GNU iconv under the hood, for more charset support than in Go's library
 func MimeHeaderDecode(str string) string {
 
 	matched := mimeRegex.FindAllStringSubmatch(str, -1)

@@ -40,7 +40,7 @@ type Backend interface {
 type BackendConfig map[string]interface{}
 
 // All config structs extend from this
-type baseConfig interface{}
+type BaseConfig interface{}
 
 type saveStatus struct {
 	err      error
@@ -160,13 +160,24 @@ func (b *BackendService) Shutdown() {
 	b.Shutdowners = make([]ProcessorShutdowner, 0)
 }
 
+// AddProcessor adds a new processor, which becomes available to the backend_config.process_line option
+func (b *BackendService) AddProcessor(name string, p ProcessorConstructor) {
+	// wrap in a constructor since we want to defer calling it
+	var c ProcessorConstructor
+	c = func() Decorator {
+		return p()
+	}
+	// add to our processors list
+	Processors[strings.ToLower(name)] = c
+}
+
 // extractConfig loads the backend config. It has already been unmarshalled
 // configData contains data from the main config file's "backend_config" value
 // configType is a Processor's specific config value.
 // The reason why using reflection is because we'll get a nice error message if the field is missing
 // the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
 // error messages
-func (b *BackendService) extractConfig(configData BackendConfig, configType baseConfig) (interface{}, error) {
+func (b *BackendService) ExtractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
 	// Use reflection so that we can provide a nice error message
 	s := reflect.ValueOf(configType).Elem() // so that we can set the values
 	m := reflect.ValueOf(configType).Elem()

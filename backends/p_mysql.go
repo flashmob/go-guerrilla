@@ -96,7 +96,7 @@ func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	}
 	stmt, sqlErr := db.Prepare(sqlstr)
 	if sqlErr != nil {
-		Log().WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+		Log().WithError(sqlErr).Panic("failed while db.Prepare(INSERT...)")
 	}
 	// cache it
 	g.cache[rows-1] = stmt
@@ -134,8 +134,8 @@ func MySql() Decorator {
 	mp := &MysqlProcessor{}
 
 	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
-		configType := baseConfig(&MysqlProcessorConfig{})
-		bcfg, err := Service.extractConfig(backendConfig, configType)
+		configType := BaseConfig(&MysqlProcessorConfig{})
+		bcfg, err := Service.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func MySql() Decorator {
 		mp.config = config
 		db, err = mp.connect(config)
 		if err != nil {
-			Log().Fatalf("cannot open mysql: %s", err)
+			Log().Error("cannot open mysql: %s", err)
 			return err
 		}
 		return nil
