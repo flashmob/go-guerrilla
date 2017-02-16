@@ -21,7 +21,7 @@ func extractEmail(str string) (envelope.EmailAddress, error) {
 		email.User = matched[1]
 		email.Host = validHost(matched[2])
 	} else if res := strings.Split(str, "@"); len(res) > 1 {
-		email.User = res[0]
+		email.User = strings.TrimSpace(res[0])
 		email.Host = validHost(res[1])
 	}
 	err = nil
