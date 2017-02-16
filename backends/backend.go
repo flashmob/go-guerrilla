@@ -105,11 +105,27 @@ func (s Shutdown) Shutdown() error {
 	return s()
 }
 
+type Errors []error
+
+// implement the Error interface
+func (e Errors) Error() string {
+	if len(e) == 1 {
+		return e[0].Error()
+	}
+	// multiple errors
+	msg := ""
+	for _, err := range e {
+		msg += "\n" + err.Error()
+	}
+	return msg
+}
+
 type BackendService struct {
 	Initializers []ProcessorInitializer
 	Shutdowners  []ProcessorShutdowner
 	sync.Mutex
-	mainlog atomic.Value
+	mainlog    atomic.Value
+	initErrors Errors
 }
 
 // Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
@@ -139,13 +155,18 @@ func (b *BackendService) AddShutdowner(i ProcessorShutdowner) {
 	b.Shutdowners = append(b.Shutdowners, i)
 }
 
-// Initialize initializes all the processors by
-func (b *BackendService) Initialize(backend BackendConfig) {
+// Initialize initializes all the processors one-by-one and returns any errors.
+func (b *BackendService) Initialize(backend BackendConfig) Errors {
 	b.Lock()
 	defer b.Unlock()
+	b.initErrors = nil
 	for i := range b.Initializers {
-		b.Initializers[i].Initialize(backend)
+		err := b.Initializers[i].Initialize(backend)
+		if err != nil {
+			b.initErrors = append(b.initErrors, err)
+		}
 	}
+	return b.initErrors
 }
 
 // Shutdown shuts down all the processor by calling their shutdowners

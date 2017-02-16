@@ -178,7 +178,9 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			lines = append(lines, gw.newProcessorLine())
 		}
 		// initialize processors
-		Service.Initialize(cfg)
+		if err := Service.Initialize(cfg); err != nil {
+			return err
+		}
 		gw.saveMailChan = make(chan *savePayload, workersSize)
 		// start our savemail workers
 		gw.wg.Add(workersSize)
