@@ -32,7 +32,7 @@ type BackendGateway struct {
 
 type GatewayConfig struct {
 	WorkersSize   int    `json:"save_workers_size,omitempty"`
-	ProcessorLine string `json:"process_line,omitempty"`
+	ProcessorLine string `json:"process_stack,omitempty"`
 }
 
 // savePayload is what get placed on the BackendGateway.saveMailChan channel
@@ -127,7 +127,7 @@ func (gw *BackendGateway) Reinitialize() error {
 // newProcessorLine creates a new call-stack of decorators and returns as a single Processor
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
-// This function uses the config value process_line to figure out which Decorator to use
+// This function uses the config value process_stack to figure out which Decorator to use
 func (gw *BackendGateway) newProcessorLine() Processor {
 	var decorators []Decorator
 	if len(gw.gwConfig.ProcessorLine) == 0 {
@@ -148,8 +148,8 @@ func (gw *BackendGateway) newProcessorLine() Processor {
 // loadConfig loads the config for the GatewayConfig
 func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	configType := BaseConfig(&GatewayConfig{})
-	if _, ok := cfg["process_line"]; !ok {
-		cfg["process_line"] = "Debugger"
+	if _, ok := cfg["process_stack"]; !ok {
+		cfg["process_stack"] = "Debugger"
 	}
 	if _, ok := cfg["save_workers_size"]; !ok {
 		cfg["save_workers_size"] = 1

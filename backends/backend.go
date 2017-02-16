@@ -181,7 +181,7 @@ func (b *BackendService) Shutdown() {
 	b.Shutdowners = make([]ProcessorShutdowner, 0)
 }
 
-// AddProcessor adds a new processor, which becomes available to the backend_config.process_line option
+// AddProcessor adds a new processor, which becomes available to the backend_config.process_stack option
 func (b *BackendService) AddProcessor(name string, p ProcessorConstructor) {
 	// wrap in a constructor since we want to defer calling it
 	var c ProcessorConstructor

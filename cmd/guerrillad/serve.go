@@ -171,9 +171,8 @@ func serve(cmd *cobra.Command, args []string) {
 // the the command line interface.
 type CmdConfig struct {
 	guerrilla.AppConfig
-	BackendName        string                 `json:"backend_name"`
-	BackendConfig      backends.BackendConfig `json:"backend_config"`
-	BackendProcessLine string                 `json:"backend_process_line"`
+	BackendName   string                 `json:"backend_name"`
+	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
 func (c *CmdConfig) load(jsonBytes []byte) error {
