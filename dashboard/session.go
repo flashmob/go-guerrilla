@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"encoding/json"
 	"math/rand"
 	"time"
 
@@ -23,7 +22,7 @@ type session struct {
 	id string
 	ws *websocket.Conn
 	// Messages to send over the websocket are received on this channel
-	send <-chan *dataFrame
+	send <-chan *message
 }
 
 // Receives messages from the websocket connection associated with a session
@@ -59,17 +58,13 @@ transmit:
 	for {
 		select {
 		case p, ok := <-s.send:
-			data, err := json.Marshal(p)
-			log.Info("session:63", string(data), err)
-			log.Info("session:64", p.NClients, p.Ram)
 			s.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				s.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				break transmit
 			}
 
-			err = s.ws.WriteJSON(p)
-			log.Info("session:67", err)
+			err := s.ws.WriteJSON(p)
 			if err != nil {
 				log.WithError(err).Debug("Failed to write next websocket message. Closing connection")
 				break transmit

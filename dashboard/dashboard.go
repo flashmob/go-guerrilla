@@ -82,13 +82,13 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.ws = conn
-	c := make(chan *dataFrame)
+	c := make(chan *message)
 	sess.send = c
 	// TODO send store contents at connection time
 	store.subscribe(sess.id, c)
-	store.initSession(sess)
 	go sess.receive()
 	go sess.transmit()
+	go store.initSession(sess)
 }
 
 func startSession(w http.ResponseWriter, r *http.Request) *session {

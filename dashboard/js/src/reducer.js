@@ -18,6 +18,7 @@ const initialState = Immutable.Map({
 });
 
 const reducer = (state = initialState, {type, payload}) => {
+	console.log(type, payload);
 	let newState = state;
 
 	switch (type) {

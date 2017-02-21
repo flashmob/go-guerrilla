@@ -12,6 +12,8 @@ const (
 	tickInterval = time.Second * 5
 	maxWindow    = time.Hour * 24
 	maxTicks     = int(maxWindow / tickInterval)
+	INIT_MESSAGE = "INIT"
+	TICK_MESSAGE = "TICK"
 )
 
 // Log for sending client events from the server to the dashboard.
@@ -28,11 +30,11 @@ type dataStore struct {
 	nClientTicks []point
 	// Up-to-date number of clients
 	nClients uint64
-	subs     map[string]chan<- *dataFrame
+	subs     map[string]chan<- *message
 }
 
 func newDataStore() *dataStore {
-	subs := make(map[string]chan<- *dataFrame)
+	subs := make(map[string]chan<- *message)
 	return &dataStore{
 		ramTicks:     make([]point, 0, maxTicks),
 		nClientTicks: make([]point, 0, maxTicks),
@@ -56,7 +58,7 @@ func (ds *dataStore) addNClientPoint(p point) {
 	}
 }
 
-func (ds *dataStore) subscribe(id string, c chan<- *dataFrame) {
+func (ds *dataStore) subscribe(id string, c chan<- *message) {
 	ds.subs[id] = c
 }
 
@@ -64,17 +66,20 @@ func (ds *dataStore) unsubscribe(id string) {
 	delete(ds.subs, id)
 }
 
-func (ds *dataStore) notify(p *dataFrame) {
+func (ds *dataStore) notify(m *message) {
 	for _, c := range ds.subs {
 		select {
-		case c <- p:
+		case c <- m:
 		default:
 		}
 	}
 }
 
 func (ds *dataStore) initSession(sess *session) {
-	// TODO implement
+	store.subs[sess.id] <- &message{INIT_MESSAGE, initFrame{
+		Ram:      store.ramTicks,
+		NClients: store.nClientTicks,
+	}}
 }
 
 type point struct {
@@ -94,24 +99,37 @@ func dataListener(interval time.Duration) {
 		log.Info("datastore:89", ramPoint, nClientPoint)
 		store.addRAMPoint(ramPoint)
 		store.addNClientPoint(nClientPoint)
-		store.notify(&dataFrame{
+		store.notify(&message{TICK_MESSAGE, dataFrame{
 			Ram:      ramPoint,
 			NClients: nClientPoint,
-		})
+		}})
 	}
 }
 
 type dataFrame struct {
 	Ram      point `json:"ram"`
-	NClients point `json:"n_clients"`
+	NClients point `json:"nClients"`
 	// top5Helo []string // TODO add for aggregation
 	// top5IP   []string
+}
+
+type initFrame struct {
+	Ram      []point `json:"ram"`
+	NClients []point `json:"nClients"`
+	// top5Helo []string // TODO add for aggregation
+	// top5IP   []string
+}
+
+// Format of messages to be sent over WebSocket
+type message struct {
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 type logHook int
 
 func (h logHook) Levels() []log.Level {
-	return []log.Level{log.InfoLevel}
+	return log.AllLevels
 }
 
 func (h logHook) Fire(e *log.Entry) error {

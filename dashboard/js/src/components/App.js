@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import {connect} from 'react-redux';
 import {init, tick} from '../action-creators';
+import ActionTypes from '../action-types';
 import LineChart from './LineChart';
 
 const styles = {
@@ -25,9 +26,9 @@ class App extends Component {
 		ws.onopen = event => console.log(event);
 		ws.onclose = event => console.log(event);
 		ws.onmessage = event => {
-			const data = JSON.parse(event.data);
-			console.log(data);
-			props.dispatch(tick(data));
+			const message = JSON.parse(event.data);
+			console.log(message);
+			props.dispatch(message);
 		};
 
 		this.state = {ws};
