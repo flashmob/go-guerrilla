@@ -2,38 +2,49 @@ package backends
 
 import (
 	"errors"
-	"fmt"
 	"runtime/debug"
 )
 
 type Worker struct{}
 
-func (w *Worker) saveMailWorker(saveMailChan chan *savePayload, p Processor, workerId int) {
+func (w *Worker) workDispatcher(workIn chan *workerMsg, validateRcpt chan *workerMsg, p Processor, workerId int) {
 
 	defer func() {
 		if r := recover(); r != nil {
 			// recover form closed channel
-			fmt.Println("Recovered in f", r, string(debug.Stack()))
 			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 		}
 		// close any connections / files
-		Service.Shutdown()
+		Svc.shutdown()
 
 	}()
 	Log().Infof("Save mail worker started (#%d)", workerId)
 	for {
-		payload := <-saveMailChan
-		if payload == nil {
-			Log().Debug("No more saveMailChan payload")
-			return
-		}
-		// process the email here
-		result, _ := p.Process(payload.mail)
-		// if all good
-		if result.Code() < 300 {
-			payload.savedNotify <- &saveStatus{nil, payload.mail.QueuedId}
-		} else {
-			payload.savedNotify <- &saveStatus{errors.New(result.String()), ""}
+		select {
+		case msg := <-workIn:
+			if msg == nil {
+				Log().Debug("No more messages from saveMail")
+				return
+			}
+			// process the email here
+			// TODO we should check the err
+			result, _ := p.Process(msg.mail, TaskSaveMail)
+			if result.Code() < 300 {
+				// if all good, let the gateway know that it was queued
+				msg.notifyMe <- &notifyMsg{nil, msg.mail.QueuedId}
+			} else {
+				// notify the gateway about the error
+				msg.notifyMe <- &notifyMsg{err: errors.New(result.String())}
+			}
+		case msg := <-validateRcpt:
+			_, err := p.Process(msg.mail, TaskValidateRcpt)
+			if err != nil {
+				// validation failed
+				msg.notifyMe <- &notifyMsg{err: err}
+			} else {
+				// all good.
+				msg.notifyMe <- &notifyMsg{err: nil}
+			}
 		}
 
 	}

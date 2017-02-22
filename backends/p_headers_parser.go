@@ -16,16 +16,22 @@ import (
 // Output        : Headers will be populated in e.Header
 // ----------------------------------------------------------------------------------
 func init() {
-	Processors["headersparser"] = func() Decorator {
+	processors["headersparser"] = func() Decorator {
 		return HeadersParser()
 	}
 }
 
 func HeadersParser() Decorator {
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			e.ParseHeaders()
-			return c.Process(e)
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+			if task == TaskSaveMail {
+				e.ParseHeaders()
+				// next processor
+				return c.Process(e, task)
+			} else {
+				// next processor
+				return c.Process(e, task)
+			}
 		})
 	}
 }

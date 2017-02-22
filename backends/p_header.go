@@ -25,7 +25,7 @@ type HeaderConfig struct {
 // Output        : Sets e.DeliveryHeader with additional delivery info
 // ----------------------------------------------------------------------------------
 func init() {
-	Processors["header"] = func() Decorator {
+	processors["header"] = func() Decorator {
 		return Header()
 	}
 }
@@ -36,9 +36,9 @@ func Header() Decorator {
 
 	var config *HeaderConfig
 
-	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&HeaderConfig{})
-		bcfg, err := Service.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -47,23 +47,28 @@ func Header() Decorator {
 	}))
 
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
-			hash := "unknown"
-			if len(e.Hashes) > 0 {
-				hash = e.Hashes[0]
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+			if task == TaskSaveMail {
+				to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
+				hash := "unknown"
+				if len(e.Hashes) > 0 {
+					hash = e.Hashes[0]
+				}
+				var addHead string
+				addHead += "Delivered-To: " + to + "\n"
+				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\n"
+				if len(e.RcptTo) > 0 {
+					addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
+				}
+				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
+				// save the result
+				e.DeliveryHeader = addHead
+				// next processor
+				return c.Process(e, task)
+
+			} else {
+				return c.Process(e, task)
 			}
-			var addHead string
-			addHead += "Delivered-To: " + to + "\n"
-			addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\n"
-			if len(e.RcptTo) > 0 {
-				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
-			}
-			addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
-			// save the result
-			e.DeliveryHeader = addHead
-			// next processor
-			return c.Process(e)
 		})
 	}
 }

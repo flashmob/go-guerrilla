@@ -85,7 +85,7 @@ func convertError(name string) error {
 
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Service.ExtractConfig(backendConfig, configType)
+	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
@@ -96,6 +96,11 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (er
 
 func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
 	return g.config.NumberOfWorkers
+}
+
+// ValidateRcpt not implemented
+func (g *GuerrillaDBAndRedisBackend) ValidateRcpt(e *envelope.Envelope) RcptError {
+	return nil
 }
 
 type redisClient struct {
@@ -309,7 +314,7 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
+func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *workerMsg) {
 	var to, body string
 
 	var redisErr error
@@ -413,7 +418,7 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 			trimToLimit(payload.mail.MailFrom.String(), 255),
 			payload.mail.TLS)
 		feeder <- vals
-		payload.savedNotify <- &saveStatus{nil, hash}
+		payload.notifyMe <- &notifyMsg{nil, hash}
 
 	}
 }
@@ -459,8 +464,8 @@ func (g *GuerrillaDBAndRedisBackend) Initialize(config BackendConfig) error {
 }
 
 // does nothing
-func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) BackendResult {
-	return NewBackendResult("250 OK")
+func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) Result {
+	return NewResult("250 OK")
 }
 
 // does nothing

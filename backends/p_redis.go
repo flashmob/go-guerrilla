@@ -27,7 +27,7 @@ import (
 // ----------------------------------------------------------------------------------
 func init() {
 
-	Processors["redis"] = func() Decorator {
+	processors["redis"] = func() Decorator {
 		return Redis()
 	}
 }
@@ -61,9 +61,9 @@ func Redis() Decorator {
 	var config *RedisProcessorConfig
 	redisClient := &RedisProcessor{}
 	// read the config into RedisProcessorConfig
-	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&RedisProcessorConfig{})
-		bcfg, err := Service.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -75,7 +75,7 @@ func Redis() Decorator {
 		return nil
 	}))
 	// When shutting down
-	Service.AddShutdowner(Shutdown(func() error {
+	Svc.AddShutdowner(Shutdown(func() error {
 		if redisClient.isConnected {
 			return redisClient.conn.Close()
 		}
@@ -85,40 +85,46 @@ func Redis() Decorator {
 	var redisErr error
 
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			hash := ""
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
 
-			if len(e.Hashes) > 0 {
-				e.QueuedId = e.Hashes[0]
-				hash = e.Hashes[0]
+			if task == TaskSaveMail {
+				hash := ""
+				if len(e.Hashes) > 0 {
+					e.QueuedId = e.Hashes[0]
+					hash = e.Hashes[0]
 
-				var stringer fmt.Stringer
-				// a compressor was set
-				if c, ok := e.Info["zlib-compressor"]; ok {
-					stringer = c.(*compressor)
-				} else {
-					stringer = e
-				}
-				redisErr = redisClient.redisConnection(config.RedisInterface)
-
-				if redisErr == nil {
-					_, doErr := redisClient.conn.Do("SETEX", hash, config.RedisExpireSeconds, stringer)
-					if doErr != nil {
-						redisErr = doErr
+					var stringer fmt.Stringer
+					// a compressor was set
+					if c, ok := e.Values["zlib-compressor"]; ok {
+						stringer = c.(*compressor)
+					} else {
+						stringer = e
 					}
-				}
-				if redisErr != nil {
-					Log().WithError(redisErr).Warn("Error while talking to redis")
-					result := NewBackendResult(response.Canned.FailBackendTransaction)
-					return result, redisErr
+					redisErr = redisClient.redisConnection(config.RedisInterface)
+
+					if redisErr == nil {
+						_, doErr := redisClient.conn.Do("SETEX", hash, config.RedisExpireSeconds, stringer)
+						if doErr != nil {
+							redisErr = doErr
+						}
+					}
+					if redisErr != nil {
+						Log().WithError(redisErr).Warn("Error while talking to redis")
+						result := NewResult(response.Canned.FailBackendTransaction)
+						return result, redisErr
+					} else {
+						e.Values["redis"] = "redis" // the backend system will know to look in redis for the message data
+					}
 				} else {
-					e.Info["redis"] = "redis" // the backend system will know to look in redis for the message data
+					Log().Error("Redis needs a Hash() process before it")
 				}
+
+				return c.Process(e, task)
 			} else {
-				Log().Error("Redis needs a Hash() process before it")
+				// nothing to do for this task
+				return c.Process(e, task)
 			}
 
-			return c.Process(e)
 		})
 	}
 }

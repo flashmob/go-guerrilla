@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/flashmob/go-guerrilla/envelope"
-	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
 	"strings"
 )
@@ -18,11 +17,14 @@ import (
 // via a channel. Shutting down via Shutdown() will stop all workers.
 // The rest of this program always talks to the backend via this gateway.
 type BackendGateway struct {
-	saveMailChan chan *savePayload
+	// channel for sending envelopes to process and save
+	saveMailChan chan *workerMsg
+	// channel for validating the last recipient added to the envelope
+	validateRcptChan chan *workerMsg
 	// waits for backend workers to start/stop
 	wg sync.WaitGroup
 	w  *Worker
-	b  Backend
+
 	// controls access to state
 	sync.Mutex
 	State    backendState
@@ -36,10 +38,10 @@ type GatewayConfig struct {
 }
 
 // savePayload is what get placed on the BackendGateway.saveMailChan channel
-type savePayload struct {
+type workerMsg struct {
 	mail *envelope.Envelope
 	// savedNotify is used to notify that the save operation completed
-	savedNotify chan *saveStatus
+	notifyMe chan *notifyMsg
 }
 
 // possible values for state
@@ -49,51 +51,60 @@ const (
 	BackendStateError
 )
 
+const ProcessTimeout = time.Second * 30
+
 type backendState int
 
 func (s backendState) String() string {
 	return strconv.Itoa(int(s))
 }
 
-// New retrieve a backend specified by the backendName, and initialize it using
-// backendConfig
-func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
-	Service.StoreMainlog(l)
-	gateway := &BackendGateway{config: backendConfig}
-	if backend, found := backends[backendName]; found {
-		gateway.b = backend
-	}
-	err := gateway.Initialize(backendConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error while initializing the backend: %s", err)
-	}
-	gateway.State = BackendStateRunning
-
-	return gateway, nil
-}
-
 // Process distributes an envelope to one of the backend workers
-func (gw *BackendGateway) Process(e *envelope.Envelope) BackendResult {
+func (gw *BackendGateway) Process(e *envelope.Envelope) Result {
 	if gw.State != BackendStateRunning {
-		return NewBackendResult(response.Canned.FailBackendNotRunning + gw.State.String())
+		return NewResult(response.Canned.FailBackendNotRunning + gw.State.String())
 	}
 	// place on the channel so that one of the save mail workers can pick it up
-	savedNotify := make(chan *saveStatus)
-	gw.saveMailChan <- &savePayload{e, savedNotify}
+	savedNotify := make(chan *notifyMsg)
+	gw.saveMailChan <- &workerMsg{e, savedNotify}
 	// wait for the save to complete
 	// or timeout
 	select {
 	case status := <-savedNotify:
 		if status.err != nil {
-			return NewBackendResult(response.Canned.FailBackendTransaction + status.err.Error())
+			return NewResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
-		return NewBackendResult(response.Canned.SuccessMessageQueued + status.queuedID)
+		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
 
-	case <-time.After(time.Second * 30):
+	case <-time.After(ProcessTimeout):
 		Log().Infof("Backend has timed out")
-		return NewBackendResult(response.Canned.FailBackendTimeout)
+		return NewResult(response.Canned.FailBackendTimeout)
 	}
 
+}
+
+// ValidateRcpt asks one of the workers to validate the recipient
+// Only the last recipient appended to e.RcptTo will be validated.
+func (gw *BackendGateway) ValidateRcpt(e *envelope.Envelope) RcptError {
+	if gw.State != BackendStateRunning {
+		return StorageNotAvailable
+	}
+	// place on the channel so that one of the save mail workers can pick it up
+	notify := make(chan *notifyMsg)
+	gw.validateRcptChan <- &workerMsg{e, notify}
+	// wait for the validation to complete
+	// or timeout
+	select {
+	case status := <-notify:
+		if status.err != nil {
+			return status.err
+		}
+		return nil
+
+	case <-time.After(time.Second):
+		Log().Infof("Backend has timed out")
+		return StorageTimeout
+	}
 }
 
 // Shutdown shuts down the backend and leaves it in BackendStateShuttered state
@@ -104,7 +115,7 @@ func (gw *BackendGateway) Shutdown() error {
 		close(gw.saveMailChan) // workers will stop
 		// wait for workers to stop
 		gw.wg.Wait()
-		Service.Shutdown()
+		Svc.shutdown()
 		gw.State = BackendStateShuttered
 	}
 	return nil
@@ -136,7 +147,7 @@ func (gw *BackendGateway) newProcessorLine() Processor {
 	line := strings.Split(strings.ToLower(gw.gwConfig.ProcessorLine), "|")
 	for i := range line {
 		name := line[len(line)-1-i] // reverse order, since decorators are stacked
-		if makeFunc, ok := Processors[name]; ok {
+		if makeFunc, ok := processors[name]; ok {
 			decorators = append(decorators, makeFunc())
 		}
 	}
@@ -154,7 +165,7 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	if _, ok := cfg["save_workers_size"]; !ok {
 		cfg["save_workers_size"] = 1
 	}
-	bcfg, err := Service.ExtractConfig(cfg, configType)
+	bcfg, err := Svc.ExtractConfig(cfg, configType)
 	if err != nil {
 		return err
 	}
@@ -168,7 +179,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	defer gw.Unlock()
 	err := gw.loadConfig(cfg)
 	if err == nil {
-		workersSize := gw.getNumberOfWorkers()
+		workersSize := gw.workersSize()
 		if workersSize < 1 {
 			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
@@ -178,15 +189,16 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			lines = append(lines, gw.newProcessorLine())
 		}
 		// initialize processors
-		if err := Service.Initialize(cfg); err != nil {
+		if err := Svc.initialize(cfg); err != nil {
 			return err
 		}
-		gw.saveMailChan = make(chan *savePayload, workersSize)
-		// start our savemail workers
+		gw.saveMailChan = make(chan *workerMsg, workersSize)
+		gw.validateRcptChan = make(chan *workerMsg, workersSize)
+		// start our workers
 		gw.wg.Add(workersSize)
 		for i := 0; i < workersSize; i++ {
 			go func(workerId int) {
-				gw.w.saveMailWorker(gw.saveMailChan, lines[workerId], workerId+1)
+				gw.w.workDispatcher(gw.saveMailChan, gw.validateRcptChan, lines[workerId], workerId+1)
 				gw.wg.Done()
 			}(i)
 		}
@@ -196,9 +208,9 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	return err
 }
 
-// getNumberOfWorkers gets the number of workers to use for saving email by reading the save_workers_size config value
+// workersSize gets the number of workers to use for saving email by reading the save_workers_size config value
 // Returns 1 if no config value was set
-func (gw *BackendGateway) getNumberOfWorkers() int {
+func (gw *BackendGateway) workersSize() int {
 	if gw.gwConfig.WorkersSize == 0 {
 		return 1
 	}

@@ -25,7 +25,7 @@ import (
 //               : after being printed
 // ----------------------------------------------------------------------------------
 func init() {
-	Processors["compressor"] = func() Decorator {
+	processors["compressor"] = func() Decorator {
 		return Compressor()
 	}
 }
@@ -91,12 +91,17 @@ func (c *compressor) clear() {
 
 func Compressor() Decorator {
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			compressor := newCompressor()
-			compressor.set([]byte(e.DeliveryHeader), &e.Data)
-			// put the pinter in there for other processors to use later in the line
-			e.Info["zlib-compressor"] = compressor
-			return c.Process(e)
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+			if task == TaskSaveMail {
+				compressor := newCompressor()
+				compressor.set([]byte(e.DeliveryHeader), &e.Data)
+				// put the pointer in there for other processors to use later in the line
+				e.Values["zlib-compressor"] = compressor
+				// continue to the next Processor in the decorator stack
+				return c.Process(e, task)
+			} else {
+				return c.Process(e, task)
+			}
 		})
 	}
 }

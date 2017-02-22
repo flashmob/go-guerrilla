@@ -409,8 +409,15 @@ func (server *server) handleClient(client *client) {
 					if !server.allowsHost(to.Host) {
 						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
-						client.RcptTo = append(client.RcptTo, to)
-						client.sendResponse(response.Canned.SuccessRcptCmd)
+						client.PushRcpt(to)
+						rcptError := server.backend.ValidateRcpt(client.Envelope)
+						if rcptError != nil {
+							client.PopRcpt()
+							client.sendResponse(response.Canned.FailRcptCmd)
+						} else {
+							client.sendResponse(response.Canned.SuccessRcptCmd)
+						}
+
 					}
 				}
 

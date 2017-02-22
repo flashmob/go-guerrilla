@@ -8,6 +8,7 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/flashmob/go-guerrilla/response"
 	"runtime/debug"
 )
 
@@ -33,7 +34,7 @@ import (
 // Output        : Sets e.QueuedId with the first item fromHashes[0]
 // ----------------------------------------------------------------------------------
 func init() {
-	Processors["mysql"] = func() Decorator {
+	processors["mysql"] = func() Decorator {
 		return MySql()
 	}
 }
@@ -133,9 +134,9 @@ func MySql() Decorator {
 	var db *sql.DB
 	mp := &MysqlProcessor{}
 
-	Service.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&MysqlProcessorConfig{})
-		bcfg, err := Service.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -150,7 +151,7 @@ func MySql() Decorator {
 	}))
 
 	// shutdown
-	Service.AddShutdowner(Shutdown(func() error {
+	Svc.AddShutdowner(Shutdown(func() error {
 		if db != nil {
 			return db.Close()
 		}
@@ -158,55 +159,73 @@ func MySql() Decorator {
 	}))
 
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			var to, body string
-			to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+config.PrimaryHost, 255)
-			hash := ""
-			if len(e.Hashes) > 0 {
-				hash = e.Hashes[0]
-				e.QueuedId = e.Hashes[0]
-			}
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
 
-			var co *compressor
-			// a compressor was set
-			if c, ok := e.Info["zlib-compressor"]; ok {
-				body = "gzip"
-				co = c.(*compressor)
-			}
-			// was saved in redis
-			if _, ok := e.Info["redis"]; ok {
-				body = "redis"
-			}
+			if task == TaskSaveMail {
+				var to, body string
+				to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+config.PrimaryHost, 255)
+				hash := ""
+				if len(e.Hashes) > 0 {
+					hash = e.Hashes[0]
+					e.QueuedId = e.Hashes[0]
+				}
 
-			// build the values for the query
-			vals = []interface{}{} // clear the vals
-			vals = append(vals,
-				to,
-				trimToLimit(e.MailFrom.String(), 255),
-				trimToLimit(e.Subject, 255),
-				body)
-			if body == "redis" {
-				// data already saved in redis
-				vals = append(vals, "")
-			} else if co != nil {
-				// use a compressor (automatically adds e.DeliveryHeader)
-				vals = append(vals, co.String())
-				//co.clear()
+				var co *compressor
+				// a compressor was set
+				if c, ok := e.Values["zlib-compressor"]; ok {
+					body = "gzip"
+					co = c.(*compressor)
+				}
+				// was saved in redis
+				if _, ok := e.Values["redis"]; ok {
+					body = "redis"
+				}
+
+				// build the values for the query
+				vals = []interface{}{} // clear the vals
+				vals = append(vals,
+					to,
+					trimToLimit(e.MailFrom.String(), 255),
+					trimToLimit(e.Subject, 255),
+					body)
+				if body == "redis" {
+					// data already saved in redis
+					vals = append(vals, "")
+				} else if co != nil {
+					// use a compressor (automatically adds e.DeliveryHeader)
+					vals = append(vals, co.String())
+
+				} else {
+					vals = append(vals, e.String())
+				}
+
+				vals = append(vals,
+					hash,
+					to,
+					e.RemoteAddress,
+					trimToLimit(e.MailFrom.String(), 255),
+					e.TLS)
+
+				stmt := mp.prepareInsertQuery(1, db)
+				mp.doQuery(1, db, stmt, &vals)
+				// continue to the next Processor in the decorator chain
+				return c.Process(e, task)
+			} else if task == TaskValidateRcpt {
+				// if you need to validate the e.Rcpt then change to:
+				if len(e.RcptTo) > 0 {
+					// since this is called each time a recipient is added
+					// validate only the _last_ recipient that was appended
+					last := e.RcptTo[len(e.RcptTo)-1]
+					if len(last.User) > 255 {
+						// TODO what kind of response to send?
+						return NewResult(response.Canned.FailNoSenderDataCmd), NoSuchUser
+					}
+				}
+				return c.Process(e, task)
 			} else {
-				vals = append(vals, e.String())
+				return c.Process(e, task)
 			}
 
-			vals = append(vals,
-				hash,
-				to,
-				e.RemoteAddress,
-				trimToLimit(e.MailFrom.String(), 255),
-				e.TLS)
-
-			stmt := mp.prepareInsertQuery(1, db)
-			mp.doQuery(1, db, stmt, &vals)
-			// continue to the next Processor in the decorator chain
-			return c.Process(e)
 		})
 	}
 }

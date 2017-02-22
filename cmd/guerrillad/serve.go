@@ -7,6 +7,7 @@ import (
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	_ "github.com/flashmob/maildiranasaurus"
 	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
@@ -97,8 +98,7 @@ func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app 
 		newBackend, newErr := backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
 		if newErr != nil {
 			// this will continue using old backend
-			logger.WithError(newErr).Error("Error while loading the backend %q",
-				cmdConfig.BackendName)
+			logger.WithError(newErr).Error("Error while loading the backend")
 		} else {
 			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
 			backend = newBackend
@@ -134,9 +134,23 @@ func serve(cmd *cobra.Command, args []string) {
 	var backend backends.Backend
 	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, mainlog)
 	if err != nil {
-		mainlog.WithError(err).Fatalf("Error while loading the backend %q",
-			cmdConfig.BackendName)
+		mainlog.WithError(err).Fatalf("Error while loading the backend")
 	}
+	/*
+		// add our custom processor to the backend
+		backends.Service.AddProcessor("MailDir", maildiranasaurus.MaildirProcessor)
+		config := guerrilla.AppConfig {
+			LogFile: log.OutputStderr,
+			LogLevel: "info",
+			AllowedHosts: []string{"example.com"},
+			PidFile: "./pidfile.pid",
+			Servers: []guerrilla.ServerConfig{
+
+			}
+		}
+	*/
+
+	//	g := guerrilla.NewSMTPD{config: cmdConfig}
 
 	app, err := guerrilla.New(&cmdConfig.AppConfig, backend, mainlog)
 	if err != nil {

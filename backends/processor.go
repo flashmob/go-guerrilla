@@ -4,24 +4,45 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 )
 
-// Our processor is defined as something that processes the envelope and returns a result and error
-type Processor interface {
-	Process(*envelope.Envelope) (BackendResult, error)
+type SelectTask int
+
+const (
+	TaskSaveMail SelectTask = iota
+	TaskValidateRcpt
+)
+
+func (o SelectTask) String() string {
+	switch o {
+	case TaskSaveMail:
+		return "save mail"
+	case TaskValidateRcpt:
+		return "validate recipient"
+	}
+	return "[unnamed task]"
 }
 
-// Signature of DoFunc
-type ProcessorFunc func(*envelope.Envelope) (BackendResult, error)
+var BackendResultOK = NewResult("200 OK")
+
+// Our processor is defined as something that processes the envelope and returns a result and error
+type Processor interface {
+	Process(*envelope.Envelope, SelectTask) (Result, error)
+}
+
+// Signature of Processor
+type ProcessorFunc func(*envelope.Envelope, SelectTask) (Result, error)
 
 // Make ProcessorFunc will satisfy the Processor interface
-func (f ProcessorFunc) Process(e *envelope.Envelope) (BackendResult, error) {
-	return f(e)
+func (f ProcessorFunc) Process(e *envelope.Envelope, task SelectTask) (Result, error) {
+	// delegate to the anonymous function
+	return f(e, task)
 }
 
 // DefaultProcessor is a undecorated worker that does nothing
-// Notice MockClient has no knowledge of the other decorators that have orthogonal concerns.
+// Notice DefaultProcessor has no knowledge of the other decorators that have orthogonal concerns.
 type DefaultProcessor struct{}
 
 // do nothing except return the result
-func (w DefaultProcessor) Process(e *envelope.Envelope) (BackendResult, error) {
-	return NewBackendResult("200 OK"), nil
+// (this is the last call in the decorator stack, if it got here, then all is good)
+func (w DefaultProcessor) Process(e *envelope.Envelope, task SelectTask) (Result, error) {
+	return BackendResultOK, nil
 }

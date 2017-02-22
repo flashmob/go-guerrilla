@@ -16,7 +16,7 @@ import (
 // Output        : none (only output to the log if enabled)
 // ----------------------------------------------------------------------------------
 func init() {
-	Processors["debugger"] = func() Decorator {
+	processors["debugger"] = func() Decorator {
 		return Debugger()
 	}
 }
@@ -29,22 +29,26 @@ func Debugger() Decorator {
 	var config *debuggerConfig
 	initFunc := Initialize(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&debuggerConfig{})
-		bcfg, err := Service.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
 			return err
 		}
 		config = bcfg.(*debuggerConfig)
 		return nil
 	})
-	Service.AddInitializer(initFunc)
+	Svc.AddInitializer(initFunc)
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope) (BackendResult, error) {
-			if config.LogReceivedMails {
-				Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
-				Log().Info("Headers are:", e.Header)
+		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+			if task == TaskSaveMail {
+				if config.LogReceivedMails {
+					Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
+					Log().Info("Headers are:", e.Header)
+				}
+				// continue to the next Processor in the decorator stack
+				return c.Process(e, task)
+			} else {
+				return c.Process(e, task)
 			}
-			// continue to the next Processor in the decorator chain
-			return c.Process(e)
 		})
 	}
 }

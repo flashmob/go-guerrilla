@@ -297,7 +297,7 @@ func (g *guerrilla) subscribeEvents() {
 			var l log.Logger
 			if l, err = log.GetLogger(sc.LogFile); err == nil {
 				g.storeMainlog(l)
-				backends.Service.StoreMainlog(l)
+				backends.Svc.StoreMainlog(l)
 				// it will change to the new logger on the next accepted client
 				server.logStore.Store(l)
 
@@ -402,5 +402,5 @@ func (g *guerrilla) Shutdown() {
 func (g *guerrilla) SetLogger(l log.Logger) {
 	l.SetLevel(g.Config.LogLevel)
 	g.storeMainlog(l)
-	backends.Service.StoreMainlog(l)
+	backends.Svc.StoreMainlog(l)
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -996,7 +995,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	fd, _ := os.Open("../../tests/testlog")
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		fmt.Println(logOutput)
+		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "i/o timeout"); i < 0 {
 			t.Error("Connection to 127.0.0.1:2552 didn't timeout as expected")
 		}

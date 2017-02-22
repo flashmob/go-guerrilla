@@ -51,8 +51,8 @@ type Envelope struct {
 	TLS bool
 	// Header stores the results from ParseHeaders()
 	Header textproto.MIMEHeader
-	// Hold the information generated when processing the envelope by the backend
-	Info map[string]interface{}
+	// Values hold the values generated when processing the envelope by the backend
+	Values map[string]interface{}
 	// Hashes of each email on the rcpt
 	Hashes []string
 	// additional delivery header that may be added
@@ -65,7 +65,7 @@ func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
 
 	return &Envelope{
 		RemoteAddress: remoteAddr,
-		Info:          make(map[string]interface{}),
+		Values:        make(map[string]interface{}),
 		QueuedId:      queuedID(clientID),
 	}
 }
@@ -140,8 +140,18 @@ func (e *Envelope) Reseed(remoteAddr string, clientID uint64) {
 	e.TLS = false
 	e.Hashes = make([]string, 0)
 	e.DeliveryHeader = ""
-	e.Info = make(map[string]interface{})
+	e.Values = make(map[string]interface{})
 	e.QueuedId = queuedID(clientID)
+}
+
+func (e *Envelope) PushRcpt(addr EmailAddress) {
+	e.RcptTo = append(e.RcptTo, addr)
+}
+
+func (e *Envelope) PopRcpt() EmailAddress {
+	ret := e.RcptTo[len(e.RcptTo)-1]
+	e.RcptTo = e.RcptTo[:len(e.RcptTo)-1]
+	return ret
 }
 
 var mimeRegex, _ = regexp.Compile(`=\?(.+?)\?([QBqp])\?(.+?)\?=`)
