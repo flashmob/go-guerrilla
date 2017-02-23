@@ -254,7 +254,6 @@ func (h logHook) Fire(e *log.Entry) error {
 		}
 	case "disconnect":
 		store.lock.Lock()
-		log.Info("datastore:251, disconnecting", store.nClients)
 		store.nClients--
 		store.lock.Unlock()
 	}
