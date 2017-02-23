@@ -1,4 +1,4 @@
-package main
+package mocks
 
 import (
 	"fmt"
@@ -22,52 +22,45 @@ func lastWords(message string, err error) {
 	// panic(err)
 }
 
-// Sends a single SMTP message, for testing.
-func main() {
-	for {
-		time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 10)))
-		go sendMail(
-			helos[rand.Int()%4],
-			froms[rand.Int()%4],
-		)
-	}
+type Client struct {
+	helo         string
+	emailAddress string
 }
 
-func sendMail(helo, from string) {
+func (c *Client) SendMail(to, url string) {
 	// fmt.Printf("Sending mail")
-	c, err := smtp.Dial(URL)
+	sc, err := smtp.Dial(url)
 	if err != nil {
 		lastWords("Dial ", err)
 	}
-	defer c.Close()
+	defer sc.Close()
 
 	// Introduce some artificial delay
 	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
 
-	if err = c.Hello(helo); err != nil {
+	if err = sc.Hello(c.helo); err != nil {
 		lastWords("Hello ", err)
 	}
 
-	if err = c.Mail(from); err != nil {
+	if err = sc.Mail(c.emailAddress); err != nil {
 		lastWords("Mail ", err)
 	}
 
-	to := "recipient@gmail.com"
-	if err = c.Rcpt(to); err != nil {
+	if err = sc.Rcpt(to); err != nil {
 		lastWords("Rcpt ", err)
 	}
 
 	// Introduce some artificial delay
 	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
 
-	wr, err := c.Data()
+	wr, err := sc.Data()
 	if err != nil {
 		lastWords("Data ", err)
 	}
 	defer wr.Close()
 
 	msg := fmt.Sprint("Subject: something\n")
-	msg += "From: " + from + "\n"
+	msg += "From: " + c.emailAddress + "\n"
 	msg += "To: " + to + "\n"
 	msg += "\n\n"
 	msg += "hello\n"
@@ -80,7 +73,7 @@ func sendMail(helo, from string) {
 	// Introduce some artificial delay
 	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
 
-	err = c.Quit()
+	err = sc.Quit()
 	if err != nil {
 		lastWords("Quit ", err)
 	}
