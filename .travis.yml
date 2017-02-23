@@ -8,9 +8,11 @@ go:
 
   before_install:
     - if [[ `npm -v` != 3* ]]; then npm i -g npm@3; fi
-    - nvm use 6
+    - nvm install 6 && nvm use 6
 
 install:
+  - echo `npm -v`
+  - echo `node -v`
   - export GO15VENDOREXPERIMENT=1
   - go get github.com/rakyll/statik
   - go install github.com/rakyll/statik
