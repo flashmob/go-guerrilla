@@ -33,8 +33,9 @@ import (
 	"net"
 	"strings"
 
-	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"os"
+
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 )
 
 type TestConfig struct {
@@ -245,7 +246,7 @@ func TestGreeting(t *testing.T) {
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
@@ -304,7 +305,7 @@ func TestShutDown(t *testing.T) {
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//	fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
+		if i := strings.Index(logOutput, "Handle client"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
