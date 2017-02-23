@@ -14,11 +14,13 @@ const initialState = Immutable.Map({
 		data: Immutable.List(),
 		min: Infinity,
 		max: -Infinity
-	})
+	}),
+	topDomain: Immutable.Map(),
+	topHelo: Immutable.Map(),
+	topIP: Immutable.Map()
 });
 
 const reducer = (state = initialState, {type, payload}) => {
-	console.log(type, payload);
 	let newState = state;
 
 	switch (type) {
@@ -38,7 +40,10 @@ const reducer = (state = initialState, {type, payload}) => {
 			.setIn(['ram', 'data'], state.getIn(['ram', 'data'])
 				.push(...payload.ram))
 			.setIn(['nClients', 'data'], state.getIn(['nClients', 'data'])
-				.push(...payload.nClients));
+				.push(...payload.nClients))
+			.set('topDomain', Immutable.fromJS(payload.topDomain))
+			.set('topHelo', Immutable.fromJS(payload.topHelo))
+			.set('topIP', Immutable.fromJS(payload.topIP));
 		if (newState.getIn(['ram', 'data']).count() > state.get('maxPoints')) {
 			newState = newState
 				.setIn(['ram', 'data'], state.getIn(['ram', 'data'])
@@ -62,7 +67,10 @@ const reducer = (state = initialState, {type, payload}) => {
 			.setIn(['ram', 'data'], state.getIn(['ram', 'data'])
 				.push(payload.ram))
 			.setIn(['nClients', 'data'], state.getIn(['nClients', 'data'])
-				.push(payload.nClients));
+				.push(payload.nClients))
+			.set('topDomain', Immutable.fromJS(payload.topDomain))
+			.set('topHelo', Immutable.fromJS(payload.topHelo))
+			.set('topIP', Immutable.fromJS(payload.topIP));
 		if (newState.getIn(['ram', 'data']).count() > state.get('maxPoints')) {
 			newState = newState
 				.setIn(['ram', 'data'], state.getIn(['ram', 'data'])

@@ -24,7 +24,7 @@ const baseProps = {
 	height: 300,
 	padding: {
 		top: 20,
-		bottom: 5,
+		bottom: 40,
 		left: 80,
 		right: 10
 	},

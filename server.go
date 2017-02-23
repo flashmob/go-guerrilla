@@ -282,13 +282,18 @@ func (server *server) isShuttingDown() bool {
 
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
-	defer client.closeConn()
+	defer func() {
+		server.log.WithFields(map[string]interface{}{
+			"event": "disconnect",
+			"id":    client.ID,
+		}).Info("Disconnect client")
+		client.closeConn()
+	}()
+
 	sc := server.configStore.Load().(ServerConfig)
 	server.log.WithFields(map[string]interface{}{
-		"event":   "connect",
-		"address": client.RemoteAddress,
-		"helo":    client.Helo,
-		"id":      client.ID,
+		"event": "connect",
+		"id":    client.ID,
 	}).Info("Handle client")
 
 	// Initial greeting
@@ -398,6 +403,13 @@ func (server *server) handleClient(client *client) {
 				if err != nil {
 					client.sendResponse(err)
 				} else {
+					server.log.WithFields(map[string]interface{}{
+						"event":   "mailfrom",
+						"helo":    client.Helo,
+						"domain":  from.Host,
+						"address": client.RemoteAddress,
+						"id":      client.ID,
+					}).Info("Mail from")
 					client.MailFrom = from
 					client.sendResponse(response.Canned.SuccessMailCmd)
 				}

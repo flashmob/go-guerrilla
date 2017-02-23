@@ -1,13 +1,19 @@
-package mocks
+package main
 
 import (
 	"fmt"
+	"math/rand"
 	"net/smtp"
 	"time"
 )
 
 const (
 	URL = "127.0.0.1:2500"
+)
+
+var (
+	helos = []string{"hi", "hello", "ahoy", "bonjour"}
+	froms = []string{"joe@gmail.com", "jane@gmail.com", "alex@gmail.com", "sally@gmail.com"}
 )
 
 func lastWords(message string, err error) {
@@ -18,30 +24,41 @@ func lastWords(message string, err error) {
 
 // Sends a single SMTP message, for testing.
 func main() {
-	for i := 0; i < 100; i++ {
-		go sendMail(i)
+	for {
+		time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 10)))
+		go sendMail(
+			helos[rand.Int()%4],
+			froms[rand.Int()%4],
+		)
 	}
-	time.Sleep(time.Minute / 10)
 }
 
-func sendMail(i int) {
-	fmt.Printf("Sending %d mail\n", i)
+func sendMail(helo, from string) {
+	// fmt.Printf("Sending mail")
 	c, err := smtp.Dial(URL)
 	if err != nil {
 		lastWords("Dial ", err)
 	}
 	defer c.Close()
 
-	from := "somebody@gmail.com"
-	to := "somebody.else@gmail.com"
+	// Introduce some artificial delay
+	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
+
+	if err = c.Hello(helo); err != nil {
+		lastWords("Hello ", err)
+	}
 
 	if err = c.Mail(from); err != nil {
 		lastWords("Mail ", err)
 	}
 
+	to := "recipient@gmail.com"
 	if err = c.Rcpt(to); err != nil {
 		lastWords("Rcpt ", err)
 	}
+
+	// Introduce some artificial delay
+	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
 
 	wr, err := c.Data()
 	if err != nil {
@@ -60,10 +77,11 @@ func sendMail(i int) {
 		lastWords("Send ", err)
 	}
 
-	fmt.Printf("About to quit %d\n", i)
+	// Introduce some artificial delay
+	time.Sleep(time.Millisecond * (time.Duration(rand.Int() % 50)))
+
 	err = c.Quit()
 	if err != nil {
 		lastWords("Quit ", err)
 	}
-	fmt.Printf("Finished sending %d mail\n", i)
 }

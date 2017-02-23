@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/rakyll/statik/fs"
 )
 
 const (
@@ -35,21 +37,21 @@ type Config struct {
 	ListenInterface string
 }
 
+// Begin collecting data and listening for dashboard clients
 func Run(c *Config) {
-	// TODO below for testing w/ webpack only, change before merging
-	// statikFS, _ := fs.New()
+	log.Info("Dashboard run")
+	statikFS, _ := fs.New()
 	config = c
 	sessions = map[string]*session{}
 	r := mux.NewRouter()
 	r.HandleFunc("/ws", webSocketHandler)
-	// TODO below for testing w/ webpack only, change before merging
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("dashboard/js/build")))
+	r.PathPrefix("/").Handler(http.FileServer(statikFS))
 
 	rand.Seed(time.Now().UnixNano())
 
 	go dataListener(tickInterval)
-
-	http.ListenAndServe(c.ListenInterface, r)
+	err := http.ListenAndServe(c.ListenInterface, r)
+	log.WithError(err).Error("Dashboard server failed to start")
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
+	log.Info("websocket handler")
 	cookie, err := r.Cookie("SID")
 	if err != nil {
 		// TODO error
@@ -84,7 +87,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	sess.ws = conn
 	c := make(chan *message)
 	sess.send = c
-	// TODO send store contents at connection time
+
 	store.subscribe(sess.id, c)
 	go sess.receive()
 	go sess.transmit()
@@ -110,6 +113,7 @@ func startSession(w http.ResponseWriter, r *http.Request) *session {
 	return sess
 }
 
+// TODO unused
 func getSession(r *http.Request) *session {
 	c, err := r.Cookie("SID")
 	if err != nil {

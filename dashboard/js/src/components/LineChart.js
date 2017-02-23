@@ -2,9 +2,13 @@ import React, { PropTypes } from 'react';
 import { VictoryAxis, VictoryChart, VictoryLine } from 'victory';
 import { formatBytes, formatNumber } from './../util';
 import moment from 'moment';
+import simplify from 'simplify-js';
 import theme from './../theme';
 
-const _formatIndependentAxis = tick => moment(tick).format('HH:mm:ss');
+const _formatIndependentAxis = tick => {
+	console.log("_formatIndependentAxis", tick, '$$$$', moment(tick).format('HH:mm:ss'));
+	return moment(tick).format('HH:mm:ss');
+};
 
 const _formatDependentAxis = (tick, format) => (
 	format === 'bytes' ?
@@ -12,23 +16,44 @@ const _formatDependentAxis = (tick, format) => (
 		formatNumber(tick, 1)
 );
 
-const LineChart = ({data, format}) => {
+// Uses simplifyJS to simplify the data from the backend (there can be up to
+// 8000 points so this step is necessary)
+const _simplify = data => {
+	if (data.length === 0) return [];
+	return simplify(
+		data.map(d => ({x: moment(d.x).unix(), y: d.y}))
+	).map(d => ({x: moment(d.x), y: d.y}));;
+}
+
+const styles = {
+	title: {
+		fontSize: 22,
+		fontWeight: 300,
+		textAlign: 'center',
+		margin: 0
+	}
+};
+
+const LineChart = ({data, format, title}) => {
 	return (
-		<VictoryChart
-			theme={theme}
-			height={150}
-			width={1000}>
-			<VictoryAxis
-				scale="time"
-				tickCount={4}
-				tickFormat={tick => _formatIndependentAxis(tick)}/>
-			<VictoryAxis
-				dependentAxis
-				scale="linear"
-				tickCount={2}
-				tickFormat={tick => _formatDependentAxis(tick, format)} />
-			<VictoryLine data={data} />
-		</VictoryChart>
+		<div>
+			<h1 style={styles.title}>{title}</h1>
+			<VictoryChart
+				theme={theme}
+				height={150}
+				width={1000}>
+				<VictoryAxis
+					scale="time"
+					tickCount={4}
+					tickFormat={tick => _formatIndependentAxis(tick)}/>
+				<VictoryAxis
+					dependentAxis
+					scale="linear"
+					tickCount={3}
+					tickFormat={tick => _formatDependentAxis(tick, format)} />
+				<VictoryLine data={_simplify(data)} />
+			</VictoryChart>
+		</div>
 	);
 };
 

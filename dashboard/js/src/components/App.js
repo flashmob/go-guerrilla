@@ -1,22 +1,40 @@
 import React, { Component } from 'react';
 import {connect} from 'react-redux';
-import {init, tick} from '../action-creators';
-import ActionTypes from '../action-types';
+// import {init, tick} from '../action-creators';
+// import ActionTypes from '../action-types';
 import LineChart from './LineChart';
+import RankingTable from './RankingTable';
 
 const styles = {
 	container: {
-		backgroundSize: 'cover',
 		display: 'flex',
-		padding: 32,
-		flexDirection: 'column'
+		width: '100%',
+		flexDirection: 'column',
+		justifyContent: 'space-between',
+		padding: '64px 32px'
 	},
-	chartContainer: {
-
+	chartsContainer: {
+		display: 'flex',
+		flexDirection: 'column',
+		justifyContent: 'space-between'
+	},
+	tableContainer: {
+		display: 'flex',
+		flexDirection: 'row',
+		justifyContent: 'space-around'
 	}
 }
 
+// TODO make this not hard-coded
 const WS_URL = 'ws://localhost:8080/ws';
+const RANKING_SIZE = 5;
+
+const _computeRanking = mapping => {
+	return Object.keys(mapping)
+		.map(k => ({value: k, count: mapping[k]}))
+		.sort((a, b) => a.count - b.count)
+		.slice(0, RANKING_SIZE);
+}
 
 class App extends Component {
 	constructor(props) {
@@ -35,17 +53,32 @@ class App extends Component {
 	}
 
 	render() {
-		const {ram, nClients} = this.props;
+		const {ram, nClients, topDomain, topHelo, topIP} = this.props;
 		return (
 			<div style={styles.container}>
-				<LineChart
-					data={ram.get('data').toArray()}
-					domain={[ram.get('min'), ram.get('max')]}
-					format="bytes" />
-				<LineChart
-					data={nClients.get('data').toArray()}
-					domain={[nClients.get('min'), nClients.get('max')]}
-					format="number" />
+				<div style={styles.chartContainer}>
+					<LineChart
+						data={ram.get('data').toArray()}
+						domain={[ram.get('min'), ram.get('max')]}
+						format="bytes"
+						title="Memory Usage" />
+					<LineChart
+						data={nClients.get('data').toArray()}
+						domain={[nClients.get('min'), nClients.get('max')]}
+						format="number"
+						title="Number of Clients" />
+				</div>
+				<div style={styles.tableContainer}>
+					<RankingTable
+						rankType="Domain"
+						ranking={_computeRanking(topDomain.toJS())} />
+					<RankingTable
+						rankType="HELO"
+						ranking={_computeRanking(topHelo.toJS())} />
+					<RankingTable
+						rankType="IP"
+						ranking={_computeRanking(topIP.toJS())} />
+				</div>
 			</div>
 		);
 	}
@@ -53,7 +86,10 @@ class App extends Component {
 
 const mapStateToProps = state => ({
 	ram: state.get('ram'),
-	nClients: state.get('nClients')
+	nClients: state.get('nClients'),
+	topDomain: state.get('topDomain'),
+	topHelo: state.get('topHelo'),
+	topIP: state.get('topIP')
 });
 
 export default connect(mapStateToProps)(App);

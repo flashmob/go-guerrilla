@@ -6,12 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/sloonz/go-qprintable"
-	"gopkg.in/iconv.v1"
 	"io/ioutil"
 	"net/textproto"
 	"regexp"
 	"strings"
+
+	"github.com/sloonz/go-qprintable"
+	"gopkg.in/iconv.v1"
 )
 
 // EmailAddress encodes an email address of the form `<user@host>`
@@ -28,7 +29,7 @@ func (ep *EmailAddress) IsEmpty() bool {
 	return ep.User == "" && ep.Host == ""
 }
 
-// Email represents a single SMTP message.
+// Envelope represents a single SMTP message.
 type Envelope struct {
 	// Remote IP address
 	RemoteAddress string
