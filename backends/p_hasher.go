@@ -32,7 +32,7 @@ func init() {
 // It appends the hashes to envelope's Hashes slice.
 func Hasher() Decorator {
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
 				// base hash, use subject from and timestamp-nano

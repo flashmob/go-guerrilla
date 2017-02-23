@@ -29,10 +29,10 @@ type Processor interface {
 }
 
 // Signature of Processor
-type ProcessorFunc func(*envelope.Envelope, SelectTask) (Result, error)
+type ProcessWith func(*envelope.Envelope, SelectTask) (Result, error)
 
 // Make ProcessorFunc will satisfy the Processor interface
-func (f ProcessorFunc) Process(e *envelope.Envelope, task SelectTask) (Result, error) {
+func (f ProcessWith) Process(e *envelope.Envelope, task SelectTask) (Result, error) {
 	// delegate to the anonymous function
 	return f(e, task)
 }

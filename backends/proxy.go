@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/log"
 	"sync"
 )
 
-// The ProxyBackend makes it possible to use the old backend system
-// which is not using processors
+// Deprecated: ProxyBackend makes it possible to use the old backend system
 type ProxyBackend struct {
 	config       proxyConfig
 	extend       proxy
@@ -18,6 +18,7 @@ type ProxyBackend struct {
 	wg sync.WaitGroup
 }
 
+// Deprecated: Use workerMsg instead
 type savePayload struct {
 	mail        *envelope.Envelope
 	from        *envelope.EmailAddress
@@ -25,23 +26,42 @@ type savePayload struct {
 	savedNotify chan *saveStatus
 }
 
+// Deprecated: Use notifyMsg instead
 type saveStatus struct {
 	err  error
 	hash string
 }
 
-type proxy interface {
-
-	//	Backend
-	/*
-		saveMailWorker
-		numberOfWorkersGetter
-		settingsTester
-		configLoader
-	*/
-
+// Deprecated: Kept for compatibility, use BackendGateway instead
+// AbstractBackend is an alias ProxyBackend for back-compatibility.
+type AbstractBackend struct {
+	extend proxy
+	ProxyBackend
 }
 
+// extractConfig for compatibility only. Forward to Svc.ExtractConfig
+func (ac *AbstractBackend) extractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
+	return Svc.ExtractConfig(configData, configType)
+}
+
+// copy the extend field down to the Proxy
+func (ac *AbstractBackend) Initialize(config BackendConfig) error {
+	if ac.extend != nil {
+		ac.ProxyBackend.extend = ac.extend
+	}
+	return ac.ProxyBackend.Initialize(config)
+}
+
+// Deprecated: backeConfig is an alias to BaseConfig, use BaseConfig instead
+type baseConfig BaseConfig
+
+// Deprecated: Use Log() instead to get a hold of a logger
+var mainlog log.Logger
+
+// Deprecated: proxy may implement backend interface or any of the interfaces below
+type proxy interface{}
+
+//
 type saveMailWorker interface {
 	// start save mail worker(s)
 	saveMailWorker(chan *savePayload)
@@ -83,9 +103,8 @@ func (pb *ProxyBackend) loadConfig(backendConfig BackendConfig) (err error) {
 }
 
 func (pb *ProxyBackend) initialize(config BackendConfig) error {
-
 	if cl, ok := pb.extend.(configLoader); ok {
-		return cl.loadConfig(config)
+		cl.loadConfig(config)
 	}
 	err := pb.loadConfig(config)
 	if err != nil {

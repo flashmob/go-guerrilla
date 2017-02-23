@@ -47,7 +47,7 @@ func Header() Decorator {
 	}))
 
 	return func(c Processor) Processor {
-		return ProcessorFunc(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
 				hash := "unknown"

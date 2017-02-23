@@ -130,6 +130,10 @@ func (e Errors) Error() string {
 func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	Svc.StoreMainlog(l)
 	if backend, found := backends[backendName]; found {
+		err := backend.Initialize(backendConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error while initializing the backend: %s", err)
+		}
 		b = backend
 	} else {
 		gateway := &BackendGateway{config: backendConfig}

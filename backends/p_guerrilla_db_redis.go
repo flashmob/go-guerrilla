@@ -1,44 +1,36 @@
 package backends
 
-// This backend is presented here as an example only, please modify it to your needs.
-// The backend stores the email data in Redis.
-// Other meta-information is stored in MySQL to be joined later.
-// A lot of email gets discarded without viewing on Guerrilla Mail,
-// so it's much faster to put in Redis, where other programs can
-// process it later, without touching the disk.
-//
-// Some features:
-// - It batches the SQL inserts into a single query and inserts either after a time threshold or if the batch is full
-// - If the mysql driver crashes, it's able to recover, log the incident and resume again.
-// - It also does a clean shutdown - it tries to save everything before returning
-//
-// Short history:
-// Started with issuing an insert query for each single email and another query to update the tally
-// Then applied the following optimizations:
-// - Moved tally updates to another background process which does the tallying in a single query
-// - Changed the MySQL queries to insert in batch
-// - Made a Compressor that recycles buffers using sync.Pool
-// The result was around 400% speed improvement. If you know of any more improvements, please share!
-// - Added the recovery mechanism,
-
 import (
-	"fmt"
-
-	"time"
-
-	"github.com/garyburd/redigo/redis"
-
 	"bytes"
 	"compress/zlib"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
-
+	"fmt"
+	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/garyburd/redigo/redis"
 	"github.com/go-sql-driver/mysql"
 	"io"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 )
+
+// ----------------------------------------------------------------------------------
+// Processor Name: Guerrilla-reds-db
+// ----------------------------------------------------------------------------------
+// Description   : Saves the body to redis, meta data to mysql. Example
+// ----------------------------------------------------------------------------------
+// Config Options: ...
+// --------------:-------------------------------------------------------------------
+// Input         : envelope
+// ----------------------------------------------------------------------------------
+// Output        :
+// ----------------------------------------------------------------------------------
+func init() {
+	processors["guerrilla-redis-db"] = func() Decorator {
+		return GuerrillaDbReddis()
+	}
+}
 
 // how many rows to batch at a time
 const GuerrillaDBAndRedisBatchMax = 2
@@ -46,14 +38,8 @@ const GuerrillaDBAndRedisBatchMax = 2
 // tick on every...
 const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
 
-func init() {
-	backends["guerrilla-db-redis"] = &AbstractBackend{
-		extend: &GuerrillaDBAndRedisBackend{}}
-}
-
 type GuerrillaDBAndRedisBackend struct {
-	AbstractBackend
-	config    guerrillaDBAndRedisConfig
+	config    *guerrillaDBAndRedisConfig
 	batcherWg sync.WaitGroup
 	// cache prepared queries
 	cache stmtCache
@@ -83,12 +69,12 @@ func convertError(name string) error {
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := baseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := g.extractConfig(backendConfig, configType)
+	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 	if err != nil {
 		return err
 	}
 	m := bcfg.(*guerrillaDBAndRedisConfig)
-	g.config = *m
+	g.config = m
 	return nil
 }
 
@@ -285,8 +271,6 @@ func trimToLimit(str string, limit int) string {
 	return ret
 }
 
-var workerId = 0
-
 func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 	conf := mysql.Config{
 		User:         g.config.MysqlUser,
@@ -307,20 +291,47 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 
 }
 
-func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePayload) {
+func (c *redisClient) redisConnection(redisInterface string) (err error) {
+	if c.isConnected == false {
+		c.conn, err = redis.Dial("tcp", redisInterface)
+		if err != nil {
+			// handle error
+			return err
+		}
+		c.isConnected = true
+	}
+	return nil
+}
+
+var workerId = 0
+
+// GuerrillaDbReddis is a specialized processor for Guerrilla mail. It is here as an example.
+// It's an example of a 'monolithic' processor.
+func GuerrillaDbReddis() Decorator {
+
+	g := GuerrillaDBAndRedisBackend{}
+	redisClient := &redisClient{}
+
+	var db *sql.DB
 	var to, body string
 
 	var redisErr error
 
-	workerId++
+	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+		configType := BaseConfig(&guerrillaDBAndRedisConfig{})
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		if err != nil {
+			return err
+		}
+		g.config = bcfg.(*guerrillaDBAndRedisConfig)
+		db, err = g.mysqlConnect()
+		if err != nil {
+			mainlog.Fatalf("cannot open mysql: %s", err)
+		}
+		return nil
+	}))
 
-	redisClient := &redisClient{}
-	var db *sql.DB
-	var err error
-	db, err = g.mysqlConnect()
-	if err != nil {
-		mainlog.Fatalf("cannot open mysql: %s", err)
-	}
+	workerId++
 
 	// start the query SQL batching where we will send data via the feeder channel
 	feeder := make(chan []interface{}, 1)
@@ -353,96 +364,64 @@ func (g *GuerrillaDBAndRedisBackend) saveMailWorker(saveMailChan chan *savePaylo
 	}()
 	var vals []interface{}
 	data := newCompressedData()
-	//  receives values from the channel repeatedly until it is closed.
 
-	for {
-		payload := <-saveMailChan
-		if payload == nil {
-			mainlog.Debug("No more saveMailChan payload")
-			return
-		}
-		mainlog.Debug("Got mail from chan", payload.mail.RemoteAddress)
-		to = trimToLimit(strings.TrimSpace(payload.recipient.User)+"@"+g.config.PrimaryHost, 255)
-		payload.mail.Helo = trimToLimit(payload.mail.Helo, 255)
-		payload.recipient.Host = trimToLimit(payload.recipient.Host, 255)
-		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		payload.mail.ParseHeaders()
-		hash := MD5Hex(
-			to,
-			payload.mail.MailFrom.String(),
-			payload.mail.Subject,
-			ts)
-		// Add extra headers
-		var addHead string
-		addHead += "Delivered-To: " + to + "\r\n"
-		addHead += "Received: from " + payload.mail.Helo + " (" + payload.mail.Helo + "  [" + payload.mail.RemoteAddress + "])\r\n"
-		addHead += "	by " + payload.recipient.Host + " with SMTP id " + hash + "@" + payload.recipient.Host + ";\r\n"
-		addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
+	return func(c Processor) Processor {
+		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+			if task == TaskSaveMail {
+				mainlog.Debug("Got mail from chan", e.RemoteAddress)
+				to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+g.config.PrimaryHost, 255)
+				e.Helo = trimToLimit(e.Helo, 255)
+				e.RcptTo[0].Host = trimToLimit(e.RcptTo[0].Host, 255)
+				ts := fmt.Sprintf("%d", time.Now().UnixNano())
+				e.ParseHeaders()
+				hash := MD5Hex(
+					to,
+					e.MailFrom.String(),
+					e.Subject,
+					ts)
+				// Add extra headers
+				var addHead string
+				addHead += "Delivered-To: " + to + "\r\n"
+				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\r\n"
+				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
+				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
-		// data will be compressed when printed, with addHead added to beginning
+				// data will be compressed when printed, with addHead added to beginning
 
-		data.set([]byte(addHead), &payload.mail.Data)
-		body = "gzencode"
+				data.set([]byte(addHead), &e.Data)
+				body = "gzencode"
 
-		// data will be written to redis - it implements the Stringer interface, redigo uses fmt to
-		// print the data to redis.
+				// data will be written to redis - it implements the Stringer interface, redigo uses fmt to
+				// print the data to redis.
 
-		redisErr = redisClient.redisConnection(g.config.RedisInterface)
-		if redisErr == nil {
-			_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, data)
-			if doErr == nil {
-				body = "redis" // the backend system will know to look in redis for the message data
-				data.clear()   // blank
+				redisErr = redisClient.redisConnection(g.config.RedisInterface)
+				if redisErr == nil {
+					_, doErr := redisClient.conn.Do("SETEX", hash, g.config.RedisExpireSeconds, data)
+					if doErr == nil {
+						body = "redis" // the backend system will know to look in redis for the message data
+						data.clear()   // blank
+					}
+				} else {
+					mainlog.WithError(redisErr).Warn("Error while connecting redis")
+				}
+
+				vals = []interface{}{} // clear the vals
+				vals = append(vals,
+					trimToLimit(to, 255),
+					trimToLimit(e.MailFrom.String(), 255),
+					trimToLimit(e.Subject, 255),
+					body,
+					data.String(),
+					hash,
+					trimToLimit(to, 255),
+					e.RemoteAddress,
+					trimToLimit(e.MailFrom.String(), 255),
+					e.TLS)
+				return c.Process(e, task)
+
+			} else {
+				return c.Process(e, task)
 			}
-		} else {
-			mainlog.WithError(redisErr).Warn("Error while connecting redis")
-		}
-
-		vals = []interface{}{} // clear the vals
-		vals = append(vals,
-			trimToLimit(to, 255),
-			trimToLimit(payload.mail.MailFrom.String(), 255),
-			trimToLimit(payload.mail.Subject, 255),
-			body,
-			data.String(),
-			hash,
-			trimToLimit(to, 255),
-			payload.mail.RemoteAddress,
-			trimToLimit(payload.mail.MailFrom.String(), 255),
-			payload.mail.TLS)
-		feeder <- vals
-		payload.savedNotify <- &saveStatus{nil, hash}
-
+		})
 	}
-}
-
-func (c *redisClient) redisConnection(redisInterface string) (err error) {
-	if c.isConnected == false {
-		c.conn, err = redis.Dial("tcp", redisInterface)
-		if err != nil {
-			// handle error
-			return err
-		}
-		c.isConnected = true
-	}
-	return nil
-}
-
-// test database connection settings
-func (g *GuerrillaDBAndRedisBackend) testSettings() (err error) {
-
-	var db *sql.DB
-
-	if db, err = g.mysqlConnect(); err != nil {
-		err = fmt.Errorf("MySql cannot connect, check your settings: %s", err)
-	} else {
-		db.Close()
-	}
-
-	redisClient := &redisClient{}
-	if redisErr := redisClient.redisConnection(g.config.RedisInterface); redisErr != nil {
-		err = fmt.Errorf("Redis cannot connect, check your settings: %s", redisErr)
-	}
-
-	return
 }
