@@ -50,7 +50,8 @@ const GuerrillaDBAndRedisBatchMax = 2
 const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
 
 func init() {
-	backends["guerrilla-db-redis"] = &GuerrillaDBAndRedisBackend{}
+	backends["guerrilla-db-redis"] = &ProxyBackend{
+		extend: &GuerrillaDBAndRedisBackend{}}
 }
 
 type GuerrillaDBAndRedisBackend struct {
@@ -452,24 +453,4 @@ func (g *GuerrillaDBAndRedisBackend) testSettings() (err error) {
 	}
 
 	return
-}
-
-func (g *GuerrillaDBAndRedisBackend) Initialize(config BackendConfig) error {
-	err := g.loadConfig(config)
-	if err != nil {
-		return err
-	}
-	return nil
-
-}
-
-// does nothing
-func (g *GuerrillaDBAndRedisBackend) Process(mail *envelope.Envelope) Result {
-	return NewResult("250 OK")
-}
-
-// does nothing
-func (g *GuerrillaDBAndRedisBackend) Shutdown() error {
-
-	return nil
 }
