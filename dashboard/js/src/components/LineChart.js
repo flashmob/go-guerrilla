@@ -22,7 +22,7 @@ const _simplify = data => {
 	if (data.length === 0) return [];
 	return simplify(
 		data.map(d => ({x: moment(d.x).unix(), y: d.y}))
-	).map(d => ({x: moment(d.x), y: d.y}));;
+	).map(d => ({x: moment(d.x), y: d.y}));
 }
 
 const styles = {
