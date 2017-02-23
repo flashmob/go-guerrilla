@@ -11,6 +11,10 @@ install:
   - go get github.com/Masterminds/glide
   - go install github.com/Masterminds/glide
   - glide up
+  - go get github.com/rakyll/statik
+  - go install github.com/rakyll/statik
+  - cd dashboard/js && npm install && npm run build && cd ../..
+  - statik -src=dashboard/js/build -dest=dashboard
 
 script:
   - ./.travis.gofmt.sh

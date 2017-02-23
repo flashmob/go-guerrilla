@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"html/template"
 	"math/rand"
 	"net/http"
 	"time"
@@ -13,17 +12,12 @@ import (
 	"github.com/rakyll/statik/fs"
 )
 
-const (
-	dashboard      = "index.html"
-	dashboardPath  = "dashboard/html/index.html"
-	sessionTimeout = time.Hour * 24 // TODO replace with config
-)
+const sessionTimeout = time.Hour * 24 // TODO replace with config
 
 var (
 	// Cache of HTML templates
-	templates = template.Must(template.ParseFiles(dashboardPath))
-	config    *Config
-	sessions  map[string]*session
+	config   *Config
+	sessions map[string]*session
 )
 
 var upgrader = websocket.Upgrader{
@@ -39,7 +33,6 @@ type Config struct {
 
 // Begin collecting data and listening for dashboard clients
 func Run(c *Config) {
-	log.Info("Dashboard run")
 	statikFS, _ := fs.New()
 	config = c
 	sessions = map[string]*session{}
@@ -54,19 +47,7 @@ func Run(c *Config) {
 	log.WithError(err).Error("Dashboard server failed to start")
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	c, err := r.Cookie("SID")
-	_, sidExists := sessions[c.Value]
-	if err != nil || !sidExists {
-		// No SID cookie
-		startSession(w, r)
-	}
-	w.WriteHeader(http.StatusOK)
-	templates.ExecuteTemplate(w, dashboard, nil)
-}
-
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
-	log.Info("websocket handler")
 	cookie, err := r.Cookie("SID")
 	if err != nil {
 		// TODO error
@@ -110,21 +91,5 @@ func startSession(w http.ResponseWriter, r *http.Request) *session {
 
 	http.SetCookie(w, cookie)
 	sessions[sessionID] = sess
-	return sess
-}
-
-// TODO unused
-func getSession(r *http.Request) *session {
-	c, err := r.Cookie("SID")
-	if err != nil {
-		return nil
-	}
-
-	sid := c.Value
-	sess, ok := sessions[sid]
-	if !ok {
-		return nil
-	}
-
 	return sess
 }

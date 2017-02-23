@@ -171,7 +171,11 @@ func dataListener(interval time.Duration) {
 		runtime.ReadMemStats(memStats)
 		ramPoint := point{t, memStats.Alloc}
 		nClientPoint := point{t, store.nClients}
-		log.Info("datastore:89", ramPoint, nClientPoint)
+		log.WithFields(map[string]interface{}{
+			"ram":     ramPoint.Y,
+			"clients": nClientPoint.Y,
+		}).Info("Logging analytics data")
+
 		store.addRAMPoint(ramPoint)
 		store.addNClientPoint(nClientPoint)
 		store.notify(&message{tickMessageType, dataFrame{
@@ -235,7 +239,7 @@ func (h logHook) Fire(e *log.Entry) error {
 			return nil
 		}
 	}
-	log.Info("event ", event)
+
 	switch event {
 	case "connect":
 		store.lock.Lock()

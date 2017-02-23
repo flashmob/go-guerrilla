@@ -32,7 +32,7 @@ const RANKING_SIZE = 5;
 const _computeRanking = mapping => {
 	return Object.keys(mapping)
 		.map(k => ({value: k, count: mapping[k]}))
-		.sort((a, b) => a.count - b.count)
+		.sort((a, b) => b.count - a.count)
 		.slice(0, RANKING_SIZE);
 }
 

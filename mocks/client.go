@@ -12,8 +12,8 @@ const (
 )
 
 var (
-	helos = []string{"hi", "hello", "ahoy", "bonjour"}
-	froms = []string{"joe@gmail.com", "jane@gmail.com", "alex@gmail.com", "sally@gmail.com"}
+	helos = []string{"hi", "hello", "ahoy", "bonjour", "hey!"}
+	froms = []string{"joe@yahoo.com", "jane@gmail.com", "alex@hotmail.com", "sally@fastmail.com", "alex@outlook.com"}
 )
 
 func lastWords(message string, err error) {
