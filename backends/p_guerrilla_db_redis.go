@@ -68,7 +68,7 @@ func convertError(name string) error {
 // from the main config file 'backend' config "backend_config"
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
-	configType := baseConfig(&guerrillaDBAndRedisConfig{})
+	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
 	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 	if err != nil {
 		return err
@@ -164,7 +164,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	}
 	stmt, sqlErr := db.Prepare(sqlstr)
 	if sqlErr != nil {
-		mainlog.WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
+		Log().WithError(sqlErr).Fatalf("failed while db.Prepare(INSERT...)")
 	}
 	// cache it
 	g.cache[rows-1] = stmt
@@ -176,14 +176,14 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	defer func() {
 		if r := recover(); r != nil {
 			//logln(1, fmt.Sprintf("Recovered in %v", r))
-			mainlog.Error("Recovered form panic:", r, string(debug.Stack()))
+			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			mainlog.Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
 			panic("query failed")
 		}
 	}()
@@ -191,7 +191,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	if execErr != nil {
-		mainlog.WithError(execErr).Error("There was a problem the insert")
+		Log().WithError(execErr).Error("There was a problem the insert")
 	}
 }
 
@@ -225,7 +225,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			mainlog.Error("insertQueryBatcher caught a panic", r)
+			Log().Error("insertQueryBatcher caught a panic", r)
 		}
 	}()
 	// Keep getting values from feeder and add to batch.
@@ -237,14 +237,14 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
 		case row, feederOk := <-feeder:
 			if row == nil {
-				mainlog.Info("Query batchaer exiting")
+				Log().Info("Query batchaer exiting")
 				// Insert any remaining rows
 				insert(count)
 				return feederOk
 			}
 			vals = append(vals, row...)
 			count++
-			mainlog.Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
+			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
 			if count >= GuerrillaDBAndRedisBatchMax {
 				insert(GuerrillaDBAndRedisBatchMax)
 			}
@@ -283,7 +283,7 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 		Params:       map[string]string{"collation": "utf8_general_ci"},
 	}
 	if db, err := sql.Open("mysql", conf.FormatDSN()); err != nil {
-		mainlog.Error("cannot open mysql", err)
+		Log().Error("cannot open mysql", err)
 		return nil, err
 	} else {
 		return db, nil
@@ -326,7 +326,7 @@ func GuerrillaDbReddis() Decorator {
 		g.config = bcfg.(*guerrillaDBAndRedisConfig)
 		db, err = g.mysqlConnect()
 		if err != nil {
-			mainlog.Fatalf("cannot open mysql: %s", err)
+			Log().Fatalf("cannot open mysql: %s", err)
 		}
 		return nil
 	}))
@@ -338,11 +338,11 @@ func GuerrillaDbReddis() Decorator {
 	go func() {
 		for {
 			if feederOK := g.insertQueryBatcher(feeder, db); !feederOK {
-				mainlog.Debug("insertQueryBatcher exited")
+				Log().Debug("insertQueryBatcher exited")
 				return
 			}
 			// if insertQueryBatcher panics, it can recover and go in again
-			mainlog.Debug("resuming insertQueryBatcher")
+			Log().Debug("resuming insertQueryBatcher")
 		}
 
 	}()
@@ -350,11 +350,11 @@ func GuerrillaDbReddis() Decorator {
 	defer func() {
 		if r := recover(); r != nil {
 			//recover form closed channel
-			mainlog.Error("panic recovered in saveMailWorker", r)
+			Log().Error("panic recovered in saveMailWorker", r)
 		}
 		db.Close()
 		if redisClient.conn != nil {
-			mainlog.Infof("closed redis")
+			Log().Infof("closed redis")
 			redisClient.conn.Close()
 		}
 		// close the feeder & wait for query batcher to exit.
@@ -368,7 +368,7 @@ func GuerrillaDbReddis() Decorator {
 	return func(c Processor) Processor {
 		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
-				mainlog.Debug("Got mail from chan", e.RemoteAddress)
+				Log().Debug("Got mail from chan", e.RemoteAddress)
 				to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+g.config.PrimaryHost, 255)
 				e.Helo = trimToLimit(e.Helo, 255)
 				e.RcptTo[0].Host = trimToLimit(e.RcptTo[0].Host, 255)
@@ -402,7 +402,7 @@ func GuerrillaDbReddis() Decorator {
 						data.clear()   // blank
 					}
 				} else {
-					mainlog.WithError(redisErr).Warn("Error while connecting redis")
+					Log().WithError(redisErr).Warn("Error while connecting redis")
 				}
 
 				vals = []interface{}{} // clear the vals

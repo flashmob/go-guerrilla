@@ -14,12 +14,10 @@ import (
 var (
 	Svc *Service
 
-	// deprecated backends system
-	backends = map[string]Backend{}
 	// Store the constructor for making an new processor decorator.
 	processors map[string]processorConstructor
 
-	b Backend // todo make sure legacy works
+	b Backend
 )
 
 func init() {
@@ -129,21 +127,13 @@ func (e Errors) Error() string {
 // backendConfig
 func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	Svc.StoreMainlog(l)
-	if backend, found := backends[backendName]; found {
-		err := backend.Initialize(backendConfig)
-		if err != nil {
-			return nil, fmt.Errorf("error while initializing the backend: %s", err)
-		}
-		b = backend
-	} else {
-		gateway := &BackendGateway{config: backendConfig}
-		err := gateway.Initialize(backendConfig)
-		if err != nil {
-			return nil, fmt.Errorf("error while initializing the backend: %s", err)
-		}
-		gateway.State = BackendStateRunning
-		b = Backend(gateway)
+	gateway := &BackendGateway{config: backendConfig}
+	err := gateway.Initialize(backendConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
+	gateway.State = BackendStateRunning
+	b = Backend(gateway)
 	return b, nil
 }
 
