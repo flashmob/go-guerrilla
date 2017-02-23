@@ -11,8 +11,6 @@ before_install:
   - nvm install 6 && nvm use 6
 
 install:
-  - echo `npm -v`
-  - echo `node -v`
   - export GO15VENDOREXPERIMENT=1
   - go get github.com/rakyll/statik
   - go install github.com/rakyll/statik

@@ -71,7 +71,7 @@ const theme = {
 			}),
 			grid: {
 				fill: "transparent",
-				stroke: "transparent"
+				stroke: "#f0f0f0"
 			},
 			ticks: {
 				fill: "transparent",
@@ -124,7 +124,7 @@ const theme = {
 		style: {
 			data: {
 				fill: "transparent",
-				stroke: charcoal,
+				stroke: "#969696",
 				strokeWidth: 2
 			},
 			labels: assign({}, baseLabelStyles, {

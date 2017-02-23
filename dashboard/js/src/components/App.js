@@ -1,7 +1,5 @@
 import React, { Component } from 'react';
 import {connect} from 'react-redux';
-// import {init, tick} from '../action-creators';
-// import ActionTypes from '../action-types';
 import LineChart from './LineChart';
 import RankingTable from './RankingTable';
 
@@ -25,8 +23,12 @@ const styles = {
 	}
 }
 
-// TODO make this not hard-coded
-const WS_URL = 'ws://localhost:8080/ws';
+let WS_URL = `ws://${location.host}/ws`
+if (process.env.NODE_ENV === 'development') {
+	WS_URL = `ws://localhost:8080/ws`
+}
+
+// Maximum size of ranking tables
 const RANKING_SIZE = 5;
 
 const _computeRanking = mapping => {
@@ -38,14 +40,13 @@ const _computeRanking = mapping => {
 
 class App extends Component {
 	constructor(props) {
-		super();
+		super(props);
 		const ws = new WebSocket(WS_URL);
 		ws.onerror = err => console.log(err);
 		ws.onopen = event => console.log(event);
 		ws.onclose = event => console.log(event);
 		ws.onmessage = event => {
 			const message = JSON.parse(event.data);
-			console.log(message);
 			props.dispatch(message);
 		};
 

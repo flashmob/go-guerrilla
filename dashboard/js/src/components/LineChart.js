@@ -6,7 +6,6 @@ import simplify from 'simplify-js';
 import theme from './../theme';
 
 const _formatIndependentAxis = tick => {
-	console.log("_formatIndependentAxis", tick, '$$$$', moment(tick).format('HH:mm:ss'));
 	return moment(tick).format('HH:mm:ss');
 };
 
@@ -17,11 +16,12 @@ const _formatDependentAxis = (tick, format) => (
 );
 
 // Uses simplifyJS to simplify the data from the backend (there can be up to
-// 8000 points so this step is necessary)
+// 8000 points so this step is necessary). Because of the format expectations
+// of simplifyJS, we need to convert x's to ints and back to moments.
 const _simplify = data => {
 	if (data.length === 0) return [];
 	return simplify(
-		data.map(d => ({x: moment(d.x).unix(), y: d.y}))
+		data.map(d => ({x: moment(d.x).valueOf(), y: d.y}))
 	).map(d => ({x: moment(d.x), y: d.y}));
 }
 
@@ -40,8 +40,8 @@ const LineChart = ({data, format, title}) => {
 			<h1 style={styles.title}>{title}</h1>
 			<VictoryChart
 				theme={theme}
-				height={150}
-				width={1000}>
+				height={200}
+				width={1500}>
 				<VictoryAxis
 					scale="time"
 					tickCount={4}
