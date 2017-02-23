@@ -6,9 +6,9 @@ go:
   - 1.7
   - master
 
-  before_install:
-    - if [[ `npm -v` != 3* ]]; then npm i -g npm@3; fi
-    - nvm install 6 && nvm use 6
+before_install:
+  - if [[ `npm -v` != 3* ]]; then npm i -g npm@3; fi
+  - nvm install 6 && nvm use 6
 
 install:
   - echo `npm -v`
