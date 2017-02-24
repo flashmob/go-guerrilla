@@ -38,34 +38,33 @@ funded from our bitcoin donation address:
 `1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
 
 So far we have the following bounties are still open:
-(Updated 22 Dec 2016)
+(Updated 24 Feb 2017)
 
-- Let's encrypt TLS certificate support! 
+* Let's encrypt TLS certificate support! 
+Status: Open.
 Take a look at https://github.com/flashmob/go-guerrilla/issues/29
 (0.5 for a successful merge)
 
-- Analytics: A web based admin panel that displays live statistics,
-including the number of clients, memory usage, graph the number of
+* Analytics: A web based admin panel that displays live statistics.
+Status: Currently WIP, see branch https://github.com/flashmob/go-guerrilla/tree/dashboard
+Include the number of clients, memory usage, graph the number of
 connections/bytes/memory used for the last 24h.
 Show the top source clients by: IP, by domain & by HELO message.
-Using websocket via https & password protected.
-Update: Currently WIP, see branch https://github.com/flashmob/go-guerrilla/tree/dashboard.
 (1 BTC for a successful merge)
 
-- Fuzz Testing: Using https://github.com/dvyukov/go-fuzz
+* Fuzz Testing: Using https://github.com/dvyukov/go-fuzz
+Status: Completed, see result: https://github.com/flashmob/go-guerrilla/wiki/Fuzz-testing
 Implement a fuzzing client that will send input to the
 server's connection. 
-Maybe another area to fuzz would be the config file, 
-fuzz the config file and then send a sighup to the server to see if it 
-can crash? Please open an issue before to discuss scope
-(0.25 BTC for a successful merge / bugs found.)
+(0.25 BTC has been awarded)
 
-- Testing: Add some automated more tests to increase coverage.
-(0.1 BTC for a successful merge, judged to be a satisfactory increase
-in coverage. Please open an issue before to discuss scope)
+* Testing: Add some automated more tests to increase coverage.
+Staus: Open .(0.1 BTC for a successful merge, judged to be a satisfactory increase
+in coverage. Please open an issue before to discuss scope.
+Already awarded once)
 
-- Profiling: Simulate a configurable number of simultaneous clients 
-(eg 5000) which send commands at random speeds with messages of various 
+* Profiling: Simulate a configurable number of simultaneous clients 
+Status: Open. Send commands at random speeds with messages of various 
 lengths. Some connections to use TLS. Some connections may produce 
 errors, eg. disconnect randomly after a few commands, issue unexpected
 input or timeout. Provide a report of all the bottlenecks and setup so 
@@ -74,8 +73,9 @@ github. (Flame graph maybe? https://github.com/uber/go-torch
 Please open an issue before to discuss scope)
 (0.25 BTC)
 
-- Looking for someone to do a code review & possibly fix any tidbits,
-they find, or suggestions for doing things better.
+* Code review & possibly fix any tidbits.
+Status: Open.
+Submit a pull request with fixes, or suggestions for doing things better.
 (Already one bounty of 0.25 paid, however, more is always welcome)
 
 Ready to roll up your sleeves and have a go?
