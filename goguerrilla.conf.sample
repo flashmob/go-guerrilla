@@ -13,6 +13,13 @@
     "backend_config": {
         "log_received_mails": true
     },
+    "dashboard": {
+      "enabled": true,
+      "listen_interface": ":8080",
+      "tick_interval": "5s",
+      "max_window": "24h",
+      "ranking_aggregation_interval": "6h"
+    },
     "servers" : [
         {
             "is_enabled" : true,

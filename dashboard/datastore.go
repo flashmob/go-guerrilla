@@ -9,16 +9,8 @@ import (
 )
 
 const (
-	// Frequency at which we measure stats and send messages to clients
-	tickInterval = time.Second * 5
-	// Maximum history of stats kept in store and displayed on frontend
-	maxWindow = time.Hour * 24
-	maxTicks  = int(maxWindow / tickInterval)
 	// Number of entries to show in top N charts
 	topClientsSize = 5
-	// Frequency at which we update top client rankings
-	rankingUpdateInterval = time.Hour * 6
-	nRankingBuffers       = int(maxWindow / rankingUpdateInterval)
 	// Redux action type names
 	initMessageType = "INIT"
 	tickMessageType = "TICK"
@@ -26,8 +18,13 @@ const (
 
 var (
 	// Log for sending client events from the server to the dashboard.
-	LogHook = logHook(1)
-	store   = newDataStore()
+	tickInterval          = time.Second * 5
+	maxWindow             = time.Hour * 24
+	rankingUpdateInterval = time.Hour * 6
+	maxTicks              = int(maxWindow / tickInterval)
+	nRankingBuffers       = int(maxWindow / rankingUpdateInterval)
+	LogHook               = logHook(1)
+	store                 = newDataStore()
 )
 
 // Keeps track of connection data that is buffered in the topClients
@@ -64,7 +61,7 @@ func newDataStore() *dataStore {
 		newConns:     newConns,
 		subs:         subs,
 	}
-	go ds.rankingManager()
+
 	return ds
 }
 

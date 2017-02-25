@@ -12,10 +12,7 @@ import (
 	"github.com/rakyll/statik/fs"
 )
 
-const sessionTimeout = time.Hour * 24 // TODO replace with config
-
 var (
-	// Cache of HTML templates
 	config   *Config
 	sessions map[string]*session
 )
@@ -28,14 +25,23 @@ var upgrader = websocket.Upgrader{
 }
 
 type Config struct {
-	ListenInterface string
+	Enabled         bool   `json:"enabled"`
+	ListenInterface string `json:"listen_interface"`
+	// Interval at which we send measure and send dataframe to frontend
+	TickInterval string `json:"tick_interval"`
+	// Maximum interval for which we store data
+	MaxWindow string `json:"max_window"`
+	// Granularity for which rankings are aggregated
+	RankingUpdateInterval string `json:"ranking_aggregation_interval"`
 }
 
 // Begin collecting data and listening for dashboard clients
 func Run(c *Config) {
 	statikFS, _ := fs.New()
-	config = c
+
+	applyConfig(c)
 	sessions = map[string]*session{}
+
 	r := mux.NewRouter()
 	r.HandleFunc("/ws", webSocketHandler)
 	r.PathPrefix("/").Handler(http.FileServer(statikFS))
@@ -43,8 +49,38 @@ func Run(c *Config) {
 	rand.Seed(time.Now().UnixNano())
 
 	go dataListener(tickInterval)
+	go store.rankingManager()
+	log.Info("hi")
+
 	err := http.ListenAndServe(c.ListenInterface, r)
 	log.WithError(err).Error("Dashboard server failed to start")
+}
+
+// Parses options in config and applies to global variables
+func applyConfig(c *Config) {
+	config = c
+
+	if len(config.MaxWindow) > 0 {
+		mw, err := time.ParseDuration(config.MaxWindow)
+		if err == nil {
+			maxWindow = mw
+		}
+	}
+	if len(config.RankingUpdateInterval) > 0 {
+		rui, err := time.ParseDuration(config.RankingUpdateInterval)
+		if err == nil {
+			rankingUpdateInterval = rui
+		}
+	}
+	if len(config.TickInterval) > 0 {
+		ti, err := time.ParseDuration(config.TickInterval)
+		if err == nil {
+			tickInterval = ti
+		}
+	}
+
+	maxTicks = int(maxWindow * tickInterval)
+	nRankingBuffers = int(maxWindow / rankingUpdateInterval)
 }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {

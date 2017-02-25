@@ -7,21 +7,18 @@ import (
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/flashmob/go-guerrilla/dashboard"
 )
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	Dashboard    DashboardConfig `json:"dashboard"`
-	Servers      []ServerConfig  `json:"servers"`
-	AllowedHosts []string        `json:"allowed_hosts"`
-	PidFile      string          `json:"pid_file"`
-	LogFile      string          `json:"log_file,omitempty"`
-	LogLevel     string          `json:"log_level,omitempty"`
-}
-
-type DashboardConfig struct {
-	Enabled         bool   `json:"enabled"`
-	ListenInterface string `json:"listen_interface"`
+	Dashboard    dashboard.Config `json:"dashboard"`
+	Servers      []ServerConfig   `json:"servers"`
+	AllowedHosts []string         `json:"allowed_hosts"`
+	PidFile      string           `json:"pid_file"`
+	LogFile      string           `json:"log_file,omitempty"`
+	LogLevel     string           `json:"log_level,omitempty"`
 }
 
 // ServerConfig specifies config options for a single server

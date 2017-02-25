@@ -17,11 +17,11 @@ every hour.
 The purpose of this daemon is to grab the email, save it to the database
 and disconnect as quickly as possible.
 
-A typical user of this software would probably want to look into 
-`backends/guerrilla_db_redis.go` source file to use as an example to 
+A typical user of this software would probably want to look into
+`backends/guerrilla_db_redis.go` source file to use as an example to
 customize for their own systems.
 
-This server does not attempt to filter HTML, check for spam or do any 
+This server does not attempt to filter HTML, check for spam or do any
 sender verification. These steps should be performed by other programs,
  (or perhaps your own custom backend?).
 The server does not send any email including bounces.
@@ -31,8 +31,8 @@ The software is using MIT License (MIT) - contributors welcome.
 ### Roadmap / Contributing & Bounties
 
 
-Pull requests / issue reporting & discussion / code reviews always 
-welcome. To encourage more pull requests, we are now offering bounties 
+Pull requests / issue reporting & discussion / code reviews always
+welcome. To encourage more pull requests, we are now offering bounties
 funded from our bitcoin donation address:
 
 `1grr11aWtbsyMUeB4EGfHvTuu7eFzkJ4A`
@@ -40,7 +40,7 @@ funded from our bitcoin donation address:
 So far we have the following bounties are still open:
 (Updated 22 Dec 2016)
 
-- Let's encrypt TLS certificate support! 
+- Let's encrypt TLS certificate support!
 Take a look at https://github.com/flashmob/go-guerrilla/issues/29
 (0.5 for a successful merge)
 
@@ -54,9 +54,9 @@ Update: Currently WIP, see branch https://github.com/flashmob/go-guerrilla/tree/
 
 - Fuzz Testing: Using https://github.com/dvyukov/go-fuzz
 Implement a fuzzing client that will send input to the
-server's connection. 
-Maybe another area to fuzz would be the config file, 
-fuzz the config file and then send a sighup to the server to see if it 
+server's connection.
+Maybe another area to fuzz would be the config file,
+fuzz the config file and then send a sighup to the server to see if it
 can crash? Please open an issue before to discuss scope
 (0.25 BTC for a successful merge / bugs found.)
 
@@ -64,13 +64,13 @@ can crash? Please open an issue before to discuss scope
 (0.1 BTC for a successful merge, judged to be a satisfactory increase
 in coverage. Please open an issue before to discuss scope)
 
-- Profiling: Simulate a configurable number of simultaneous clients 
-(eg 5000) which send commands at random speeds with messages of various 
-lengths. Some connections to use TLS. Some connections may produce 
+- Profiling: Simulate a configurable number of simultaneous clients
+(eg 5000) which send commands at random speeds with messages of various
+lengths. Some connections to use TLS. Some connections may produce
 errors, eg. disconnect randomly after a few commands, issue unexpected
-input or timeout. Provide a report of all the bottlenecks and setup so 
-that the report can be run automatically run when code is pushed to 
-github. (Flame graph maybe? https://github.com/uber/go-torch 
+input or timeout. Provide a report of all the bottlenecks and setup so
+that the report can be run automatically run when code is pushed to
+github. (Flame graph maybe? https://github.com/uber/go-torch
 Please open an issue before to discuss scope)
 (0.25 BTC)
 
@@ -93,7 +93,7 @@ Guerrilla Mail. As of 2016, it's handling all connections without any
 proxy (Nginx).
 
 Originally, Guerrilla Mail ran Exim which piped email to a php script (2009).
-As as the site got popular and more email came through, this approach
+As the site got popular and more email came through, this approach
 eventually swamped the server.
 
 The next solution was to decrease the heavy setup into something more
@@ -116,7 +116,7 @@ $ make guerrillad
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
 
-See `backends/guerrilla_db_redis.go` source to use an example for creating your own email saving backend, 
+See `backends/guerrilla_db_redis.go` source to use an example for creating your own email saving backend,
 or the dummy one if you'd like to start from scratch.
 
 If you want to build on the sample `guerrilla-db-redis` module, setup the following table
@@ -152,7 +152,7 @@ Otherwise, if data is in Redis, the `mail` will be blank, and
 the `body` field will contain the word 'redis'.
 
 You can implement your own saveMail function to use whatever storage /
-backend fits for you. Please share them ^_^, in particular, we would 
+backend fits for you. Please share them ^_^, in particular, we would
 like to see other formats such as maildir and mbox.
 
 
@@ -201,7 +201,7 @@ startErrors := app.Start()
 `Shutdown` will do a graceful shutdown, close all the connections, close
  the ports, and gracefully shutdown the backend. It will block until all
   operations are complete.
- 
+
 ```go
 app.Shutdown()
 ```
@@ -230,6 +230,13 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
                 "save_workers_size" : 3,
                 "primary_mail_host":"sharklasers.com"
             },
+        "dashboard": {
+            "enabled": true,
+            "listen_interface": ":8080", // Where the dashboard will be accessible
+            "tick_interval": "5s", // Interval at which data is measured, parseable by time.ParseDuration
+            "max_window": "24h", // Maximum interval to keep data
+            "ranking_aggregation_interval": "6h" // Aggregation granularity of rankings
+        },
         "servers" : [ // the following is an array of objects, each object represents a new server that will be spawned
             {
                 "is_enabled" : true, // boolean
@@ -270,8 +277,8 @@ Email Saving Backends
 =====================
 
 Backends provide for a modular way to save email and for the ability to
-extend this functionality. They can be swapped in or out via the config. 
-Currently, the server comes with two example backends: 
+extend this functionality. They can be swapped in or out via the config.
+Currently, the server comes with two example backends:
 
 - dummy : used for testing purposes
 - guerrilla_db_redis: example uses MySQL and Redis to store email, used on Guerrilla Mail
@@ -280,7 +287,7 @@ Releases
 ========
 
 (Master branch - Release Candidate 1 for v1.6)
-Large refactoring of the code. 
+Large refactoring of the code.
 - Introduced "backends": modular architecture for saving email
 - Issue: Use as a package in your own projects! https://github.com/flashmob/go-guerrilla/issues/20
 - Issue: Do not include dot-suffix in emails https://github.com/flashmob/go-guerrilla/issues/24
@@ -289,7 +296,7 @@ Large refactoring of the code.
 - Incompatible change: The server's command is now a command called `guerrillad`
 - Config re-loading via SIGHUP: reload TLS, add/remove/enable/disable servers, change allowed hosts, timeout.
 - Begin writing automated tests
- 
+
 
 1.5.1 - 4nd Nov 2016 (Latest tagged release)
 - Small optimizations to the way email is saved
@@ -426,15 +433,15 @@ $ time smtp-source -c -l 5000 -t test@spam4.me -s 500 -m 5000 5.9.7.183
 Authors
 =======
 
-Project Lead: 
+Project Lead:
 -------------
 Flashmob, GuerrillaMail.com, Contact: flashmob@gmail.com
 
-Major Contributors: 
+Major Contributors:
 -------------------
 
 * Reza Mohammadi https://github.com/remohammadi
-* Jordan Schalm https://github.com/jordanschalm 
+* Jordan Schalm https://github.com/jordanschalm
 
 Thanks to:
 ----------
