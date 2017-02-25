@@ -14,7 +14,7 @@
         "log_received_mails": true
     },
     "dashboard": {
-      "enabled": true,
+      "is_enabled": true,
       "listen_interface": ":8080",
       "tick_interval": "5s",
       "max_window": "24h",

@@ -231,7 +231,7 @@ Copy goguerrilla.conf.sample to goguerrilla.conf
                 "primary_mail_host":"sharklasers.com"
             },
         "dashboard": {
-            "enabled": true,
+            "is_enable": true,
             "listen_interface": ":8080", // Where the dashboard will be accessible
             "tick_interval": "5s", // Interval at which data is measured, parseable by time.ParseDuration
             "max_window": "24h", // Maximum interval to keep data

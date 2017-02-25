@@ -25,7 +25,7 @@ var upgrader = websocket.Upgrader{
 }
 
 type Config struct {
-	Enabled         bool   `json:"enabled"`
+	Enabled         bool   `json:"is_enabled"`
 	ListenInterface string `json:"listen_interface"`
 	// Interval at which we send measure and send dataframe to frontend
 	TickInterval string `json:"tick_interval"`
