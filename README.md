@@ -266,15 +266,47 @@ The Json parser is very strict on syntax. If there's a parse error and it
 doesn't give much clue, then test your syntax here:
 http://jsonlint.com/#
 
-Email Saving Backends
+Email Processing Backend
 =====================
 
-Backends provide for a modular way to save email and for the ability to
-extend this functionality. They can be swapped in or out via the config. 
-Currently, the server comes with two example backends: 
+The main job of a go-guerrilla backend is to save email. 
 
-- dummy : used for testing purposes
-- guerrilla_db_redis: example uses MySQL and Redis to store email, used on Guerrilla Mail
+It can also validate recipients.
+
+Using a producer/consumer model, our backend manages multiple workers. These workers are composed of 
+smaller components called "Processors" which can be chained via the config to perform a series of steps.
+Each processor specifies a unique feature of behaviour for processing the envelope.
+
+To extend or add a feature, one would write a new Processor, then add it to the config.
+There are a few default processors to get you started.
+
+### Documentation
+
+See the full documentation here: 
+[About Backends: introduction, configuration, extending](https://github.com/flashmob/go-guerrilla/wiki/About-Backends:-introduction,-configuring-and-extending)
+
+### Included Processors
+
+| Processor | Description |
+|-----------|-------------|
+|Compressor|Sets a zlib compressor that other processors can use later|
+|Debugger|Logs the email envelope to help with testing|
+|Hasher|Processes each envelope to produce unique hashes to be used for ids later|
+|Header|Add a delivery header to the envelope|
+|HeadersParser|Parses MIME headers and also populates the Subject field of the envelope|
+|MySQL|Saves the emails to MySQL.|
+|Redis|Saves the email data to Redis.|
+|GuerrillaDbRedis|A 'monolithic' processor used at Guerrilla Mail; included for example
+
+### External Processors
+
+| Processor | Description |
+|-----------|-------------|
+|MailDir|Save emails to a maildir|
+
+### Example project
+
+[MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project using a custom processor to save email to a MailDir.
 
 Releases
 ========
