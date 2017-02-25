@@ -98,7 +98,7 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 			newServer.emitChangeEvents(oldServer, app)
 		} else {
 			// start new server
-			app.Publish(EventConfigEvServerNew, newServer)
+			app.Publish(EventConfigServerNew, newServer)
 		}
 
 	}

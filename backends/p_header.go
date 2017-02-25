@@ -1,7 +1,7 @@
 package backends
 
 import (
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"strings"
 	"time"
 )
@@ -36,7 +36,7 @@ func Header() Decorator {
 
 	var config *HeaderConfig
 
-	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&HeaderConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -47,7 +47,7 @@ func Header() Decorator {
 	}))
 
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
 				hash := "unknown"
@@ -56,7 +56,7 @@ func Header() Decorator {
 				}
 				var addHead string
 				addHead += "Delivered-To: " + to + "\n"
-				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\n"
+				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\n"
 				if len(e.RcptTo) > 0 {
 					addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
 				}

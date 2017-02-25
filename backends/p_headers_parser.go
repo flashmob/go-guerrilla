@@ -1,7 +1,7 @@
 package backends
 
 import (
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ----------------------------------------------------------------------------------
@@ -23,7 +23,7 @@ func init() {
 
 func HeadersParser() Decorator {
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				e.ParseHeaders()
 				// next processor

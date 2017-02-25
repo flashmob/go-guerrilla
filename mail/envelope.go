@@ -1,4 +1,4 @@
-package envelope
+package mail
 
 import (
 	"bufio"
@@ -17,32 +17,32 @@ import (
 	"time"
 )
 
-const maxHeaderChunk = iota + (1<<10)*3 // 3KB
+const maxHeaderChunk = iota + (3 << 10) // 3KB
 
-// EmailAddress encodes an email address of the form `<user@host>`
-type EmailAddress struct {
+// Address encodes an email address of the form `<user@host>`
+type Address struct {
 	User string
 	Host string
 }
 
-func (ep *EmailAddress) String() string {
+func (ep *Address) String() string {
 	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
 }
 
-func (ep *EmailAddress) IsEmpty() bool {
+func (ep *Address) IsEmpty() bool {
 	return ep.User == "" && ep.Host == ""
 }
 
 // Email represents a single SMTP message.
 type Envelope struct {
 	// Remote IP address
-	RemoteAddress string
+	RemoteIP string
 	// Message sent in EHLO command
 	Helo string
 	// Sender
-	MailFrom EmailAddress
+	MailFrom Address
 	// Recipients
-	RcptTo []EmailAddress
+	RcptTo []Address
 	// Data stores the header and message body
 	Data bytes.Buffer
 	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
@@ -62,11 +62,10 @@ type Envelope struct {
 }
 
 func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
-
 	return &Envelope{
-		RemoteAddress: remoteAddr,
-		Values:        make(map[string]interface{}),
-		QueuedId:      queuedID(clientID),
+		RemoteIP: remoteAddr,
+		Values:   make(map[string]interface{}),
+		QueuedId: queuedID(clientID),
 	}
 }
 
@@ -125,16 +124,16 @@ func (e *Envelope) String() string {
 
 // ResetTransaction is called when the transaction is reset (but save connection)
 func (e *Envelope) ResetTransaction() {
-	e.MailFrom = EmailAddress{}
-	e.RcptTo = []EmailAddress{}
+	e.MailFrom = Address{}
+	e.RcptTo = []Address{}
 	// reset the data buffer, keep it allocated
 	e.Data.Reset()
 }
 
 // Seed is called when used with a new connection, once it's accepted
-func (e *Envelope) Reseed(remoteAddr string, clientID uint64) {
+func (e *Envelope) Reseed(RemoteIP string, clientID uint64) {
 	e.Subject = ""
-	e.RemoteAddress = remoteAddr
+	e.RemoteIP = RemoteIP
 	e.Helo = ""
 	e.Header = nil
 	e.TLS = false
@@ -144,11 +143,13 @@ func (e *Envelope) Reseed(remoteAddr string, clientID uint64) {
 	e.QueuedId = queuedID(clientID)
 }
 
-func (e *Envelope) PushRcpt(addr EmailAddress) {
+// PushRcpt adds a recipient email address to the envelope
+func (e *Envelope) PushRcpt(addr Address) {
 	e.RcptTo = append(e.RcptTo, addr)
 }
 
-func (e *Envelope) PopRcpt() EmailAddress {
+// Pop removes the last email address that was pushed to the envelope
+func (e *Envelope) PopRcpt() Address {
 	ret := e.RcptTo[len(e.RcptTo)-1]
 	e.RcptTo = e.RcptTo[:len(e.RcptTo)-1]
 	return ret

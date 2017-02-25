@@ -32,7 +32,6 @@ var configJsonA = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": true
     },
@@ -80,7 +79,6 @@ var configJsonB = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": false
     },
@@ -172,7 +170,6 @@ var configJsonD = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
         "log_received_mails": false
     },
@@ -253,8 +250,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 	expectedEvents := map[guerrilla.Event]bool{
 		guerrilla.EventConfigBackendConfig: false,
-		guerrilla.EventConfigBackendName:   false,
-		guerrilla.EventConfigEvServerNew:   false,
+		guerrilla.EventConfigServerNew:     false,
 	}
 	mainlog, _ = log.GetLogger("off")
 
@@ -366,7 +362,7 @@ func TestServe(t *testing.T) {
 	}
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "Backend started:dummy"); i < 0 {
+		if i := strings.Index(logOutput, "Backend started"); i < 0 {
 			t.Error("Dummy backend not restared")
 		}
 	}
@@ -648,7 +644,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 
 	// now change the config by adding a host to allowed hosts
 
-	newConf := conf // copy the cmdConfg
+	newConf := conf
 	newConf.AllowedHosts = append(newConf.AllowedHosts, "grr.la")
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)

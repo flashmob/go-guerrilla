@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/flashmob/go-guerrilla/response"
@@ -134,7 +134,7 @@ func MySql() Decorator {
 	var db *sql.DB
 	mp := &MysqlProcessor{}
 
-	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&MysqlProcessorConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -151,7 +151,7 @@ func MySql() Decorator {
 	}))
 
 	// shutdown
-	Svc.AddShutdowner(Shutdown(func() error {
+	Svc.AddShutdowner(ShutdownWith(func() error {
 		if db != nil {
 			return db.Close()
 		}
@@ -159,7 +159,7 @@ func MySql() Decorator {
 	}))
 
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
 				var to, body string
@@ -202,7 +202,7 @@ func MySql() Decorator {
 				vals = append(vals,
 					hash,
 					to,
-					e.RemoteAddress,
+					e.RemoteIP,
 					trimToLimit(e.MailFrom.String(), 255),
 					e.TLS)
 

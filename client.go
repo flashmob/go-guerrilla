@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"net"
 	"net/textproto"
 	"sync"
@@ -30,7 +30,7 @@ const (
 )
 
 type client struct {
-	*envelope.Envelope
+	*mail.Envelope
 	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
@@ -54,7 +54,7 @@ type client struct {
 func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
 	c := &client{
 		conn:        conn,
-		Envelope:    envelope.NewEnvelope(getRemoteAddr(conn), clientID),
+		Envelope:    mail.NewEnvelope(getRemoteAddr(conn), clientID),
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
@@ -118,7 +118,7 @@ func (c *client) resetTransaction() {
 // A transaction starts after a MAIL command gets issued by the client.
 // Call resetTransaction to end the transaction
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := c.MailFrom == (envelope.EmailAddress{})
+	isMailFromEmpty := c.MailFrom == (mail.Address{})
 	if isMailFromEmpty {
 		return false
 	}

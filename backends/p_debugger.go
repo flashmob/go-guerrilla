@@ -1,7 +1,7 @@
 package backends
 
 import (
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ----------------------------------------------------------------------------------
@@ -16,7 +16,7 @@ import (
 // Output        : none (only output to the log if enabled)
 // ----------------------------------------------------------------------------------
 func init() {
-	processors["debugger"] = func() Decorator {
+	processors[defaultProcessor] = func() Decorator {
 		return Debugger()
 	}
 }
@@ -27,7 +27,7 @@ type debuggerConfig struct {
 
 func Debugger() Decorator {
 	var config *debuggerConfig
-	initFunc := Initialize(func(backendConfig BackendConfig) error {
+	initFunc := InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&debuggerConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -38,7 +38,7 @@ func Debugger() Decorator {
 	})
 	Svc.AddInitializer(initFunc)
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				if config.LogReceivedMails {
 					Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)

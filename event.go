@@ -19,12 +19,10 @@ const (
 	EventConfigLogReopen
 	// when log level changed
 	EventConfigLogLevel
-	// when the backend changed
-	EventConfigBackendName
 	// when the backend's config changed
 	EventConfigBackendConfig
 	// when a new server was added
-	EventConfigEvServerNew
+	EventConfigServerNew
 	// when an existing server was removed
 	EventConfigServerRemove
 	// when a new server config was detected (general event)
@@ -53,7 +51,6 @@ var eventList = [...]string{
 	"config_change:reopen_log_file",
 	"config_change:log_level",
 	"config_change:backend_config",
-	"config_change:backend_name",
 	"server_change:new_server",
 	"server_change:remove_server",
 	"server_change:update_config",
@@ -64,9 +61,6 @@ var eventList = [...]string{
 	"server_change:timeout",
 	"server_change:max_clients",
 	"server_change:tls_config",
-	"backend:proc_config_load",
-	"backend:proc_init",
-	"backend:proc_shutdown",
 }
 
 func (e Event) String() string {

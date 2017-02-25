@@ -3,7 +3,7 @@ package backends
 import (
 	"bytes"
 	"compress/zlib"
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"io"
 	"sync"
 )
@@ -91,7 +91,7 @@ func (c *compressor) clear() {
 
 func Compressor() Decorator {
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				compressor := newCompressor()
 				compressor.set([]byte(e.DeliveryHeader), &e.Data)

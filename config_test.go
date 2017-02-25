@@ -24,7 +24,6 @@ var configJsonA = `
     "log_level" : "debug",
     "pid_file" : "/var/run/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -98,7 +97,6 @@ var configJsonB = `
     "log_level" : "debug",
     "pid_file" : "/var/run/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -215,7 +213,7 @@ func TestConfigChangeEvents(t *testing.T) {
 		EventConfigLogFile:         false,
 		EventConfigLogLevel:        false,
 		EventConfigAllowedHosts:    false,
-		EventConfigEvServerNew:     false, // 127.0.0.1:4654 will be added
+		EventConfigServerNew:       false, // 127.0.0.1:4654 will be added
 		EventConfigServerRemove:    false, // 127.0.0.1:9999 server removed
 		EventConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
 		EventConfigServerLogFile:   false, // 127.0.0.1:2526

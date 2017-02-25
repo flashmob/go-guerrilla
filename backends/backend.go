@@ -2,8 +2,8 @@ package backends
 
 import (
 	"fmt"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"reflect"
 	"strconv"
 	"strings"
@@ -34,8 +34,8 @@ type processorConstructor func() Decorator
 // whether the message was processed successfully.
 type Backend interface {
 	// Public methods
-	Process(*envelope.Envelope) Result
-	ValidateRcpt(e *envelope.Envelope) RcptError
+	Process(*mail.Envelope) Result
+	ValidateRcpt(e *mail.Envelope) RcptError
 	Initialize(BackendConfig) error
 	Shutdown() error
 }
@@ -92,18 +92,18 @@ type ProcessorShutdowner interface {
 	Shutdown() error
 }
 
-type Initialize func(backendConfig BackendConfig) error
-type Shutdown func() error
+type InitializeWith func(backendConfig BackendConfig) error
+type ShutdownWith func() error
 
 // Satisfy ProcessorInitializer interface
 // So we can now pass an anonymous function that implements ProcessorInitializer
-func (i Initialize) Initialize(backendConfig BackendConfig) error {
+func (i InitializeWith) Initialize(backendConfig BackendConfig) error {
 	// delegate to the anonymous function
 	return i(backendConfig)
 }
 
-// satisfy ProcessorShutdowner interface, same concept as Initialize type
-func (s Shutdown) Shutdown() error {
+// satisfy ProcessorShutdowner interface, same concept as InitializeWith type
+func (s ShutdownWith) Shutdown() error {
 	// delegate
 	return s()
 }
@@ -135,6 +135,10 @@ func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend
 	gateway.State = BackendStateRunning
 	b = Backend(gateway)
 	return b, nil
+}
+
+func convertError(name string) error {
+	return fmt.Errorf("failed to load backend config (%s)", name)
 }
 
 func GetBackend() Backend {
@@ -242,11 +246,17 @@ func (s *Service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 		f := v.Field(i)
 		// read the tags of the config struct
 		field_name := t.Field(i).Tag.Get("json")
+		omitempty := false
 		if len(field_name) > 0 {
 			// parse the tag to
 			// get the field name from struct tag
 			split := strings.Split(field_name, ",")
 			field_name = split[0]
+			if len(split) > 1 {
+				if split[1] == "omitempty" {
+					omitempty = true
+				}
+			}
 		} else {
 			// could have no tag
 			// so use the reflected field name
@@ -258,21 +268,21 @@ func (s *Service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 				v.Field(i).SetInt(int64(intVal))
 			} else if intVal, converted := configData[field_name].(int); converted {
 				v.Field(i).SetInt(int64(intVal))
-			} else {
+			} else if !omitempty {
 				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "string" {
 			if stringVal, converted := configData[field_name].(string); converted {
 				v.Field(i).SetString(stringVal)
-			} else {
+			} else if !omitempty {
 				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "bool" {
 			if boolVal, converted := configData[field_name].(bool); converted {
 				v.Field(i).SetBool(boolVal)
-			} else {
+			} else if !omitempty {
 				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
 			}
 		}

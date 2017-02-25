@@ -95,14 +95,14 @@ func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app 
 			logger.WithError(err).Warn("Backend failed to shutdown")
 			return
 		}
-		newBackend, newErr := backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, logger)
+		newBackend, newErr := backends.New("", cmdConfig.BackendConfig, logger)
 		if newErr != nil {
 			// this will continue using old backend
 			logger.WithError(newErr).Error("Error while loading the backend")
 		} else {
 			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
 			backend = newBackend
-			logger.Info("Backend started:", cmdConfig.BackendName)
+			logger.Info("Backend started")
 		}
 	})
 }
@@ -132,7 +132,7 @@ func serve(cmd *cobra.Command, args []string) {
 
 	// Backend setup
 	var backend backends.Backend
-	backend, err = backends.New(cmdConfig.BackendName, cmdConfig.BackendConfig, mainlog)
+	backend, err = backends.New("", cmdConfig.BackendConfig, mainlog)
 	if err != nil {
 		mainlog.WithError(err).Fatalf("Error while loading the backend")
 	}
@@ -163,7 +163,6 @@ func serve(cmd *cobra.Command, args []string) {
 		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
 	subscribeBackendEvent(guerrilla.EventConfigBackendConfig, backend, app)
-	subscribeBackendEvent(guerrilla.EventConfigBackendName, backend, app)
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config
@@ -185,7 +184,6 @@ func serve(cmd *cobra.Command, args []string) {
 // the the command line interface.
 type CmdConfig struct {
 	guerrilla.AppConfig
-	BackendName   string                 `json:"backend_name"`
 	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
@@ -204,16 +202,16 @@ func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerril
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
 		app.Publish(guerrilla.EventConfigBackendConfig, c)
 	}
-	if c.BackendName != oldConfig.BackendName {
-		app.Publish(guerrilla.EventConfigBackendName, c)
-	}
 	// call other emitChangeEvents
 	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
 }
 
 // ReadConfig which should be called at startup, or when a SIG_HUP is caught
 func readConfig(path string, pidFile string, config *CmdConfig) error {
-	// load in the config.
+	// Load in the config.
+	// Note here is the only place we can make an exception to the
+	// "treat config values as immutable". For example, here the
+	// command line flags can override config values
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("Could not read config file: %s", err.Error())

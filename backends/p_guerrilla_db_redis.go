@@ -5,7 +5,7 @@ import (
 	"compress/zlib"
 	"database/sql"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/garyburd/redigo/redis"
 	"github.com/go-sql-driver/mysql"
 	"io"
@@ -27,7 +27,7 @@ import (
 // Output        :
 // ----------------------------------------------------------------------------------
 func init() {
-	processors["guerrilla-redis-db"] = func() Decorator {
+	processors["GuerrillaRedisDB"] = func() Decorator {
 		return GuerrillaDbReddis()
 	}
 }
@@ -58,10 +58,6 @@ type guerrillaDBAndRedisConfig struct {
 	RedisExpireSeconds int    `json:"redis_expire_seconds"`
 	RedisInterface     string `json:"redis_interface"`
 	PrimaryHost        string `json:"primary_mail_host"`
-}
-
-func convertError(name string) error {
-	return fmt.Errorf("failed to load backend config (%s)", name)
 }
 
 // Load the backend config for the backend. It has already been unmarshalled
@@ -317,7 +313,7 @@ func GuerrillaDbReddis() Decorator {
 
 	var redisErr error
 
-	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&guerrillaDBAndRedisConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -366,9 +362,9 @@ func GuerrillaDbReddis() Decorator {
 	data := newCompressedData()
 
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
-				Log().Debug("Got mail from chan", e.RemoteAddress)
+				Log().Debug("Got mail from chan", e.RemoteIP)
 				to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+g.config.PrimaryHost, 255)
 				e.Helo = trimToLimit(e.Helo, 255)
 				e.RcptTo[0].Host = trimToLimit(e.RcptTo[0].Host, 255)
@@ -382,7 +378,7 @@ func GuerrillaDbReddis() Decorator {
 				// Add extra headers
 				var addHead string
 				addHead += "Delivered-To: " + to + "\r\n"
-				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteAddress + "])\r\n"
+				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\r\n"
 				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
 				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
@@ -414,7 +410,7 @@ func GuerrillaDbReddis() Decorator {
 					data.String(),
 					hash,
 					trimToLimit(to, 255),
-					e.RemoteAddress,
+					e.RemoteIP,
 					trimToLimit(e.MailFrom.String(), 255),
 					e.TLS)
 				return c.Process(e, task)

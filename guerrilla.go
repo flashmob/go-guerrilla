@@ -194,7 +194,7 @@ func (g *guerrilla) subscribeEvents() {
 				// it will change server's logger when the next client gets accepted
 				server.mainlogStore.Store(l)
 			})
-			g.mainlog().Infof("main log for new clients changed to to [%s]", c.LogFile)
+			g.mainlog().Infof("main log for new clients changed to [%s]", c.LogFile)
 		} else {
 			g.mainlog().WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
 		}
@@ -222,7 +222,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// add a new server to the config & start
-	g.Subscribe(EventConfigEvServerNew, func(sc *ServerConfig) {
+	g.Subscribe(EventConfigServerNew, func(sc *ServerConfig) {
 		if _, err := g.findServer(sc.ListenInterface); err != nil {
 			// not found, lets add it
 			if err := g.makeServers(); err != nil {

@@ -76,7 +76,6 @@ var configJson = `
     "log_level" : "debug",
     "pid_file" : "/var/run/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -332,6 +331,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			}
 
 			for i := 0; i < 101; i++ {
+				fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
 				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break

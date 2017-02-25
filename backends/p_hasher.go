@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ----------------------------------------------------------------------------------
@@ -32,7 +32,7 @@ func init() {
 // It appends the hashes to envelope's Hashes slice.
 func Hasher() Decorator {
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
 				// base hash, use subject from and timestamp-nano

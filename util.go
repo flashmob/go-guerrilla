@@ -5,14 +5,14 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
 var extractEmailRegex, _ = regexp.Compile(`<(.+?)@(.+?)>`) // go home regex, you're drunk!
 
-func extractEmail(str string) (envelope.EmailAddress, error) {
-	email := envelope.EmailAddress{}
+func extractEmail(str string) (mail.Address, error) {
+	email := mail.Address{}
 	var err error
 	if len(str) > RFC2821LimitPath {
 		return email, errors.New(response.Canned.FailPathTooLong)

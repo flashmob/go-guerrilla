@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -284,7 +284,7 @@ func (server *server) isShuttingDown() bool {
 func (server *server) handleClient(client *client) {
 	defer client.closeConn()
 	sc := server.configStore.Load().(ServerConfig)
-	server.log.Infof("Handle client [%s], id: %d", client.RemoteAddress, client.ID)
+	server.log.Infof("Handle client [%s], id: %d", client.RemoteIP, client.ID)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
@@ -311,7 +311,7 @@ func (server *server) handleClient(client *client) {
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
-			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -331,17 +331,17 @@ func (server *server) handleClient(client *client) {
 			input, err := server.readCommand(client, sc.MaxSize)
 			server.log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteIP)
 				return
 			} else if err == LineLimitExceeded {
 				client.sendResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				server.log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Read error: %s", client.RemoteIP)
 				client.kill()
 				break
 			}
@@ -381,21 +381,22 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
-				mail := input[10:]
-				from := envelope.EmailAddress{}
-
-				if !(strings.Index(mail, "<>") == 0) &&
-					!(strings.Index(mail, " <>") == 0) {
+				addr := input[10:]
+				if !(strings.Index(addr, "<>") == 0) &&
+					!(strings.Index(addr, " <>") == 0) {
 					// Not Bounce, extract mail.
-					from, err = extractEmail(mail)
-				}
+					if from, err := extractEmail(addr); err != nil {
+						client.sendResponse(err)
+						break
+					} else {
+						client.MailFrom = from
+					}
 
-				if err != nil {
-					client.sendResponse(err)
 				} else {
-					client.MailFrom = from
-					client.sendResponse(response.Canned.SuccessMailCmd)
+					// bounce has empty from address
+					client.MailFrom = mail.Address{}
 				}
+				client.sendResponse(response.Canned.SuccessMailCmd)
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
@@ -413,7 +414,7 @@ func (server *server) handleClient(client *client) {
 						rcptError := server.backend.ValidateRcpt(client.Envelope)
 						if rcptError != nil {
 							client.PopRcpt()
-							client.sendResponse(response.Canned.FailRcptCmd)
+							client.sendResponse(response.Canned.FailRcptCmd + rcptError.Error())
 						} else {
 							client.sendResponse(response.Canned.SuccessRcptCmd)
 						}
@@ -507,7 +508,7 @@ func (server *server) handleClient(client *client) {
 					advertiseTLS = ""
 					client.resetTransaction()
 				} else {
-					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}

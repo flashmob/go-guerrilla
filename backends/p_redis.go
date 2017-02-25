@@ -3,7 +3,7 @@ package backends
 import (
 	"fmt"
 
-	"github.com/flashmob/go-guerrilla/envelope"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
 
 	"github.com/garyburd/redigo/redis"
@@ -61,7 +61,7 @@ func Redis() Decorator {
 	var config *RedisProcessorConfig
 	redisClient := &RedisProcessor{}
 	// read the config into RedisProcessorConfig
-	Svc.AddInitializer(Initialize(func(backendConfig BackendConfig) error {
+	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&RedisProcessorConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -75,7 +75,7 @@ func Redis() Decorator {
 		return nil
 	}))
 	// When shutting down
-	Svc.AddShutdowner(Shutdown(func() error {
+	Svc.AddShutdowner(ShutdownWith(func() error {
 		if redisClient.isConnected {
 			return redisClient.conn.Close()
 		}
@@ -85,7 +85,7 @@ func Redis() Decorator {
 	var redisErr error
 
 	return func(c Processor) Processor {
-		return ProcessWith(func(e *envelope.Envelope, task SelectTask) (Result, error) {
+		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
 				hash := ""
