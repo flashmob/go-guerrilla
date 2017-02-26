@@ -39,6 +39,9 @@ func init() {
 	}
 }
 
+const procMySQLReadTimeout = time.Second * 10
+const procMySQLWriteTimeout = time.Second * 10
+
 type MysqlProcessorConfig struct {
 	MysqlTable  string `json:"mail_table"`
 	MysqlDB     string `json:"mysql_db"`
@@ -62,8 +65,8 @@ func (m *MysqlProcessor) connect(config *MysqlProcessorConfig) (*sql.DB, error) 
 		DBName:       config.MysqlDB,
 		Net:          "tcp",
 		Addr:         config.MysqlHost,
-		ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
-		WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		ReadTimeout:  procMySQLReadTimeout,
+		WriteTimeout: procMySQLWriteTimeout,
 		Params:       map[string]string{"collation": "utf8_general_ci"},
 	}
 	if db, err = sql.Open("mysql", conf.FormatDSN()); err != nil {
@@ -176,12 +179,12 @@ func MySql() Decorator {
 				}
 
 				var co *compressor
-				// a compressor was set
+				// a compressor was set by the Compress processor
 				if c, ok := e.Values["zlib-compressor"]; ok {
 					body = "gzip"
 					co = c.(*compressor)
 				}
-				// was saved in redis
+				// was saved in redis by the Redis processor
 				if _, ok := e.Values["redis"]; ok {
 					body = "redis"
 				}

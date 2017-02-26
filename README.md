@@ -302,7 +302,7 @@ See the full documentation here:
 
 | Processor | Description |
 |-----------|-------------|
-|MailDir|Save emails to a maildir|
+|[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir|
 
 ### Example project
 

@@ -12,19 +12,18 @@ func (w *Worker) workDispatcher(workIn chan *workerMsg, p Processor, workerId in
 	defer func() {
 		if r := recover(); r != nil {
 			// recover form closed channel
-			Log().Error("Recovered form panic:", r, string(debug.Stack()))
+			Log().Error("worker recovered form panic:", r, string(debug.Stack()))
 		}
 		// close any connections / files
 		Svc.shutdown()
 
 	}()
-	Log().Infof("Save mail worker started (#%d)", workerId)
+	Log().Infof("processing worker started (#%d)", workerId)
 	for {
 		select {
 		case msg := <-workIn:
-
 			if msg == nil {
-				Log().Debug("No more messages from saveMail")
+				Log().Debugf("worker stopped (#%d)", workerId)
 				return
 			}
 			if msg.task == TaskSaveMail {
@@ -48,8 +47,6 @@ func (w *Worker) workDispatcher(workIn chan *workerMsg, p Processor, workerId in
 					msg.notifyMe <- &notifyMsg{err: nil}
 				}
 			}
-
 		}
-
 	}
 }

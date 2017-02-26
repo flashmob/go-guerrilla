@@ -32,6 +32,8 @@ func init() {
 	}
 }
 
+var queryBatcherId = 0
+
 // how many rows to batch at a time
 const GuerrillaDBAndRedisBatchMax = 2
 
@@ -233,14 +235,14 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
 		case row, feederOk := <-feeder:
 			if row == nil {
-				Log().Info("Query batchaer exiting")
+				Log().Infof("MySQL query batcher exiting (#%d)", queryBatcherId)
 				// Insert any remaining rows
 				insert(count)
 				return feederOk
 			}
 			vals = append(vals, row...)
 			count++
-			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", workerId)
+			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", queryBatcherId)
 			if count >= GuerrillaDBAndRedisBatchMax {
 				insert(GuerrillaDBAndRedisBatchMax)
 			}
@@ -304,8 +306,6 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 	return nil
 }
 
-var workerId = 0
-
 // GuerrillaDbReddis is a specialized processor for Guerrilla mail. It is here as an example.
 // It's an example of a 'monolithic' processor.
 func GuerrillaDbReddis() Decorator {
@@ -318,7 +318,6 @@ func GuerrillaDbReddis() Decorator {
 
 	var redisErr error
 
-	workerId++
 	feeder := make(chan []interface{}, 1)
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
@@ -334,9 +333,10 @@ func GuerrillaDbReddis() Decorator {
 		}
 		// start the query SQL batching where we will send data via the feeder channel
 		go func() {
+			queryBatcherId++
 			for {
 				if feederOK := g.insertQueryBatcher(feeder, db); !feederOK {
-					Log().Debug("insertQueryBatcher exited")
+					Log().Debugf("insertQueryBatcher exited (#%d)", queryBatcherId)
 					return
 				}
 				// if insertQueryBatcher panics, it can recover and go in again
