@@ -256,6 +256,9 @@ func (h logHook) Fire(e *log.Entry) error {
 		if !ok {
 			return nil
 		}
+		if len(helo) > 16 {
+			helo = helo[:16]
+		}
 		ip, ok = e.Data["address"].(string)
 		if !ok {
 			return nil
