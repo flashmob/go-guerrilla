@@ -1,4 +1,4 @@
-const {assign} = Object;
+const { assign } = Object;
 
 // Colors
 const colors = [

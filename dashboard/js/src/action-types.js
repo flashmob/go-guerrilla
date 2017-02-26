@@ -1,4 +1,4 @@
-import {createActionTypes} from './util';
+import { createActionTypes } from './util';
 
 export default createActionTypes([
 	'INIT',

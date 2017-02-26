@@ -405,7 +405,7 @@ func (server *server) handleClient(client *client) {
 				} else {
 					server.log.WithFields(map[string]interface{}{
 						"event":   "mailfrom",
-						"helo":    client.Helo,
+						"helo":    client.Helo[:16],
 						"domain":  from.Host,
 						"address": client.RemoteAddress,
 						"id":      client.ID,

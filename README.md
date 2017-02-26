@@ -283,6 +283,11 @@ Currently, the server comes with two example backends:
 - dummy : used for testing purposes
 - guerrilla_db_redis: example uses MySQL and Redis to store email, used on Guerrilla Mail
 
+Web Dashboard
+=============
+
+An optional web-based dashboard is built into GoGuerrilla. To use it, set the dashboard options in the config file, as shown in the Configuration section.
+
 Releases
 ========
 

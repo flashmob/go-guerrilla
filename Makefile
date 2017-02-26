@@ -22,6 +22,7 @@ dependencies:
 	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) install -v
 
 guerrillad: *.go */*.go */*/*.go
+	statik -src=dashboard/js/build -dest=dashboard
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
 test: *.go */*.go */*/*.go
