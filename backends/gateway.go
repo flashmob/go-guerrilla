@@ -144,11 +144,11 @@ func (gw *BackendGateway) Reinitialize() error {
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
 // This function uses the config value process_stack to figure out which Decorator to use
-func (gw *BackendGateway) newProcessorLine() (Processor, error) {
+func (gw *BackendGateway) newProcessorStack() (Processor, error) {
 	var decorators []Decorator
 	cfg := strings.ToLower(strings.TrimSpace(gw.gwConfig.ProcessorStack))
 	if len(cfg) == 0 {
-		cfg = defaultProcessor
+		cfg = strings.ToLower(defaultProcessor)
 	}
 	line := strings.Split(cfg, "|")
 	for i := range line {
@@ -192,7 +192,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 		}
 		var lines []Processor
 		for i := 0; i < workersSize; i++ {
-			p, err := gw.newProcessorLine()
+			p, err := gw.newProcessorStack()
 			if err != nil {
 				return err
 			}

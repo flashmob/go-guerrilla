@@ -2,6 +2,7 @@ package backends
 
 import (
 	"github.com/flashmob/go-guerrilla/mail"
+	"strings"
 )
 
 // ----------------------------------------------------------------------------------
@@ -16,7 +17,7 @@ import (
 // Output        : none (only output to the log if enabled)
 // ----------------------------------------------------------------------------------
 func init() {
-	processors[defaultProcessor] = func() Decorator {
+	processors[strings.ToLower(defaultProcessor)] = func() Decorator {
 		return Debugger()
 	}
 }

@@ -70,9 +70,14 @@ func (m *MysqlProcessor) connect(config *MysqlProcessorConfig) (*sql.DB, error) 
 		Log().Error("cannot open mysql", err)
 		return nil, err
 	}
+	// do we have permission to access the table?
+	_, err = db.Query("SELECT mail_id FROM " + m.config.MysqlTable + "LIMIT 1")
+	if err != nil {
+		Log().Error("cannot select table", err)
+		return nil, err
+	}
 	Log().Info("connected to mysql on tcp ", config.MysqlHost)
 	return db, err
-
 }
 
 // prepares the sql query with the number of rows that can be batched with it
