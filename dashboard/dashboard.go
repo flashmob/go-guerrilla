@@ -33,6 +33,11 @@ type Config struct {
 	MaxWindow string `json:"max_window"`
 	// Granularity for which rankings are aggregated
 	RankingUpdateInterval string `json:"ranking_aggregation_interval"`
+	// Determines at which ratio of unique HELOs to unique connections we
+	// will stop collecting data to prevent memory exhaustion attack.
+	// Number between 0-1, set to >1 if you never want to stop collecting data.
+	// Default is 0.8
+	UniqueHeloRatioMax float64 `json:"unique_helo_ratio"`
 }
 
 // Begin collecting data and listening for dashboard clients
@@ -50,7 +55,6 @@ func Run(c *Config) {
 
 	go dataListener(tickInterval)
 	go store.rankingManager()
-	log.Info("hi")
 
 	err := http.ListenAndServe(c.ListenInterface, r)
 	log.WithError(err).Error("Dashboard server failed to start")
@@ -77,6 +81,9 @@ func applyConfig(c *Config) {
 		if err == nil {
 			tickInterval = ti
 		}
+	}
+	if config.UniqueHeloRatioMax > 0 {
+		uniqueHeloRatioMax = config.UniqueHeloRatioMax
 	}
 
 	maxTicks = int(maxWindow * tickInterval)

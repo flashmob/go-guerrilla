@@ -17,10 +17,10 @@ const (
 )
 
 var (
-	// Log for sending client events from the server to the dashboard.
 	tickInterval          = time.Second * 5
 	maxWindow             = time.Hour * 24
 	rankingUpdateInterval = time.Hour * 6
+	uniqueHeloRatioMax    = 0.8
 	maxTicks              = int(maxWindow / tickInterval)
 	nRankingBuffers       = int(maxWindow / rankingUpdateInterval)
 	LogHook               = logHook(1)
@@ -40,10 +40,12 @@ type dataStore struct {
 	// List of samples of number of connected clients
 	nClientTicks []point
 	// Up-to-date number of clients
-	nClients  uint64
-	topDomain bufferedRanking
-	topHelo   bufferedRanking
-	topIP     bufferedRanking
+	nClients uint64
+	// Total number of clients in the current aggregation buffer
+	nClientsInBuffer uint64
+	topDomain        bufferedRanking
+	topHelo          bufferedRanking
+	topIP            bufferedRanking
 	// For notifying the store about new connections
 	newConns chan conn
 	subs     map[string]chan<- *message
@@ -86,7 +88,16 @@ func (ds *dataStore) rankingManager() {
 	for {
 		select {
 		case c := <-ds.newConns:
+			nHelos := len(ds.topHelo)
+			if nHelos > 5 &&
+				float64(nHelos)/float64(ds.nClientsInBuffer) > uniqueHeloRatioMax {
+				// If too many unique HELO messages are detected as a ratio to the total
+				// number of clients, quit collecting data until we roll over into the next
+				// aggregation buffer.
+				continue
+			}
 			ds.lock.Lock()
+			ds.nClientsInBuffer++
 			ds.topDomain[0][c.domain]++
 			ds.topHelo[0][c.helo]++
 			ds.topIP[0][c.ip]++
@@ -95,6 +106,7 @@ func (ds *dataStore) rankingManager() {
 		case <-ticker.C:
 			ds.lock.Lock()
 			// Add empty map at index 0 and shift other maps one down
+			ds.nClientsInBuffer = 0
 			ds.topDomain = append(
 				[]map[string]int{map[string]int{}},
 				ds.topDomain[:len(ds.topDomain)-1]...)
