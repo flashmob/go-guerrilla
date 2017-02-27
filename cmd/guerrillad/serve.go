@@ -95,7 +95,7 @@ func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app 
 			logger.WithError(err).Warn("Backend failed to shutdown")
 			return
 		}
-		newBackend, newErr := backends.New("", cmdConfig.BackendConfig, logger)
+		newBackend, newErr := backends.New(cmdConfig.BackendConfig, logger)
 		if newErr != nil {
 			// this will continue using old backend
 			logger.WithError(newErr).Error("Error while loading the backend")
@@ -132,7 +132,7 @@ func serve(cmd *cobra.Command, args []string) {
 
 	// Backend setup
 	var backend backends.Backend
-	backend, err = backends.New("", cmdConfig.BackendConfig, mainlog)
+	backend, err = backends.New(cmdConfig.BackendConfig, mainlog)
 	if err != nil {
 		mainlog.WithError(err).Fatalf("Error while loading the backend")
 	}

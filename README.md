@@ -163,20 +163,37 @@ Guerrilla SMTPd can also be imported and used as a package in your project.
 ## Import Guerrilla.
 ```go
 import "github.com/flashmob/go-guerrilla"
+
+
 ```
 
 ## Implement the `Backend` interface
 Or use one of the implementations in the `backends` sub-package). This is how
 your application processes emails received by the Guerrilla app.
 ```go
+import "github.com/flashmob/go-guerrilla/mail"
+import "github.com/flashmob/go-guerrilla/backends"
+
 type CustomBackend struct {...}
 
-func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult {
-  err := saveSomewhere(c.Data)
+func (cb *CustomBackend) Process(e *mail.Envelope) backends.Result {
+  err := saveSomewhere(e.NewReader())
   if err != nil {
-    return guerrilla.NewBackendResult(fmt.Sprintf("554 Error: %s", err.Error()))
+    return guerrilla.NewResult(fmt.Sprintf("554 Error: %s", err.Error()))
   }
-  return guerrilla.NewBackendResult("250 OK")
+  return guerrilla.NewResult("250 OK")
+}
+```
+
+## Create a logger
+
+```go
+import "github.com/flashmob/go-guerrilla/log"
+
+mainlog, err := log.GetLogger(log.OutputStderr.String());
+if  err != nil {
+    fmt.Println("Cannot open log:", err)
+    os.Exit(1)
 }
 ```
 
@@ -188,7 +205,7 @@ config := &guerrilla.AppConfig{
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}
-app, err := guerrilla.New(config, backend)
+app, err := guerrilla.New(config, backend, mainlog)
 ```
 
 ## Start the app.
@@ -302,11 +319,8 @@ See the full documentation here:
 
 | Processor | Description |
 |-----------|-------------|
-|[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir|
+|[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir. [MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project|
 
-### Example project
-
-[MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project using a custom processor to save email to a MailDir.
 
 Releases
 ========

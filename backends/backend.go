@@ -33,7 +33,6 @@ type processorConstructor func() Decorator
 // Must return an SMTP message (i.e. "250 OK") and a boolean indicating
 // whether the message was processed successfully.
 type Backend interface {
-	// Public methods
 	Process(*mail.Envelope) Result
 	ValidateRcpt(e *mail.Envelope) RcptError
 	Initialize(BackendConfig) error
@@ -123,9 +122,9 @@ func (e Errors) Error() string {
 	return msg
 }
 
-// New retrieve a backend specified by the backendName, and initialize it using
-// backendConfig
-func New(backendName string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
+// New makes a new default BackendGateway backend, and initializes it using
+// backendConfig and stores the logger
+func New(backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	Svc.StoreMainlog(l)
 	gateway := &BackendGateway{config: backendConfig}
 	err := gateway.Initialize(backendConfig)

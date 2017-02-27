@@ -197,7 +197,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	oldconf.Load([]byte(configJsonA))
 	logger, _ := log.GetLogger(oldconf.LogFile)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, _ := backends.New("dummy", bcfg, logger)
+	backend, _ := backends.New(bcfg, logger)
 	app, _ := New(oldconf, backend, logger)
 	// simulate timestamp change
 	time.Sleep(time.Second + time.Millisecond*500)

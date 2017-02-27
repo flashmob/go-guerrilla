@@ -63,7 +63,7 @@ func init() {
 	} else {
 		setupCerts(config)
 		logger, _ = log.GetLogger(config.LogFile)
-		backend, _ := getBackend("dummy", config.BackendConfig, logger)
+		backend, _ := getBackend(config.BackendConfig, logger)
 		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
@@ -112,8 +112,8 @@ var configJson = `
 }
 `
 
-func getBackend(backendName string, backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
-	return backends.New(backendName, backendConfig, l)
+func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
+	return backends.New(backendConfig, l)
 }
 
 func setupCerts(c *TestConfig) {

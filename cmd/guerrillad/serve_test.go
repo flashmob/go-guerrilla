@@ -255,7 +255,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	mainlog, _ = log.GetLogger("off")
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, err := backends.New("dummy", bcfg, mainlog)
+	backend, err := backends.New(bcfg, mainlog)
 	app, err := guerrilla.New(&oldconf.AppConfig, backend, mainlog)
 	if err != nil {
 		//log.Info("Failed to create new app", err)
