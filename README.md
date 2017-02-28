@@ -108,13 +108,22 @@ Getting started
 
 (Assuming that you have GNU make and latest Go on your system)
 
-To build, just run
+To build for the first time (installs dependencies and builds the web dashboard):
+```
+$ make dependencies
+$ make dashboard
+$ make guerrillad
+```
 
+To build afterward, just run
 ```
 $ make guerrillad
 ```
 
 Rename goguerrilla.conf.sample to goguerrilla.conf
+```
+$ cp goguerrilla.conf.sample goguerrilla.conf
+```
 
 See `backends/guerrilla_db_redis.go` source to use an example for creating your own email saving backend,
 or the dummy one if you'd like to start from scratch.
@@ -286,7 +295,7 @@ Currently, the server comes with two example backends:
 Web Dashboard
 =============
 
-An optional web-based dashboard is built into GoGuerrilla. To use it, set the dashboard options in the config file, as shown in the Configuration section.
+An optional web-based dashboard is built into Go-Guerrilla. To use it, set the dashboard options in the config file, as shown in the Configuration section.
 
 Releases
 ========
