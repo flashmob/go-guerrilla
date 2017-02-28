@@ -16,6 +16,8 @@ help:
 
 clean:
 	rm -f guerrillad
+	rm -rf dashboard/js/node_modules
+	rm -rf dashboard/js/build
 
 dependencies:
 	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) get -u -v
