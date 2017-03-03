@@ -54,8 +54,16 @@ func init() {
 }
 
 func sigHandler(app guerrilla.Guerrilla) {
-	// handle SIGHUP for reloading the configuration while running
-	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL)
+
+	signal.Notify(
+		signalChannel,
+		syscall.SIGHUP,
+		syscall.SIGTERM,
+		syscall.SIGQUIT,
+		syscall.SIGINT,
+		syscall.SIGKILL,
+		syscall.SIGUSR1,
+	)
 
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
