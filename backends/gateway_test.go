@@ -79,7 +79,7 @@ func TestStartProcessStop(t *testing.T) {
 		RemoteIP: "127.0.0.1",
 		QueuedId: "abc12345",
 		Helo:     "helo.example.com",
-		MailFrom: mail.Address{"test", "example.com"},
+		MailFrom: mail.Address{User: "test", Host: "example.com"},
 		TLS:      true,
 	}
 	e.PushRcpt(mail.Address{"test", "example.com"})

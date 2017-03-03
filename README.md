@@ -286,16 +286,17 @@ http://jsonlint.com/#
 Email Processing Backend
 =====================
 
-The main job of a go-guerrilla backend is to save email. 
+The main job of a go-guerrilla backend is to validate recipients and deliver emails. The term
+"delivery" is often synonymous with saving email to secondary storage.
 
-It can also validate recipients.
+The default backend implementation manages multiple workers. These workers are composed of 
+smaller components called "Processors" which are chained using the config to perform a series of steps.
+Each processor specifies a distinct feature of behaviour. For example, a processor may save
+the emails to a particular storage system such as MySQL, or it may add additional headers before 
+passing the email to the next _processor_.
 
-Using a producer/consumer model, our backend manages multiple workers. These workers are composed of 
-smaller components called "Processors" which can be chained via the config to perform a series of steps.
-Each processor specifies a unique feature of behaviour for processing the envelope.
-
-To extend or add a feature, one would write a new Processor, then add it to the config.
-There are a few default processors to get you started.
+To extend or add a new feature, one would write a new Processor, then add it to the config.
+There are a few default _processors_ to get you started.
 
 ### Documentation
 
@@ -320,12 +321,14 @@ See the full documentation here:
 | Processor | Description |
 |-----------|-------------|
 |[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir. [MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project|
+|[FastCgi](https://github.com/flashmob/fastcgi-processor)|Deliver email directly to PHP-FPM or a similar FastCGI backend.
 
+Have a processor that you would like to share? Submit a PR to add it to the list!
 
 Releases
 ========
 
-(Master branch - Release Candidate 1 for v1.6)
+(Master branch - Release Candidate 1 for v2.0)
 Large refactoring of the code. 
 - Introduced "backends": modular architecture for saving email
 - Issue: Use as a package in your own projects! https://github.com/flashmob/go-guerrilla/issues/20
