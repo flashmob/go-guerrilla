@@ -108,6 +108,11 @@ func (e *Envelope) ParseHeaders() error {
 	return err
 }
 
+// Len returns the number of bytes that would be in the reader returned by NewReader()
+func (e *Envelope) Len() int {
+	return len(e.DeliveryHeader) + e.Data.Len()
+}
+
 // Returns a new reader for reading the email contents, including the delivery headers
 func (e *Envelope) NewReader() io.Reader {
 	return io.MultiReader(

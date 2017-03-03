@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	Svc *Service
+	Svc *service
 
 	// Store the constructor for making an new processor decorator.
 	processors map[string]processorConstructor
@@ -21,8 +21,7 @@ var (
 )
 
 func init() {
-	Svc = &Service{}
-
+	Svc = &service{}
 	processors = make(map[string]processorConstructor)
 }
 
@@ -33,10 +32,18 @@ type processorConstructor func() Decorator
 // Must return an SMTP message (i.e. "250 OK") and a boolean indicating
 // whether the message was processed successfully.
 type Backend interface {
+	// Process processes then saves the mail envelope
 	Process(*mail.Envelope) Result
+	// ValidateRcpt validates the last recipient that was pushed to the mail envelope
 	ValidateRcpt(e *mail.Envelope) RcptError
+	// Initializes the backend, eg. creates folders, sets-up database connections
 	Initialize(BackendConfig) error
+	// Initializes the backend after it was Shutdown()
+	Reinitialize() error
+	// Shutdown frees / closes anything created during initializations
 	Shutdown() error
+	// Start Starts a backend that has been initialized
+	Start() error
 }
 
 type BackendConfig map[string]interface{}
@@ -83,11 +90,11 @@ func NewResult(message string) Result {
 	return result(message)
 }
 
-type ProcessorInitializer interface {
+type processorInitializer interface {
 	Initialize(backendConfig BackendConfig) error
 }
 
-type ProcessorShutdowner interface {
+type processorShutdowner interface {
 	Shutdown() error
 }
 
@@ -122,20 +129,6 @@ func (e Errors) Error() string {
 	return msg
 }
 
-// New makes a new default BackendGateway backend, and initializes it using
-// backendConfig and stores the logger
-func New(backendConfig BackendConfig, l log.Logger) (Backend, error) {
-	Svc.StoreMainlog(l)
-	gateway := &BackendGateway{config: backendConfig}
-	err := gateway.Initialize(backendConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error while initializing the backend: %s", err)
-	}
-	gateway.State = BackendStateRunning
-	b = Backend(gateway)
-	return b, nil
-}
-
 func convertError(name string) error {
 	return fmt.Errorf("failed to load backend config (%s)", name)
 }
@@ -144,9 +137,9 @@ func GetBackend() Backend {
 	return b
 }
 
-type Service struct {
-	initializers []ProcessorInitializer
-	shutdowners  []ProcessorShutdowner
+type service struct {
+	initializers []processorInitializer
+	shutdowners  []processorShutdowner
 	sync.Mutex
 	mainlog atomic.Value
 }
@@ -156,36 +149,42 @@ func Log() log.Logger {
 	if v, ok := Svc.mainlog.Load().(log.Logger); ok {
 		return v
 	}
-	l, _ := log.GetLogger(log.OutputStderr.String())
+	l, _ := log.GetLogger(string(log.OutputStderr))
 	return l
 }
 
-func (s *Service) StoreMainlog(l log.Logger) {
+func (s *service) SetMainlog(l log.Logger) {
 	s.mainlog.Store(l)
 }
 
 // AddInitializer adds a function that implements ProcessorShutdowner to be called when initializing
-func (s *Service) AddInitializer(i ProcessorInitializer) {
+func (s *service) AddInitializer(i processorInitializer) {
 	s.Lock()
 	defer s.Unlock()
 	s.initializers = append(s.initializers, i)
 }
 
 // AddShutdowner adds a function that implements ProcessorShutdowner to be called when shutting down
-func (s *Service) AddShutdowner(sh ProcessorShutdowner) {
+func (s *service) AddShutdowner(sh processorShutdowner) {
 	s.Lock()
 	defer s.Unlock()
 	s.shutdowners = append(s.shutdowners, sh)
 }
 
+// reset clears the initializers and Shutdowners
+func (s *service) reset() {
+	s.shutdowners = make([]processorShutdowner, 0)
+	s.initializers = make([]processorInitializer, 0)
+}
+
 // Initialize initializes all the processors one-by-one and returns any errors.
 // Subsequent calls to Initialize will not call the initializer again unless it failed on the previous call
 // so Initialize may be called again to retry after getting errors
-func (s *Service) initialize(backend BackendConfig) Errors {
+func (s *service) initialize(backend BackendConfig) Errors {
 	s.Lock()
 	defer s.Unlock()
 	var errors Errors
-	failed := make([]ProcessorInitializer, 0)
+	failed := make([]processorInitializer, 0)
 	for i := range s.initializers {
 		if err := s.initializers[i].Initialize(backend); err != nil {
 			errors = append(errors, err)
@@ -200,11 +199,11 @@ func (s *Service) initialize(backend BackendConfig) Errors {
 // Shutdown shuts down all the processors by calling their shutdowners (if any)
 // Subsequent calls to Shutdown will not call the shutdowners again unless it failed on the previous call
 // so Shutdown may be called again to retry after getting errors
-func (s *Service) shutdown() Errors {
+func (s *service) shutdown() Errors {
 	s.Lock()
 	defer s.Unlock()
 	var errors Errors
-	failed := make([]ProcessorShutdowner, 0)
+	failed := make([]processorShutdowner, 0)
 	for i := range s.shutdowners {
 		if err := s.shutdowners[i].Shutdown(); err != nil {
 			errors = append(errors, err)
@@ -218,7 +217,7 @@ func (s *Service) shutdown() Errors {
 // AddProcessor adds a new processor, which becomes available to the backend_config.process_stack option
 // Use to add your own custom processor when using backends as a package, or after importing an external
 // processor.
-func (s *Service) AddProcessor(name string, p processorConstructor) {
+func (s *service) AddProcessor(name string, p processorConstructor) {
 	// wrap in a constructor since we want to defer calling it
 	var c processorConstructor
 	c = func() Decorator {
@@ -234,7 +233,7 @@ func (s *Service) AddProcessor(name string, p processorConstructor) {
 // The reason why using reflection is because we'll get a nice error message if the field is missing
 // the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
 // error messages
-func (s *Service) ExtractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
+func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
 	// Use reflection so that we can provide a nice error message
 	v := reflect.ValueOf(configType).Elem() // so that we can set the values
 	//m := reflect.ValueOf(configType).Elem()

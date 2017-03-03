@@ -66,18 +66,18 @@ func (ls *logStore) mainlog() log.Logger {
 }
 
 // storeMainlog stores the log value in an atomic operation
-func (ls *logStore) storeMainlog(log log.Logger) {
+func (ls *logStore) setMainlog(log log.Logger) {
 	ls.Store(log)
 }
 
-// Returns a new instance of Guerrilla with the given config, not yet running.
+// Returns a new instance of Guerrilla with the given config, not yet running. Backend started.
 func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 		backend: b,
 	}
-	g.storeMainlog(l)
+	g.setMainlog(l)
 
 	if ac.LogLevel != "" {
 		g.mainlog().SetLevel(ac.LogLevel)
@@ -85,6 +85,12 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 
 	g.state = GuerrillaStateNew
 	err := g.makeServers()
+
+	// start backend for processing email
+	err = g.backend.Start()
+	if err != nil {
+		return g, err
+	}
 
 	// subscribe for any events that may come in while running
 	g.subscribeEvents()
@@ -189,7 +195,7 @@ func (g *guerrilla) subscribeEvents() {
 		var err error
 		var l log.Logger
 		if l, err = log.GetLogger(c.LogFile); err == nil {
-			g.storeMainlog(l)
+			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				// it will change server's logger when the next client gets accepted
 				server.mainlogStore.Store(l)
@@ -296,8 +302,8 @@ func (g *guerrilla) subscribeEvents() {
 			var err error
 			var l log.Logger
 			if l, err = log.GetLogger(sc.LogFile); err == nil {
-				g.storeMainlog(l)
-				backends.Svc.StoreMainlog(l)
+				g.setMainlog(l)
+				backends.Svc.SetMainlog(l)
 				// it will change to the new logger on the next accepted client
 				server.logStore.Store(l)
 
@@ -335,6 +341,11 @@ func (g *guerrilla) Start() error {
 	if len(g.servers) == 0 {
 		return append(startErrors, errors.New("No servers to start, please check the config"))
 	}
+	if g.state == GuerrillaStateStopped {
+		// when a backend is shutdown, we need to re-initialize before it can be started again
+		g.backend.Reinitialize()
+		g.backend.Start()
+	}
 	// channel for reading errors
 	errs := make(chan error, len(g.servers))
 	var startWG sync.WaitGroup
@@ -369,12 +380,6 @@ func (g *guerrilla) Start() error {
 	}
 	if len(startErrors) > 0 {
 		return startErrors
-	} else {
-		if gw, ok := g.backend.(*backends.BackendGateway); ok {
-			if gw.State == backends.BackendStateShuttered {
-				_ = gw.Reinitialize()
-			}
-		}
 	}
 	return nil
 }
@@ -401,6 +406,6 @@ func (g *guerrilla) Shutdown() {
 // SetLogger sets the logger for the app and propagates it to sub-packages (eg.
 func (g *guerrilla) SetLogger(l log.Logger) {
 	l.SetLevel(g.Config.LogLevel)
-	g.storeMainlog(l)
-	backends.Svc.StoreMainlog(l)
+	g.setMainlog(l)
+	backends.Svc.SetMainlog(l)
 }

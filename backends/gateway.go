@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
+	"runtime/debug"
 	"strings"
 )
 
@@ -23,8 +25,9 @@ type BackendGateway struct {
 	conveyor chan *workerMsg
 
 	// waits for backend workers to start/stop
-	wg sync.WaitGroup
-	w  *Worker
+	wg           sync.WaitGroup
+	workStoppers []chan bool
+	lines        []Processor
 
 	// controls access to state
 	sync.Mutex
@@ -42,26 +45,56 @@ type GatewayConfig struct {
 type workerMsg struct {
 	// The email data
 	e *mail.Envelope
-	// savedNotify is used to notify that the save operation completed
+	// notifyMe is used to notify the gateway of workers finishing their processing
 	notifyMe chan *notifyMsg
 	// select the task type
 	task SelectTask
 }
 
+type backendState int
+
 // possible values for state
 const (
-	BackendStateRunning = iota
+	BackendStateNew backendState = iota
+	BackendStateRunning
 	BackendStateShuttered
 	BackendStateError
+	BackendStateInitialized
 
 	processTimeout   = time.Second * 30
 	defaultProcessor = "Debugger"
 )
 
-type backendState int
-
 func (s backendState) String() string {
+	switch s {
+	case BackendStateNew:
+		return "NewState"
+	case BackendStateRunning:
+		return "RunningState"
+	case BackendStateShuttered:
+		return "ShutteredState"
+	case BackendStateError:
+		return "ErrorSate"
+	case BackendStateInitialized:
+		return "InitializedState"
+	}
 	return strconv.Itoa(int(s))
+}
+
+// New makes a new default BackendGateway backend, and initializes it using
+// backendConfig and stores the logger
+func New(backendConfig BackendConfig, l log.Logger) (Backend, error) {
+	Svc.SetMainlog(l)
+	gateway := &BackendGateway{}
+	err := gateway.Initialize(backendConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error while initializing the backend: %s", err)
+	}
+	// keep the config known to be good.
+	gateway.config = backendConfig
+
+	b = Backend(gateway)
+	return b, nil
 }
 
 // Process distributes an envelope to one of the backend workers
@@ -117,26 +150,33 @@ func (gw *BackendGateway) Shutdown() error {
 	gw.Lock()
 	defer gw.Unlock()
 	if gw.State != BackendStateShuttered {
-		close(gw.conveyor) // workers will stop
+		// send a signal to all workers
+		gw.stopWorkers()
 		// wait for workers to stop
 		gw.wg.Wait()
-		Svc.shutdown()
+		// call shutdown on all processor shutdowners
+		if err := Svc.shutdown(); err != nil {
+			return err
+		}
 		gw.State = BackendStateShuttered
 	}
 	return nil
 }
 
-// Reinitialize starts up a backend gateway that was shutdown before
+// Reinitialize initializes the gateway with the existing config after it was shutdown
 func (gw *BackendGateway) Reinitialize() error {
 	if gw.State != BackendStateShuttered {
 		return errors.New("backend must be in BackendStateshuttered state to Reinitialize")
 	}
+	//
+	Svc.reset()
+
 	err := gw.Initialize(gw.config)
 	if err != nil {
+		fmt.Println("reinitialize to ", gw.config, err)
 		return fmt.Errorf("error while initializing the backend: %s", err)
 	}
 
-	gw.State = BackendStateRunning
 	return err
 }
 
@@ -179,10 +219,13 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	return nil
 }
 
-// Initialize builds the workers and starts each worker in a goroutine
+// Initialize builds the workers and initializes each one
 func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	gw.Lock()
 	defer gw.Unlock()
+	if gw.State != BackendStateNew && gw.State != BackendStateShuttered {
+		return errors.New("Can only Initialize in BackendStateNew or BackendStateShuttered state")
+	}
 	err := gw.loadConfig(cfg)
 	if err == nil {
 		workersSize := gw.workersSize()
@@ -190,31 +233,57 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
-		var lines []Processor
+		gw.lines = make([]Processor, 0)
 		for i := 0; i < workersSize; i++ {
 			p, err := gw.newProcessorStack()
 			if err != nil {
+				gw.State = BackendStateError
 				return err
 			}
-			lines = append(lines, p)
+			gw.lines = append(gw.lines, p)
 		}
 		// initialize processors
 		if err := Svc.initialize(cfg); err != nil {
+			gw.State = BackendStateError
 			return err
 		}
-		gw.conveyor = make(chan *workerMsg, workersSize)
-		// start our workers
-		gw.wg.Add(workersSize)
-		for i := 0; i < workersSize; i++ {
-			go func(workerId int) {
-				gw.w.workDispatcher(gw.conveyor, lines[workerId], workerId+1)
-				gw.wg.Done()
-			}(i)
+		if gw.conveyor == nil {
+			gw.conveyor = make(chan *workerMsg, workersSize)
 		}
-	} else {
-		gw.State = BackendStateError
+		// ready to start
+		gw.State = BackendStateInitialized
+		return nil
 	}
+	gw.State = BackendStateError
 	return err
+}
+
+// Start starts the worker goroutines, assuming it has been initialized or shuttered before
+func (gw *BackendGateway) Start() error {
+	gw.Lock()
+	defer gw.Unlock()
+	if gw.State == BackendStateInitialized || gw.State == BackendStateShuttered {
+		// we start our workers
+		workersSize := gw.workersSize()
+		// make our slice of channels for stopping
+		gw.workStoppers = make([]chan bool, 0)
+		// set the wait group
+		gw.wg.Add(workersSize)
+
+		for i := 0; i < workersSize; i++ {
+			stop := make(chan bool)
+			go func(workerId int, stop chan bool) {
+				// blocks here until the worker exits
+				gw.workDispatcher(gw.conveyor, gw.lines[workerId], workerId+1, stop)
+				gw.wg.Done()
+			}(i, stop)
+			gw.workStoppers = append(gw.workStoppers, stop)
+		}
+		gw.State = BackendStateRunning
+		return nil
+	} else {
+		return errors.New(fmt.Sprintf("cannot start backend because it's in %s state", gw.State))
+	}
 }
 
 // workersSize gets the number of workers to use for saving email by reading the save_workers_size config value
@@ -224,4 +293,58 @@ func (gw *BackendGateway) workersSize() int {
 		return 1
 	}
 	return gw.gwConfig.WorkersSize
+}
+
+func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, workerId int, stop chan bool) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			// recover form closed channel
+			Log().Error("worker recovered form panic:", r, string(debug.Stack()))
+		}
+		// close any connections / files
+		Svc.shutdown()
+
+	}()
+	Log().Infof("processing worker started (#%d)", workerId)
+	for {
+		select {
+		case <-stop:
+			Log().Infof("stop signal for worker (#%d)", workerId)
+			return
+		case msg := <-workIn:
+			if msg == nil {
+				Log().Debugf("worker stopped (#%d)", workerId)
+				return
+			}
+			if msg.task == TaskSaveMail {
+				// process the email here
+				// TODO we should check the err
+				result, _ := p.Process(msg.e, TaskSaveMail)
+				if result.Code() < 300 {
+					// if all good, let the gateway know that it was queued
+					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
+				} else {
+					// notify the gateway about the error
+					msg.notifyMe <- &notifyMsg{err: errors.New(result.String())}
+				}
+			} else if msg.task == TaskValidateRcpt {
+				_, err := p.Process(msg.e, TaskValidateRcpt)
+				if err != nil {
+					// validation failed
+					msg.notifyMe <- &notifyMsg{err: err}
+				} else {
+					// all good.
+					msg.notifyMe <- &notifyMsg{err: nil}
+				}
+			}
+		}
+	}
+}
+
+// stopWorkers sends a signal to all workers to stop
+func (gw *BackendGateway) stopWorkers() {
+	for i := range gw.workStoppers {
+		gw.workStoppers[i] <- true
+	}
 }

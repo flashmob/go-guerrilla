@@ -113,7 +113,12 @@ var configJson = `
 `
 
 func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
-	return backends.New(backendConfig, l)
+	b, err := backends.New(backendConfig, l)
+	if err != nil {
+		fmt.Println("backend init error", err)
+		os.Exit(1)
+	}
+	return b, err
 }
 
 func setupCerts(c *TestConfig) {
@@ -331,7 +336,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			}
 
 			for i := 0; i < 101; i++ {
-				fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
+				//fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
 				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break

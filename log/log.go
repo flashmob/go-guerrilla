@@ -275,6 +275,7 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 		}()
 		// use the plain text hook
 		entry.Logger.Formatter = hook.plainTxtFormatter
+		// todo : `go go test -v -race` detected a race condition, try log.SetFormatter()
 	}
 	if line, err := entry.String(); err == nil {
 		r := strings.NewReader(line)

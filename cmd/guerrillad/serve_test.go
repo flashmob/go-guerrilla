@@ -33,6 +33,8 @@ var configJsonA = `
       "guerrillamail.org"
     ],
     "backend_config": {
+    	"save_workers_size" : 1,
+    	"process_stack": "HeadersParser|Debugger",
         "log_received_mails": true
     },
     "servers" : [
@@ -80,6 +82,8 @@ var configJsonB = `
       "guerrillamail.org"
     ],
     "backend_config": {
+    	"save_workers_size" : 1,
+    	"process_stack": "HeadersParser|Debugger",
         "log_received_mails": false
     },
     "servers" : [
@@ -124,7 +128,10 @@ var configJsonC = `
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,
             "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com"
+            "primary_mail_host":"sharklasers.com",
+            "save_workers_size" : 1,
+	    "process_stack": "HeadersParser|Debugger",
+	    "log_received_mails": true
         },
     "servers" : [
         {
@@ -171,8 +178,69 @@ var configJsonD = `
       "guerrillamail.org"
     ],
     "backend_config": {
+        "save_workers_size" : 1,
+    	"process_stack": "HeadersParser|Debugger",
         "log_received_mails": false
     },
+    "servers" : [
+        {
+            "is_enabled" : true,
+            "host_name":"mail.test.com",
+            "max_size": 1000000,
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:2552",
+            "start_tls_on":true,
+            "tls_always_on":false,
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
+        },
+        {
+            "is_enabled" : true,
+            "host_name":"secure.test.com",
+            "max_size":1000000,
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:4655",
+            "start_tls_on":false,
+            "tls_always_on":true,
+            "max_clients":500,
+            "log_file" : "../../tests/testlog"
+        }
+    ]
+}
+`
+
+// adds 127.0.0.1:4655, a secure server
+var configJsonE = `
+{
+    "log_file" : "../../tests/testlog",
+    "log_level" : "debug",
+    "pid_file" : "./pidfile2.pid",
+    "allowed_hosts": [
+      "guerrillamail.com",
+      "guerrillamailblock.com",
+      "sharklasers.com",
+      "guerrillamail.net",
+      "guerrillamail.org"
+    ],
+    "backend_config" :
+        {
+            "process_stack_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
+            "process_stack": "GuerrillaRedisDB",
+            "log_received_mails" : true,
+            "mysql_db":"gmail_mail",
+            "mysql_host":"127.0.0.1:3306",
+            "mysql_pass":"secret",
+            "mysql_user":"root",
+            "mail_table":"new_mail",
+            "redis_interface" : "127.0.0.1:6379",
+             "redis_expire_seconds" : 7200,
+            "save_workers_size" : 3,
+            "primary_mail_host":"sharklasers.com"
+        },
     "servers" : [
         {
             "is_enabled" : true,
@@ -240,19 +308,25 @@ func sigKill() {
 func TestCmdConfigChangeEvents(t *testing.T) {
 
 	oldconf := &CmdConfig{}
-	oldconf.load([]byte(configJsonA))
+	if err := oldconf.load([]byte(configJsonA)); err != nil {
+		t.Error("configJsonA is invalid", err)
+	}
 
 	newconf := &CmdConfig{}
-	newconf.load([]byte(configJsonB))
+	if err := newconf.load([]byte(configJsonB)); err != nil {
+		t.Error("configJsonB is invalid", err)
+	}
 
 	newerconf := &CmdConfig{}
-	newerconf.load([]byte(configJsonC))
+	if err := newerconf.load([]byte(configJsonC)); err != nil {
+		t.Error("configJsonC is invalid", err)
+	}
 
 	expectedEvents := map[guerrilla.Event]bool{
 		guerrilla.EventConfigBackendConfig: false,
 		guerrilla.EventConfigServerNew:     false,
 	}
-	mainlog, _ = log.GetLogger("off")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
@@ -266,19 +340,18 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
 		func(e guerrilla.Event) {
-
 			if strings.Index(e.String(), "server_change") == 0 {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
-				toUnsubscribeS[event] = f
+				app.Subscribe(e, f)
+				toUnsubscribeS[e] = f
 			} else {
 				f := func(c *CmdConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
-				toUnsubscribe[event] = f
+				app.Subscribe(e, f)
+				toUnsubscribe[e] = f
 			}
 
 		}(event)
@@ -339,12 +412,7 @@ func TestServe(t *testing.T) {
 	// Would not work on windows as kill is not available.
 	// TODO: Implement an alternative test for windows.
 	if runtime.GOOS != "windows" {
-		ecmd := exec.Command("kill", "-HUP", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			t.Error("could not SIGHUP", err)
-			t.FailNow()
-		}
+		sigHup()
 		time.Sleep(testPauseDuration) // allow sighup to do its job
 		// did the pidfile change as expected?
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
@@ -362,7 +430,7 @@ func TestServe(t *testing.T) {
 	}
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "Backend started"); i < 0 {
+		if i := strings.Index(logOutput, "new backend started"); i < 0 {
 			t.Error("Dummy backend not restared")
 		}
 	}
@@ -1082,5 +1150,61 @@ func TestDebugLevelChange(t *testing.T) {
 	os.Truncate("../../tests/testlog", 0)
 	os.Remove("configJsonD.json")
 	os.Remove("./pidfile.pid")
+
+}
+
+// When reloading with a bad backend config, it should revert to old backend config
+func TestBadBackendReload(t *testing.T) {
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+
+	mainlog, _ = log.GetLogger("../../tests/testlog")
+
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
+	cmd := &cobra.Command{}
+	configPath = "configJsonA.json"
+	var serveWG sync.WaitGroup
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(testPauseDuration)
+
+	// change the config file to the one with a broken backend
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644)
+
+	// test SIGHUP via the kill command
+	// Would not work on windows as kill is not available.
+	// TODO: Implement an alternative test for windows.
+	if runtime.GOOS != "windows" {
+		sigHup()
+		time.Sleep(testPauseDuration) // allow sighup to do its job
+		// did the pidfile change as expected?
+		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
+			t.Error("pidfile not changed after sighup SIGHUP", err)
+		}
+	}
+
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+
+	// did backend started as expected?
+	fd, err := os.Open("../../tests/testlog")
+	if err != nil {
+		t.Error(err)
+	}
+	if read, err := ioutil.ReadAll(fd); err == nil {
+		logOutput := string(read)
+		if i := strings.Index(logOutput, "reverted to old backend config"); i < 0 {
+			t.Error("did not revert to old backend config")
+		}
+	}
+
+	// cleanup
+	os.Truncate("../../tests/testlog", 0)
+	os.Remove("configJsonA.json")
+	os.Remove("./pidfile.pid")
+	os.Remove("./pidfile2.pid")
 
 }

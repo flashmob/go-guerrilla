@@ -414,7 +414,7 @@ func (server *server) handleClient(client *client) {
 						rcptError := server.backend.ValidateRcpt(client.Envelope)
 						if rcptError != nil {
 							client.PopRcpt()
-							client.sendResponse(response.Canned.FailRcptCmd + rcptError.Error())
+							client.sendResponse(response.Canned.FailRcptCmd + " " + rcptError.Error())
 						} else {
 							client.sendResponse(response.Canned.SuccessRcptCmd)
 						}

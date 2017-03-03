@@ -86,7 +86,6 @@ func sigHandler(app guerrilla.Guerrilla) {
 }
 
 func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app guerrilla.Guerrilla) {
-
 	app.Subscribe(event, func(cmdConfig *CmdConfig) {
 		logger, _ := log.GetLogger(cmdConfig.LogFile)
 		var err error
@@ -94,14 +93,27 @@ func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app 
 			logger.WithError(err).Warn("Backend failed to shutdown")
 			return
 		}
-		newBackend, newErr := backends.New(cmdConfig.BackendConfig, logger)
-		if newErr != nil {
-			// this will continue using old backend
+		// init a new backend
+
+		if newBackend, newErr := backends.New(cmdConfig.BackendConfig, logger); newErr != nil {
+			// Revert to old backend config
 			logger.WithError(newErr).Error("Error while loading the backend")
+			err = backend.Reinitialize()
+			if err != nil {
+				logger.WithError(err).Fatal("failed to revert to old backend config")
+				return
+			}
+			err = backend.Start()
+			if err != nil {
+				logger.WithError(err).Fatal("failed to start backend with old config")
+				return
+			}
+			logger.Info("reverted to old backend config")
 		} else {
 			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
+			backend.Start()
 			backend = newBackend
-			logger.Info("Backend started")
+			logger.Info("new backend started")
 		}
 	})
 }

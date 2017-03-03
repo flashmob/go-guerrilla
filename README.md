@@ -190,7 +190,7 @@ func (cb *CustomBackend) Process(e *mail.Envelope) backends.Result {
 ```go
 import "github.com/flashmob/go-guerrilla/log"
 
-mainlog, err := log.GetLogger(log.OutputStderr.String());
+mainlog, err := log.GetLogger(string(log.OutputStderr));
 if  err != nil {
     fmt.Println("Cannot open log:", err)
     os.Exit(1)
