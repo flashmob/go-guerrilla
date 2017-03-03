@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"

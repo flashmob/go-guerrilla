@@ -18,7 +18,8 @@ import (
 // ----------------------------------------------------------------------------------
 // Processor Name: GuerrillaRedsDB
 // ----------------------------------------------------------------------------------
-// Description   : Saves the body to redis, meta data to mysql. Example
+// Description   : Saves the body to redis, meta data to mysql. Example only.
+//               : Limitation: it doesn't save multiple recipients or validate them
 // ----------------------------------------------------------------------------------
 // Config Options: ...
 // --------------:-------------------------------------------------------------------

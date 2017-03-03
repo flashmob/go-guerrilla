@@ -66,13 +66,14 @@ func sigHandler(app guerrilla.Guerrilla) {
 			if err != nil {
 				// new config will not be applied
 				mainlog.WithError(err).Error("Error while ReadConfig (reload)")
-				// re-open logs
-				cmdConfig.EmitLogReopenEvents(app)
 			} else {
 				cmdConfig = newConfig
 				mainlog.Infof("Configuration was reloaded at %s", guerrilla.ConfigLoadTime)
 				cmdConfig.emitChangeEvents(&oldConfig, app)
 			}
+		} else if sig == syscall.SIGUSR1 {
+			// re-open logs
+			cmdConfig.EmitLogReopenEvents(app)
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			mainlog.Infof("Shutdown signal caught")
 			app.Shutdown()
