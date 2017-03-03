@@ -2,7 +2,6 @@ package backends
 
 import (
 	"fmt"
-	"github.com/derekparker/delve/config"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"strings"
@@ -55,7 +54,6 @@ func TestStartProcessStop(t *testing.T) {
 		"log_received_mails": true,
 		"save_workers_size":  2,
 	}
-	config.LoadConfig()
 
 	gateway := &BackendGateway{}
 	err := gateway.Initialize(c)
