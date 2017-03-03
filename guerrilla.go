@@ -232,7 +232,7 @@ func (g *guerrilla) subscribeEvents() {
 		if _, err := g.findServer(sc.ListenInterface); err != nil {
 			// not found, lets add it
 			if err := g.makeServers(); err != nil {
-				g.mainlog().WithError(err).Error("cannot add server [%s]", sc.ListenInterface)
+				g.mainlog().WithError(err).Errorf("cannot add server [%s]", sc.ListenInterface)
 				return
 			}
 			g.mainlog().Infof("New server added [%s]", sc.ListenInterface)
