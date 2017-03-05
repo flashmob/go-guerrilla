@@ -206,7 +206,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
 	newconf.Servers[0].LogFile = "off" // test for log file change
-	newconf.LogLevel = "off"
+	newconf.LogLevel = "info"
 	newconf.LogFile = "off"
 	expectedEvents := map[Event]bool{
 		EventConfigPidFile:         false,

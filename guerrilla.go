@@ -106,9 +106,9 @@ func (g *guerrilla) makeServers() error {
 			// server already instantiated
 			continue
 		}
-		if errs := sc.Validate(); errs != nil {
+		if err := sc.Validate(); err != nil {
 			g.mainlog().WithError(errs).Errorf("Failed to create server [%s]", sc.ListenInterface)
-			errs = append(errs, errs...)
+			errs = append(errs, err)
 			continue
 		} else {
 			server, err := newServer(&sc, g.backend, g.mainlog())
@@ -325,6 +325,36 @@ func (g *guerrilla) subscribeEvents() {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			server.log.Reopen()
 			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
+		}
+	})
+	// when the backend changes
+	g.Subscribe(EventConfigBackendConfig, func(appConfig *AppConfig) {
+		logger, _ := log.GetLogger(appConfig.LogFile)
+		// shutdown the backend first.
+		var err error
+		if err = g.backend.Shutdown(); err != nil {
+			logger.WithError(err).Warn("Backend failed to shutdown")
+			return
+		}
+		// init a new backend, Revert to old backend config if it failes
+		if newBackend, newErr := backends.New(appConfig.BackendConfig, logger); newErr != nil {
+			logger.WithError(newErr).Error("Error while loading the backend")
+			err = g.backend.Reinitialize()
+			if err != nil {
+				logger.WithError(err).Fatal("failed to revert to old backend config")
+				return
+			}
+			err = g.backend.Start()
+			if err != nil {
+				logger.WithError(err).Fatal("failed to start backend with old config")
+				return
+			}
+			logger.Info("reverted to old backend config")
+		} else {
+			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
+			newBackend.Start()
+			g.backend = newBackend
+			logger.Info("new backend started")
 		}
 	})
 

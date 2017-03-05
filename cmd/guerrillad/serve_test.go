@@ -307,18 +307,18 @@ func sigKill() {
 // make sure that we get all the config change events
 func TestCmdConfigChangeEvents(t *testing.T) {
 
-	oldconf := &CmdConfig{}
-	if err := oldconf.load([]byte(configJsonA)); err != nil {
+	oldconf := &guerrilla.AppConfig{}
+	if err := oldconf.Load([]byte(configJsonA)); err != nil {
 		t.Error("configJsonA is invalid", err)
 	}
 
-	newconf := &CmdConfig{}
-	if err := newconf.load([]byte(configJsonB)); err != nil {
+	newconf := &guerrilla.AppConfig{}
+	if err := newconf.Load([]byte(configJsonB)); err != nil {
 		t.Error("configJsonB is invalid", err)
 	}
 
-	newerconf := &CmdConfig{}
-	if err := newerconf.load([]byte(configJsonC)); err != nil {
+	newerconf := &guerrilla.AppConfig{}
+	if err := newerconf.Load([]byte(configJsonC)); err != nil {
 		t.Error("configJsonC is invalid", err)
 	}
 
@@ -330,11 +330,11 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
-	app, err := guerrilla.New(&oldconf.AppConfig, backend, mainlog)
+	app, err := guerrilla.New(oldconf, backend, mainlog)
 	if err != nil {
 		//log.Info("Failed to create new app", err)
 	}
-	toUnsubscribe := map[guerrilla.Event]func(c *CmdConfig){}
+	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
 	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
 
 	for event := range expectedEvents {
@@ -347,7 +347,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 				app.Subscribe(e, f)
 				toUnsubscribeS[e] = f
 			} else {
-				f := func(c *CmdConfig) {
+				f := func(c *guerrilla.AppConfig) {
 					expectedEvents[e] = true
 				}
 				app.Subscribe(e, f)
@@ -358,8 +358,8 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	// emit events
-	newconf.emitChangeEvents(oldconf, app)
-	newerconf.emitChangeEvents(newconf, app)
+	newconf.EmitChangeEvents(oldconf, app)
+	newerconf.EmitChangeEvents(newconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
 		app.Unsubscribe(unevent, unfun)

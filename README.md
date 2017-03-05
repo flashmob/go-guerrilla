@@ -190,7 +190,7 @@ func (cb *CustomBackend) Process(e *mail.Envelope) backends.Result {
 ```go
 import "github.com/flashmob/go-guerrilla/log"
 
-mainlog, err := log.GetLogger(string(log.OutputStderr));
+mainlog, err := log.GetLogger(log.OutputStderr.String());
 if  err != nil {
     fmt.Println("Cannot open log:", err)
     os.Exit(1)
@@ -201,7 +201,7 @@ if  err != nil {
 See Configuration section below for setting configuration options.
 ```go
 config := &guerrilla.AppConfig{
-  Servers: []*guerrilla.ServerConfig{...},
+  Servers: []guerrilla.ServerConfig{...},
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}

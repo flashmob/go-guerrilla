@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/backends"
 	"os"
 	"reflect"
 	"strings"
@@ -12,27 +13,48 @@ import (
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	Servers      []ServerConfig `json:"servers"`
-	AllowedHosts []string       `json:"allowed_hosts"`
-	PidFile      string         `json:"pid_file"`
-	LogFile      string         `json:"log_file,omitempty"`
-	LogLevel     string         `json:"log_level,omitempty"`
+	// Servers can have one or more items. Defaults to 1 server listening to 127.0.0.1:2525
+	Servers []ServerConfig `json:"servers"`
+	// AllowedHosts lists which hosts to accept email for. Defaults to os.Hostname()
+	AllowedHosts []string `json:"allowed_hosts"`
+	// PidFile is the path for writing out the process id. No output if empty
+	PidFile string `json:"pid_file"`
+	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off". Default "stderr"
+	LogFile string `json:"log_file,omitempty"`
+	// LogLevel controls the lowest level we log. "info", "debug", "error", "panic". Default "info"
+	LogLevel string `json:"log_level,omitempty"`
+	// BackendConfig configures the transaction processing backend
+	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
 // ServerConfig specifies config options for a single server
 type ServerConfig struct {
-	IsEnabled       bool   `json:"is_enabled"`
-	Hostname        string `json:"host_name"`
-	MaxSize         int64  `json:"max_size"`
-	PrivateKeyFile  string `json:"private_key_file"`
-	PublicKeyFile   string `json:"public_key_file"`
-	Timeout         int    `json:"timeout"`
+	// IsEnabled set to true to start the server, false will ignore it
+	IsEnabled bool `json:"is_enabled"`
+	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
+	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
+	Hostname string `json:"host_name"`
+	// MaxSize is the maximum size of an email that will be accepted for delivery. Defaults to 10MB
+	MaxSize int64 `json:"max_size"`
+	// PrivateKeyFile path to cert private key in PEM format. Will be ignored if blank
+	PrivateKeyFile string `json:"private_key_file"`
+	// PublicKeyFile path to cert (public key) chain in PEM format. Will be ignored if blank
+	PublicKeyFile string `json:"public_key_file"`
+	// Timeout specifies the connection timeout in seconds. Defaults to 30
+	Timeout int `json:"timeout"`
+	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
-	StartTLSOn      bool   `json:"start_tls_on,omitempty"`
-	TLSAlwaysOn     bool   `json:"tls_always_on,omitempty"`
-	MaxClients      int    `json:"max_clients"`
-	LogFile         string `json:"log_file,omitempty"`
+	// StartTLSOn should we offer STARTTLS command. Cert must be valid. False by default
+	StartTLSOn bool `json:"start_tls_on,omitempty"`
+	// TLSAlwaysOn run this server as a pure TLS server, i.e. SMTPS
+	TLSAlwaysOn bool `json:"tls_always_on,omitempty"`
+	// MaxClients controls how many maxiumum clients we can handle at once. Defaults to 100
+	MaxClients int `json:"max_clients"`
+	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off". Default "stderr"
+	// defaults to AppConfig.Log file setting
+	LogFile string `json:"log_file,omitempty"`
 
+	// The following used to watch certificate changes so that the TLS can be reloaded
 	_privateKeyFile_mtime int
 	_publicKeyFile_mtime  int
 }
@@ -64,6 +86,10 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 
 // Emits any configuration change events onto the event bus.
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
+	// has backend changed?
+	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
+		app.Publish(EventConfigBackendConfig, c)
+	}
 	// has config changed, general check
 	if !reflect.DeepEqual(oldConfig, c) {
 		app.Publish(EventConfigNewConfig, c)
@@ -213,16 +239,26 @@ func (sc *ServerConfig) getTlsKeyTimestamps() (int, int) {
 }
 
 // Validate validates the server's configuration.
-func (sc *ServerConfig) Validate() Errors {
+func (sc *ServerConfig) Validate() error {
 	var errs Errors
-	if _, err := tls.LoadX509KeyPair(sc.PublicKeyFile, sc.PrivateKeyFile); err != nil {
-		if sc.StartTLSOn || sc.TLSAlwaysOn {
+
+	if sc.StartTLSOn || sc.TLSAlwaysOn {
+		if sc.PublicKeyFile == "" {
+			errs = append(errs, errors.New("PublicKeyFile is empty"))
+		}
+		if sc.PrivateKeyFile == "" {
+			errs = append(errs, errors.New("PrivateKeyFile is empty"))
+		}
+		if _, err := tls.LoadX509KeyPair(sc.PublicKeyFile, sc.PrivateKeyFile); err != nil {
 			errs = append(errs,
 				errors.New(fmt.Sprintf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)))
 		}
-
 	}
-	return errs
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
 }
 
 // Returns a diff between struct a & struct b.

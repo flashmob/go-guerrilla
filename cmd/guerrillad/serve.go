@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -94,39 +93,6 @@ func sigHandler(app guerrilla.Guerrilla) {
 	}
 }
 
-func subscribeBackendEvent(event guerrilla.Event, backend backends.Backend, app guerrilla.Guerrilla) {
-	app.Subscribe(event, func(cmdConfig *CmdConfig) {
-		logger, _ := log.GetLogger(cmdConfig.LogFile)
-		var err error
-		if err = backend.Shutdown(); err != nil {
-			logger.WithError(err).Warn("Backend failed to shutdown")
-			return
-		}
-		// init a new backend
-
-		if newBackend, newErr := backends.New(cmdConfig.BackendConfig, logger); newErr != nil {
-			// Revert to old backend config
-			logger.WithError(newErr).Error("Error while loading the backend")
-			err = backend.Reinitialize()
-			if err != nil {
-				logger.WithError(err).Fatal("failed to revert to old backend config")
-				return
-			}
-			err = backend.Start()
-			if err != nil {
-				logger.WithError(err).Fatal("failed to start backend with old config")
-				return
-			}
-			logger.Info("reverted to old backend config")
-		} else {
-			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
-			backend.Start()
-			backend = newBackend
-			logger.Info("new backend started")
-		}
-	})
-}
-
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 
@@ -182,7 +148,7 @@ func serve(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainlog.WithError(err).Error("Error(s) when starting server(s)")
 	}
-	subscribeBackendEvent(guerrilla.EventConfigBackendConfig, backend, app)
+
 	// Write out our PID
 	writePid(cmdConfig.PidFile)
 	// ...and write out our pid whenever the file name changes in the config
@@ -204,7 +170,6 @@ func serve(cmd *cobra.Command, args []string) {
 // the the command line interface.
 type CmdConfig struct {
 	guerrilla.AppConfig
-	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
 func (c *CmdConfig) load(jsonBytes []byte) error {
@@ -218,10 +183,8 @@ func (c *CmdConfig) load(jsonBytes []byte) error {
 }
 
 func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
-	// has backend changed?
-	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
-		app.Publish(guerrilla.EventConfigBackendConfig, c)
-	}
+	// if your CmdConfig has any extra fields, you can emit events here
+	// ...
 	// call other emitChangeEvents
 	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
 }

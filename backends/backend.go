@@ -149,7 +149,7 @@ func Log() log.Logger {
 	if v, ok := Svc.mainlog.Load().(log.Logger); ok {
 		return v
 	}
-	l, _ := log.GetLogger(string(log.OutputStderr))
+	l, _ := log.GetLogger(log.OutputStderr.String())
 	return l
 }
 
