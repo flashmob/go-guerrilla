@@ -74,21 +74,21 @@ func (d *Daemon) Shutdown() {
 	}
 }
 
-// ReadConfig reads in the config from a JSON file.
-func (d *Daemon) ReadConfig(path string) error {
+// LoadConfig reads in the config from a JSON file.
+func (d *Daemon) LoadConfig(path string) (AppConfig, error) {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("Could not read config file: %s", err.Error())
+		return *d.Config, fmt.Errorf("Could not read config file: %s", err.Error())
 	}
 	d.Config = &AppConfig{}
 	if err := d.Config.Load(data); err != nil {
-		return err
+		return *d.Config, err
 	}
 	d.configLoadTime = time.Now()
-	return nil
+	return *d.Config, nil
 }
 
-// SetConfig is same as ReadConfig, except you can pass AppConfig directly
+// SetConfig is same as LoadConfig, except you can pass AppConfig directly
 func (d *Daemon) SetConfig(c AppConfig) error {
 	// Config.Load takes []byte so we need to serialize
 	data, err := json.Marshal(c)
@@ -128,8 +128,7 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 	}
 	var oldConfig AppConfig
 	oldConfig = *d.Config
-	err := d.ReadConfig(path)
-
+	_, err := d.LoadConfig(path)
 	if err != nil {
 		d.log().WithError(err).Error("Error while reloading config from file")
 		return err

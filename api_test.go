@@ -10,6 +10,18 @@ import (
 
 // Test Starting smtp without setting up logger / backend
 func TestSMTP(t *testing.T) {
+	go func() {
+		select {
+		case <-time.After(time.Second * 40):
+			//buf := make([]byte, 1<<16)
+			//stackSize := runtime.Stack(buf, true)
+			//fmt.Printf("%s\n", string(buf[0:stackSize]))
+			//panic("timeout")
+			t.Error("timeout")
+			return
+
+		}
+	}()
 
 	d := Daemon{}
 	err := d.Start()
@@ -163,7 +175,7 @@ func TestSMTPLoadFile(t *testing.T) {
 	}
 
 	d := Daemon{}
-	err = d.ReadConfig("goguerrilla.conf.api")
+	_, err = d.LoadConfig("goguerrilla.conf.api")
 	if err != nil {
 		t.Error("ReadConfig error", err)
 		return

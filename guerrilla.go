@@ -109,8 +109,6 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 // Instantiate servers
 func (g *guerrilla) makeServers() error {
 	g.mainlog().Debug("making servers")
-	g.guard.Lock()
-	defer g.guard.Unlock()
 	var errs Errors
 	for _, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
@@ -450,11 +448,8 @@ func (g *guerrilla) Start() error {
 }
 
 func (g *guerrilla) Shutdown() {
-	g.guard.Lock()
-	defer func() {
-		g.state = GuerrillaStateStopped
-		defer g.guard.Unlock()
-	}()
+
+	// shot down the servers first
 	g.mapServers(func(s *server) {
 		if s.state == ServerStateRunning {
 			s.Shutdown()
@@ -462,6 +457,11 @@ func (g *guerrilla) Shutdown() {
 		}
 	})
 
+	g.guard.Lock()
+	defer func() {
+		g.state = GuerrillaStateStopped
+		defer g.guard.Unlock()
+	}()
 	if err := g.backend().Shutdown(); err != nil {
 		g.mainlog().WithError(err).Warn("Backend failed to shutdown")
 	} else {
