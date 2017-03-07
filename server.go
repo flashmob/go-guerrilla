@@ -46,7 +46,6 @@ const (
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
 	configStore     atomic.Value // stores guerrilla.ServerConfig
-	backend         backends.Backend
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
@@ -61,6 +60,7 @@ type server struct {
 	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
 	logStore     atomic.Value
 	mainlogStore atomic.Value
+	backendStore atomic.Value
 }
 
 type allowedHosts struct {
@@ -71,13 +71,13 @@ type allowedHosts struct {
 // Creates and returns a new ready-to-run Server from a configuration
 func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
 	server := &server{
-		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
 		mainlog:         l,
 	}
+	server.backendStore.Store(b)
 	var logOpenError error
 	if sc.LogFile == "" {
 		// none set, use the same log file as mainlog
@@ -133,6 +133,19 @@ func (s *server) configureLog() {
 			s.mainlog = ml
 		}
 	}
+}
+
+// setBackend Sets the backend to use for processing email envelopes
+func (s *server) setBackend(b backends.Backend) {
+	s.backendStore.Store(b)
+}
+
+// backend gets the backend used to process email envelopes
+func (s *server) backend() backends.Backend {
+	if b, ok := s.backendStore.Load().(backends.Backend); ok {
+		return b
+	}
+	return nil
 }
 
 // Set the timeout for the server and all clients
@@ -410,7 +423,8 @@ func (server *server) handleClient(client *client) {
 						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
 						client.PushRcpt(to)
-						rcptError := server.backend.ValidateRcpt(client.Envelope)
+						server.log.Info("Server backend is: ", server.backend)
+						rcptError := server.backend().ValidateRcpt(client.Envelope)
 						if rcptError != nil {
 							client.PopRcpt()
 							client.sendResponse(response.Canned.FailRcptCmd + " " + rcptError.Error())
@@ -487,7 +501,7 @@ func (server *server) handleClient(client *client) {
 				break
 			}
 
-			res := server.backend.Process(client.Envelope)
+			res := server.backend().Process(client.Envelope)
 			if res.Code() < 300 {
 				client.messagesSent++
 			}

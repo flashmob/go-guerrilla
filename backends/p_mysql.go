@@ -152,7 +152,7 @@ func MySql() Decorator {
 		mp.config = config
 		db, err = mp.connect(config)
 		if err != nil {
-			Log().Error("cannot open mysql: %s", err)
+			Log().Errorf("cannot open mysql: %s", err)
 			return err
 		}
 		return nil

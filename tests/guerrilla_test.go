@@ -74,7 +74,7 @@ var configJson = `
 {
     "log_file" : "./testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/go-guerrilla.pid",
+    "pid_file" : "go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
     "backend_config" :
         {

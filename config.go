@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
@@ -13,17 +14,20 @@ import (
 
 // AppConfig is the holder of the configuration of the app
 type AppConfig struct {
-	// Servers can have one or more items. Defaults to 1 server listening to 127.0.0.1:2525
+	// Servers can have one or more items.
+	/// Defaults to 1 server listening on 127.0.0.1:2525
 	Servers []ServerConfig `json:"servers"`
-	// AllowedHosts lists which hosts to accept email for. Defaults to os.Hostname()
+	// AllowedHosts lists which hosts to accept email for. Defaults to os.Hostname
 	AllowedHosts []string `json:"allowed_hosts"`
 	// PidFile is the path for writing out the process id. No output if empty
 	PidFile string `json:"pid_file"`
-	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off". Default "stderr"
+	// LogFile is where the logs go. Use path to file, or "stderr", "stdout"
+	// or "off". Default "stderr"
 	LogFile string `json:"log_file,omitempty"`
-	// LogLevel controls the lowest level we log. "info", "debug", "error", "panic". Default "info"
+	// LogLevel controls the lowest level we log.
+	// "info", "debug", "error", "panic". Default "info"
 	LogLevel string `json:"log_level,omitempty"`
-	// BackendConfig configures the transaction processing backend
+	// BackendConfig configures the email envelope processing backend
 	BackendConfig backends.BackendConfig `json:"backend_config"`
 }
 
@@ -34,23 +38,27 @@ type ServerConfig struct {
 	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
 	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
 	Hostname string `json:"host_name"`
-	// MaxSize is the maximum size of an email that will be accepted for delivery. Defaults to 10MB
+	// MaxSize is the maximum size of an email that will be accepted for delivery.
+	// Defaults to 10 Mebibytes
 	MaxSize int64 `json:"max_size"`
 	// PrivateKeyFile path to cert private key in PEM format. Will be ignored if blank
 	PrivateKeyFile string `json:"private_key_file"`
-	// PublicKeyFile path to cert (public key) chain in PEM format. Will be ignored if blank
+	// PublicKeyFile path to cert (public key) chain in PEM format.
+	// Will be ignored if blank
 	PublicKeyFile string `json:"public_key_file"`
 	// Timeout specifies the connection timeout in seconds. Defaults to 30
 	Timeout int `json:"timeout"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
-	// StartTLSOn should we offer STARTTLS command. Cert must be valid. False by default
+	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
+	// False by default
 	StartTLSOn bool `json:"start_tls_on,omitempty"`
 	// TLSAlwaysOn run this server as a pure TLS server, i.e. SMTPS
 	TLSAlwaysOn bool `json:"tls_always_on,omitempty"`
-	// MaxClients controls how many maxiumum clients we can handle at once. Defaults to 100
+	// MaxClients controls how many maxiumum clients we can handle at once.
+	// Defaults to 100
 	MaxClients int `json:"max_clients"`
-	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off". Default "stderr"
+	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off".
 	// defaults to AppConfig.Log file setting
 	LogFile string `json:"log_file,omitempty"`
 
@@ -66,8 +74,11 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 	if err != nil {
 		return fmt.Errorf("could not parse config file: %s", err)
 	}
-	if len(c.AllowedHosts) == 0 {
-		return errors.New("empty AllowedHosts is not allowed")
+	if err = c.setDefaults(); err != nil {
+		return err
+	}
+	if err = c.setBackendDefaults(); err != nil {
+		return err
 	}
 
 	// all servers must be valid in order to continue
@@ -149,6 +160,114 @@ func (c *AppConfig) getServers() map[string]*ServerConfig {
 		servers[c.Servers[i].ListenInterface] = &c.Servers[i]
 	}
 	return servers
+}
+
+// setDefaults fills in default server settings for values that were not configured
+// The defaults are:
+// * Server listening to 127.0.0.1:2525
+// * use your hostname to determine your which hosts to accept email for
+// * 100 maximum clients
+// * 10MB max message size
+// * log to Stderr,
+// * log level set to "`debug`"
+// * timeout to 30 sec
+// * Backend configured with the following processors: `HeadersParser|Header|Debugger`
+// where it will log the received emails.
+func (c *AppConfig) setDefaults() error {
+	if c.LogFile == "" {
+		c.LogFile = log.OutputStderr.String()
+	}
+	if c.LogLevel == "" {
+		c.LogLevel = "debug"
+	}
+	if len(c.AllowedHosts) == 0 {
+		if h, err := os.Hostname(); err != nil {
+			return err
+		} else {
+			c.AllowedHosts = append(c.AllowedHosts, h)
+		}
+	}
+	h, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+	if len(c.Servers) == 0 {
+		sc := ServerConfig{}
+		sc.LogFile = c.LogFile
+		sc.ListenInterface = defaultInterface
+		sc.IsEnabled = true
+		sc.Hostname = h
+		sc.MaxClients = 100
+		sc.Timeout = 30
+		sc.MaxSize = 10 << 20 // 10 Mebibytes
+		c.Servers = append(c.Servers, sc)
+	} else {
+		// make sure each server has defaults correctly configured
+		for i := range c.Servers {
+			if c.Servers[i].Hostname == "" {
+				c.Servers[i].Hostname = h
+			}
+			if c.Servers[i].MaxClients == 0 {
+				c.Servers[i].MaxClients = 100
+			}
+			if c.Servers[i].Timeout == 0 {
+				c.Servers[i].Timeout = 20
+			}
+			if c.Servers[i].MaxSize == 0 {
+				c.Servers[i].MaxSize = 10 << 20 // 10 Mebibytes
+			}
+			if c.Servers[i].ListenInterface == "" {
+				return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
+			}
+			if c.Servers[i].LogFile == "" {
+				c.Servers[i].LogFile = c.LogFile
+			}
+			// validate the server config
+			err = c.Servers[i].Validate()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// setBackendDefaults sets default values for the backend config,
+// if no backend config was added before starting, then use a default config
+// otherwise, see what required values were missed in the config and add any missing with defaults
+func (c *AppConfig) setBackendDefaults() error {
+
+	if len(c.BackendConfig) == 0 {
+		h, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		c.BackendConfig = backends.BackendConfig{
+			"log_received_mails": true,
+			"save_workers_size":  1,
+			"process_stack":      "HeadersParser|Header|Debugger",
+			"primary_mail_host":  h,
+		}
+	} else {
+		if _, ok := c.BackendConfig["process_stack"]; !ok {
+			c.BackendConfig["process_stack"] = "HeadersParser|Header|Debugger"
+		}
+		if _, ok := c.BackendConfig["primary_mail_host"]; !ok {
+			h, err := os.Hostname()
+			if err != nil {
+				return err
+			}
+			c.BackendConfig["primary_mail_host"] = h
+		}
+		if _, ok := c.BackendConfig["save_workers_size"]; !ok {
+			c.BackendConfig["save_workers_size"] = 1
+		}
+
+		if _, ok := c.BackendConfig["log_received_mails"]; !ok {
+			c.BackendConfig["log_received_mails"] = false
+		}
+	}
+	return nil
 }
 
 // Emits any configuration change events on the server.

@@ -45,7 +45,7 @@ var configJsonA = `
             "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
-            "listen_interface":"127.0.0.1:25",
+            "listen_interface":"127.0.0.1:3536",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000,
@@ -94,7 +94,7 @@ var configJsonB = `
             "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
-            "listen_interface":"127.0.0.1:25",
+            "listen_interface":"127.0.0.1:3536",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000,
@@ -362,6 +362,9 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	newerconf.EmitChangeEvents(newconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
+		app.Unsubscribe(unevent, unfun)
+	}
+	for unevent, unfun := range toUnsubscribeS {
 		app.Unsubscribe(unevent, unfun)
 	}
 
@@ -1075,7 +1078,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 // Start in log_level = debug
 // Load config & start server
 func TestDebugLevelChange(t *testing.T) {
-	//mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog")
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)

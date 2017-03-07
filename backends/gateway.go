@@ -27,7 +27,7 @@ type BackendGateway struct {
 	// waits for backend workers to start/stop
 	wg           sync.WaitGroup
 	workStoppers []chan bool
-	lines        []Processor
+	chains       []Processor
 
 	// controls access to state
 	sync.Mutex
@@ -180,19 +180,19 @@ func (gw *BackendGateway) Reinitialize() error {
 	return err
 }
 
-// newProcessorLine creates a new call-stack of decorators and returns as a single Processor
+// newChain creates a new Processor by chaining multiple Processors in a call stack
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
 // This function uses the config value process_stack to figure out which Decorator to use
-func (gw *BackendGateway) newProcessorStack() (Processor, error) {
+func (gw *BackendGateway) newChain() (Processor, error) {
 	var decorators []Decorator
 	cfg := strings.ToLower(strings.TrimSpace(gw.gwConfig.ProcessorStack))
 	if len(cfg) == 0 {
 		cfg = strings.ToLower(defaultProcessor)
 	}
-	line := strings.Split(cfg, "|")
-	for i := range line {
-		name := line[len(line)-1-i] // reverse order, since decorators are stacked
+	items := strings.Split(cfg, "|")
+	for i := range items {
+		name := items[len(items)-1-i] // reverse order, since decorators are stacked
 		if makeFunc, ok := processors[name]; ok {
 			decorators = append(decorators, makeFunc())
 		} else {
@@ -233,14 +233,14 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
-		gw.lines = make([]Processor, 0)
+		gw.chains = make([]Processor, 0)
 		for i := 0; i < workersSize; i++ {
-			p, err := gw.newProcessorStack()
+			p, err := gw.newChain()
 			if err != nil {
 				gw.State = BackendStateError
 				return err
 			}
-			gw.lines = append(gw.lines, p)
+			gw.chains = append(gw.chains, p)
 		}
 		// initialize processors
 		if err := Svc.initialize(cfg); err != nil {
@@ -274,7 +274,7 @@ func (gw *BackendGateway) Start() error {
 			stop := make(chan bool)
 			go func(workerId int, stop chan bool) {
 				// blocks here until the worker exits
-				gw.workDispatcher(gw.conveyor, gw.lines[workerId], workerId+1, stop)
+				gw.workDispatcher(gw.conveyor, gw.chains[workerId], workerId+1, stop)
 				gw.wg.Done()
 			}(i, stop)
 			gw.workStoppers = append(gw.workStoppers, stop)

@@ -30,10 +30,10 @@ func TestInitialize(t *testing.T) {
 		t.Error("Gateway did not init because:", err)
 		t.Fail()
 	}
-	if gateway.lines == nil {
-		t.Error("gateway.lines should not be nil")
-	} else if len(gateway.lines) != 1 {
-		t.Error("len(gateway.lines) should be 1, but got", len(gateway.lines))
+	if gateway.chains == nil {
+		t.Error("gateway.chains should not be nil")
+	} else if len(gateway.chains) != 1 {
+		t.Error("len(gateway.chains) should be 1, but got", len(gateway.chains))
 	}
 
 	if gateway.conveyor == nil {
@@ -82,7 +82,7 @@ func TestStartProcessStop(t *testing.T) {
 		MailFrom: mail.Address{User: "test", Host: "example.com"},
 		TLS:      true,
 	}
-	e.PushRcpt(mail.Address{"test", "example.com"})
+	e.PushRcpt(mail.Address{User: "test", Host: "example.com"})
 	e.Data.WriteString("Subject:Test\n\nThis is a test.")
 	notify := make(chan *notifyMsg)
 

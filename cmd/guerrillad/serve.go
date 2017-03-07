@@ -236,7 +236,7 @@ func writePid(pidFile string) {
 			pid := os.Getpid()
 			if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err == nil {
 				f.Sync()
-				mainlog.Infof("pid_file (%s) written with pid:%v", pidFile, pid)
+				mainlog.Infof("(serve.go) pid_file (%s) written with pid:%v", pidFile, pid)
 			} else {
 				mainlog.WithError(err).Fatalf("Error while writing pidFile (%s)", pidFile)
 			}

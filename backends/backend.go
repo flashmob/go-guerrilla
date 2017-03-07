@@ -15,17 +15,17 @@ var (
 	Svc *service
 
 	// Store the constructor for making an new processor decorator.
-	processors map[string]processorConstructor
+	processors map[string]ProcessorConstructor
 
 	b Backend
 )
 
 func init() {
 	Svc = &service{}
-	processors = make(map[string]processorConstructor)
+	processors = make(map[string]ProcessorConstructor)
 }
 
-type processorConstructor func() Decorator
+type ProcessorConstructor func() Decorator
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -133,10 +133,6 @@ func convertError(name string) error {
 	return fmt.Errorf("failed to load backend config (%s)", name)
 }
 
-func GetBackend() Backend {
-	return b
-}
-
 type service struct {
 	initializers []processorInitializer
 	shutdowners  []processorShutdowner
@@ -217,9 +213,9 @@ func (s *service) shutdown() Errors {
 // AddProcessor adds a new processor, which becomes available to the backend_config.process_stack option
 // Use to add your own custom processor when using backends as a package, or after importing an external
 // processor.
-func (s *service) AddProcessor(name string, p processorConstructor) {
+func (s *service) AddProcessor(name string, p ProcessorConstructor) {
 	// wrap in a constructor since we want to defer calling it
-	var c processorConstructor
+	var c ProcessorConstructor
 	c = func() Decorator {
 		return p()
 	}
