@@ -116,9 +116,6 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has mainlog log changed?
 	if strings.Compare(oldConfig.LogFile, c.LogFile) != 0 {
 		app.Publish(EventConfigLogFile, c)
-	} else {
-		// since config file has not changed, we reload it
-		app.Publish(EventConfigLogReopen, c)
 	}
 	// has log level changed?
 	if strings.Compare(oldConfig.LogLevel, c.LogLevel) != 0 {

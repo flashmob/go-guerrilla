@@ -89,7 +89,8 @@ func (d *Daemon) LoadConfig(path string) (AppConfig, error) {
 }
 
 // SetConfig is same as LoadConfig, except you can pass AppConfig directly
-func (d *Daemon) SetConfig(c AppConfig) error {
+// does not emit any change events, instead use ReloadConfig after daemon has started
+func (d *Daemon) SetConfig(c *AppConfig) error {
 	// Config.Load takes []byte so we need to serialize
 	data, err := json.Marshal(c)
 	if err != nil {
@@ -105,7 +106,7 @@ func (d *Daemon) SetConfig(c AppConfig) error {
 }
 
 // Reload a config using the passed in AppConfig and emit config change events
-func (d *Daemon) ReloadConfig(c AppConfig) error {
+func (d *Daemon) ReloadConfig(c *AppConfig) error {
 	if d.Config == nil {
 		return errors.New("d.Config nil")
 	}
@@ -139,7 +140,8 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 	return nil
 }
 
-// ReopenLogs re-opens all log files. Typically, one would call this after rotating logs
+// ReopenLogs send events to re-opens all log files.
+// Typically, one would call this after rotating logs
 func (d *Daemon) ReopenLogs() {
 	d.Config.EmitLogReopenEvents(d.g)
 }

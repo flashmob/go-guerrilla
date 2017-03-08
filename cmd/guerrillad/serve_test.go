@@ -382,6 +382,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
+	os.Truncate("../../tests/testlog", 0)
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 
 	mainlog, _ = log.GetLogger("../../tests/testlog")
@@ -424,6 +425,7 @@ func TestServe(t *testing.T) {
 	}
 	// send kill signal and wait for exit
 	sigKill()
+	// wait for exit
 	serveWG.Wait()
 
 	// did backend started as expected?
@@ -439,7 +441,7 @@ func TestServe(t *testing.T) {
 	}
 
 	// cleanup
-	os.Truncate("../../tests/testlog", 0)
+
 	os.Remove("configJsonA.json")
 	os.Remove("./pidfile.pid")
 	os.Remove("./pidfile2.pid")

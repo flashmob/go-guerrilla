@@ -1,9 +1,15 @@
 package guerrilla
 
 import (
+	"bufio"
+	"fmt"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"io/ioutil"
+	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -54,39 +60,39 @@ func TestSMTPNoLog(t *testing.T) {
 
 	// configure a default server with no log output
 	cfg := &AppConfig{LogFile: log.OutputOff.String()}
-	smtp := Daemon{Config: cfg}
+	d := Daemon{Config: cfg}
 
-	err := smtp.Start()
+	err := d.Start()
 	if err != nil {
 		t.Error(err)
 	}
 	time.Sleep(time.Second * 2)
-	smtp.Shutdown()
+	d.Shutdown()
 }
 
 // our custom server
 func TestSMTPCustomServer(t *testing.T) {
-	cfg := &AppConfig{LogFile: log.OutputStdout.String()}
+	cfg := &AppConfig{LogFile: log.OutputOff.String()}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
-	smtp := Daemon{Config: cfg}
+	d := Daemon{Config: cfg}
 
-	err := smtp.Start()
+	err := d.Start()
 	if err != nil {
 		t.Error("start error", err)
 	} else {
 		time.Sleep(time.Second * 2)
-		smtp.Shutdown()
+		d.Shutdown()
 	}
 
 }
 
 // with a backend config
 func TestSMTPCustomBackend(t *testing.T) {
-	cfg := &AppConfig{LogFile: log.OutputStdout.String()}
+	cfg := &AppConfig{LogFile: log.OutputOff.String()}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
 		IsEnabled:       true,
@@ -212,5 +218,304 @@ func TestSMTPLoadFile(t *testing.T) {
 		}
 
 		d.Shutdown()
+	}
+}
+
+func TestReopenLog(t *testing.T) {
+	os.Truncate("test/testlog", 0)
+	cfg := &AppConfig{LogFile: "tests/testlog"}
+	sc := ServerConfig{
+		ListenInterface: "127.0.0.1:2526",
+		IsEnabled:       true,
+	}
+	cfg.Servers = append(cfg.Servers, sc)
+	d := Daemon{Config: cfg}
+
+	err := d.Start()
+	if err != nil {
+		t.Error("start error", err)
+	} else {
+		d.ReopenLogs()
+		time.Sleep(time.Second * 2)
+
+		d.Shutdown()
+	}
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	if strings.Index(string(b), "re-opened log file") < 0 {
+		t.Error("Server log did not re-opened, expecting \"re-opened log file\"")
+	}
+	if strings.Index(string(b), "re-opened main log file") < 0 {
+		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
+	}
+}
+
+func TestSetConfig(t *testing.T) {
+
+	os.Truncate("test/testlog", 0)
+	cfg := &AppConfig{LogFile: "tests/testlog"}
+	sc := ServerConfig{
+		ListenInterface: "127.0.0.1:2526",
+		IsEnabled:       true,
+	}
+	cfg.Servers = append(cfg.Servers, sc)
+	d := Daemon{Config: cfg}
+
+	// lets add a new server
+	sc.ListenInterface = "127.0.0.1:2527"
+	cfg.Servers = append(cfg.Servers, sc)
+
+	err := d.SetConfig(cfg)
+	if err != nil {
+		t.Error("SetConfig returned an error:", err)
+		return
+	}
+
+	err = d.Start()
+	if err != nil {
+		t.Error("start error", err)
+	} else {
+
+		time.Sleep(time.Second * 2)
+
+		d.Shutdown()
+	}
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	//fmt.Println(string(b))
+	// has 127.0.0.1:2527 started?
+	if strings.Index(string(b), "127.0.0.1:2527") < 0 {
+		t.Error("expecting 127.0.0.1:2527 to start")
+	}
+
+}
+
+func TestSetConfigError(t *testing.T) {
+
+	os.Truncate("tests/testlog", 0)
+	cfg := &AppConfig{LogFile: "tests/testlog"}
+	sc := ServerConfig{
+		ListenInterface: "127.0.0.1:2526",
+		IsEnabled:       true,
+	}
+	cfg.Servers = append(cfg.Servers, sc)
+	d := Daemon{Config: cfg}
+
+	// lets add a new server with bad TLS
+	sc.ListenInterface = "127.0.0.1:2527"
+	sc.StartTLSOn = true
+	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
+	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
+
+	cfg.Servers = append(cfg.Servers, sc)
+
+	err := d.SetConfig(cfg)
+	if err == nil {
+		t.Error("SetConfig should have returned an error compalning about bad tls settings")
+		return
+	}
+}
+
+var funkyLogger = func() backends.Decorator {
+
+	backends.Svc.AddInitializer(
+		backends.InitializeWith(
+			func(backendConfig backends.BackendConfig) error {
+				backends.Log().Info("Funky logger is up & down to funk!")
+				return nil
+			}),
+	)
+
+	backends.Svc.AddShutdowner(
+		backends.ShutdownWith(
+			func() error {
+				backends.Log().Info("The funk has been stopped!")
+				return nil
+			}),
+	)
+
+	return func(c backends.Processor) backends.Processor {
+		return backends.ProcessWith(
+			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
+				if task == backends.TaskValidateRcpt {
+					// validate the last recipient appended to e.Rcpt
+					backends.Log().Infof(
+						"another funky recipient [%s]",
+						e.RcptTo[len(e.RcptTo)-1])
+					// if valid then forward call to the next processor in the chain
+					return c.Process(e, task)
+					// if invalid, return a backend result
+					//return backends.NewResult(response.Canned.FailRcptCmd), nil
+				} else if task == backends.TaskSaveMail {
+					backends.Log().Info("Another funky email!")
+				}
+				return c.Process(e, task)
+			})
+	}
+}
+
+// How about a custom processor?
+func TestSetAddProcessor(t *testing.T) {
+	os.Truncate("tests/testlog", 0)
+	cfg := &AppConfig{
+		LogFile:       "tests/testlog",
+		AllowedHosts:  []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+	}
+	d := Daemon{Config: cfg}
+	d.AddProcessor("FunkyLogger", funkyLogger)
+
+	d.Start()
+	// lets have a talk with the server
+	talkToServer("127.0.0.1:2525")
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets check for fingerprints
+	if strings.Index(string(b), "another funky recipient") < 0 {
+		t.Error("did not log: another funky recipient")
+	}
+
+	if strings.Index(string(b), "Another funky email!") < 0 {
+		t.Error("Did not log: Another funky email!")
+	}
+
+	if strings.Index(string(b), "Funky logger is up & down to funk") < 0 {
+		t.Error("Did not log: Funky logger is up & down to funk")
+	}
+	if strings.Index(string(b), "The funk has been stopped!") < 0 {
+		t.Error("Did not log:The funk has been stopped!")
+	}
+
+}
+
+func talkToServer(address string) {
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+
+		return
+	}
+	in := bufio.NewReader(conn)
+	str, err := in.ReadString('\n')
+	fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
+	str, err = in.ReadString('\n')
+	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+	str, err = in.ReadString('\n')
+	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
+	str, err = in.ReadString('\n')
+	fmt.Fprint(conn, "DATA\r\n")
+	str, err = in.ReadString('\n')
+	fmt.Fprint(conn, "Subject: Test subject\r\n")
+	fmt.Fprint(conn, "\r\n")
+	fmt.Fprint(conn, "A an email body\r\n")
+	fmt.Fprint(conn, ".\r\n")
+	str, err = in.ReadString('\n')
+	_ = str
+}
+
+// Test hot config reload
+// Here we forgot to add FunkyLogger so backend will fail to init
+
+func TestReloadConfig(t *testing.T) {
+	os.Truncate("tests/testlog", 0)
+	d := Daemon{}
+	d.Start()
+
+	cfg := &AppConfig{
+		LogFile:       "tests/testlog",
+		AllowedHosts:  []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+	}
+	// Look mom, reloading the config without shutting down!
+	d.ReloadConfig(cfg)
+
+	d.Shutdown()
+}
+
+func TestPubSubAPI(t *testing.T) {
+
+	os.Truncate("tests/testlog", 0)
+
+	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
+	d.Start()
+
+	// new config
+	cfg := &AppConfig{
+		PidFile:       "tests/pidfile`.pid",
+		LogFile:       "tests/testlog",
+		AllowedHosts:  []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+	}
+
+	var i = 0
+	pidEvHandler := func(c *AppConfig) {
+		i++
+		if i > 1 {
+			t.Error("number > 1, it means d.Unsubscribe didn't work")
+		}
+		d.Logger.Info("number", i)
+	}
+	d.Subscribe(EventConfigPidFile, pidEvHandler)
+
+	d.ReloadConfig(cfg)
+
+	d.Unsubscribe(EventConfigPidFile, pidEvHandler)
+	cfg.PidFile = "tests/pidfile2.pid"
+	d.Publish(EventConfigPidFile, cfg)
+	d.ReloadConfig(cfg)
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets interrogate the log
+	if strings.Index(string(b), "number1") < 0 {
+		t.Error("it lools like d.ReloadConfig(cfg) did not fire EventConfigPidFile, pidEvHandler not called")
+	}
+
+}
+
+func TestAPILog(t *testing.T) {
+	os.Truncate("tests/testlog", 0)
+	d := Daemon{}
+	l := d.log()
+	l.Info("hai") // to stderr
+	if l.GetLevel() != "info" {
+		t.Error("Log level does not eq info, it is ", l.GetLevel())
+	}
+	d.Logger = nil
+	d.Config = &AppConfig{LogFile: "tests/testlog"}
+	l = d.log()
+	l.Info("hai") // to tests/testlog
+
+	//
+	l = d.log()
+	if l.GetLogDest() != "tests/testlog" {
+		t.Error("log dest is not tests/testlog, it was ", l.GetLogDest())
+	}
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets interrogate the log
+	if strings.Index(string(b), "hai") < 0 {
+		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
 }

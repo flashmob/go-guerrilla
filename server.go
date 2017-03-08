@@ -423,7 +423,6 @@ func (server *server) handleClient(client *client) {
 						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
 						client.PushRcpt(to)
-						server.log.Info("Server backend is: ", server.backend)
 						rcptError := server.backend().ValidateRcpt(client.Envelope)
 						if rcptError != nil {
 							client.PopRcpt()

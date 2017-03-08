@@ -373,6 +373,7 @@ func (g *guerrilla) subscribeEvents() {
 			if err := newBackend.Start(); err != nil {
 				logger.WithError(err).Error("backend could not start")
 			}
+			logger.Info("new backend started")
 			g.storeBackend(newBackend)
 		}
 	})

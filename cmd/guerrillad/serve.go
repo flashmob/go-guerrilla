@@ -147,7 +147,7 @@ func readConfig(path string, pidFile string) error {
 	} else if len(appConfig.PidFile) == 0 {
 		appConfig.PidFile = defaultPidFile
 	}
-	d.SetConfig(appConfig)
+	d.SetConfig(&appConfig)
 	return nil
 }
 
