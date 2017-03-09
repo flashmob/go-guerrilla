@@ -59,7 +59,7 @@ func (d *Daemon) Start() (err error) {
 	err = d.g.Start()
 	if err == nil {
 		if err := d.resetLogger(); err == nil {
-			d.log().Infof("main log configured to %s", d.Config.LogFile)
+			d.Log().Infof("main log configured to %s", d.Config.LogFile)
 		}
 
 	}
@@ -113,10 +113,10 @@ func (d *Daemon) ReloadConfig(c *AppConfig) error {
 	oldConfig := *d.Config
 	err := d.SetConfig(c)
 	if err != nil {
-		d.log().WithError(err).Error("Error while reloading config")
+		d.Log().WithError(err).Error("Error while reloading config")
 		return err
 	} else {
-		d.log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
 		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
 	return nil
@@ -131,10 +131,10 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 	oldConfig = *d.Config
 	_, err := d.LoadConfig(path)
 	if err != nil {
-		d.log().WithError(err).Error("Error while reloading config from file")
+		d.Log().WithError(err).Error("Error while reloading config from file")
 		return err
 	} else {
-		d.log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
 		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
 	return nil
@@ -163,7 +163,7 @@ func (d *Daemon) Unsubscribe(topic Event, handler interface{}) error {
 
 // log returns a logger that implements our log.Logger interface.
 // level is set to "info" by default
-func (d *Daemon) log() log.Logger {
+func (d *Daemon) Log() log.Logger {
 	if d.Logger != nil {
 		return d.Logger
 	}

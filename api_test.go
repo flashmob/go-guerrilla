@@ -493,18 +493,18 @@ func TestPubSubAPI(t *testing.T) {
 func TestAPILog(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	d := Daemon{}
-	l := d.log()
+	l := d.Log()
 	l.Info("hai") // to stderr
 	if l.GetLevel() != "info" {
 		t.Error("Log level does not eq info, it is ", l.GetLevel())
 	}
 	d.Logger = nil
 	d.Config = &AppConfig{LogFile: "tests/testlog"}
-	l = d.log()
+	l = d.Log()
 	l.Info("hai") // to tests/testlog
 
 	//
-	l = d.log()
+	l = d.Log()
 	if l.GetLogDest() != "tests/testlog" {
 		t.Error("log dest is not tests/testlog, it was ", l.GetLogDest())
 	}
