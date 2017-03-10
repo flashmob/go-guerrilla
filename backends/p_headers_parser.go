@@ -22,15 +22,15 @@ func init() {
 }
 
 func HeadersParser() Decorator {
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				e.ParseHeaders()
 				// next processor
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else {
 				// next processor
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 		})
 	}

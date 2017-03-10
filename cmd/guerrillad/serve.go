@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const (
@@ -66,6 +67,14 @@ func sigHandler() {
 			d.ReopenLogs()
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			mainlog.Infof("Shutdown signal caught")
+			go func() {
+				select {
+				// exit if graceful shutdown not finished in 60 sec.
+				case <-time.After(time.Second * 60):
+					mainlog.Error("graceful shutdown timed out")
+					os.Exit(1)
+				}
+			}()
 			d.Shutdown()
 			mainlog.Infof("Shutdown completed, exiting.")
 			return

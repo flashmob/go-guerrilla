@@ -10,6 +10,7 @@ import (
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
 )
 
@@ -67,7 +68,7 @@ func TestHandleClient(t *testing.T) {
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1, mainlog)
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

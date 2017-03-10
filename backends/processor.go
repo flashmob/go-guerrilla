@@ -31,7 +31,7 @@ type Processor interface {
 // Signature of Processor
 type ProcessWith func(*mail.Envelope, SelectTask) (Result, error)
 
-// Make ProcessorFunc will satisfy the Processor interface
+// Make ProcessWith will satisfy the Processor interface
 func (f ProcessWith) Process(e *mail.Envelope, task SelectTask) (Result, error) {
 	// delegate to the anonymous function
 	return f(e, task)

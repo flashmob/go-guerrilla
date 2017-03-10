@@ -46,7 +46,7 @@ func Header() Decorator {
 		return nil
 	}))
 
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
@@ -64,10 +64,10 @@ func Header() Decorator {
 				// save the result
 				e.DeliveryHeader = addHead
 				// next processor
-				return c.Process(e, task)
+				return p.Process(e, task)
 
 			} else {
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 		})
 	}

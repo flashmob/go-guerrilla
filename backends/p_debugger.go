@@ -38,7 +38,7 @@ func Debugger() Decorator {
 		return nil
 	})
 	Svc.AddInitializer(initFunc)
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				if config.LogReceivedMails {
@@ -46,9 +46,9 @@ func Debugger() Decorator {
 					Log().Info("Headers are:", e.Header)
 				}
 				// continue to the next Processor in the decorator stack
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else {
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 		})
 	}

@@ -37,8 +37,14 @@ type BackendGateway struct {
 }
 
 type GatewayConfig struct {
-	WorkersSize    int    `json:"save_workers_size,omitempty"`
+	// WorkersSize controls how many concurrent workers to start. Defaults to 1
+	WorkersSize int `json:"save_workers_size,omitempty"`
+	// ProcessorStack controls which processors to chain in a stack.
 	ProcessorStack string `json:"process_stack,omitempty"`
+	// TimeoutSave is the number of seconds before timeout when saving an email
+	TimeoutSave int `json:"gw_save_timeout,omitempty"`
+	// TimeoutValidateRcpt is how many seconds before timeout when validating a recipient
+	TimeoutValidateRcpt int `json:"gw_val_rcpt_timeout,omitempty"`
 }
 
 // workerMsg is what get placed on the BackendGateway.saveMailChan channel
@@ -61,8 +67,11 @@ const (
 	BackendStateError
 	BackendStateInitialized
 
-	processTimeout   = time.Second * 30
-	defaultProcessor = "Debugger"
+	// default timeout for saving email, if 'gw_save_timeout' not present in config
+	saveTimeout = time.Second * 30
+	// default timeout for validating rcpt to, if 'gw_val_rcpt_timeout' not present in config
+	validateRcptTimeout = time.Second * 5
+	defaultProcessor    = "Debugger"
 )
 
 func (s backendState) String() string {
@@ -114,11 +123,10 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 		}
 		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
 
-	case <-time.After(processTimeout):
-		Log().Infof("Backend has timed out")
+	case <-time.After(gw.saveTimeout()):
+		Log().Error("Backend has timed out while saving eamil")
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
-
 }
 
 // ValidateRcpt asks one of the workers to validate the recipient
@@ -139,8 +147,8 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 		}
 		return nil
 
-	case <-time.After(time.Second):
-		Log().Infof("Backend has timed out")
+	case <-time.After(gw.validateRcptTimeout()):
+		Log().Error("Backend has timed out while validating rcpt")
 		return StorageTimeout
 	}
 }
@@ -295,6 +303,22 @@ func (gw *BackendGateway) workersSize() int {
 	return gw.gwConfig.WorkersSize
 }
 
+// saveTimeout returns the maximum amount of seconds to wait before timing out a save processing task
+func (gw *BackendGateway) saveTimeout() time.Duration {
+	if gw.gwConfig.TimeoutSave == 0 {
+		return saveTimeout
+	}
+	return time.Duration(gw.gwConfig.TimeoutSave)
+}
+
+// validateRcptTimeout returns the maximum amount of seconds to wait before timing out a recipient validation  task
+func (gw *BackendGateway) validateRcptTimeout() time.Duration {
+	if gw.gwConfig.TimeoutValidateRcpt == 0 {
+		return validateRcptTimeout
+	}
+	return time.Duration(gw.gwConfig.TimeoutValidateRcpt)
+}
+
 func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, workerId int, stop chan bool) {
 
 	defer func() {
@@ -317,6 +341,7 @@ func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, wo
 				Log().Debugf("worker stopped (#%d)", workerId)
 				return
 			}
+			msg.e.Lock()
 			if msg.task == TaskSaveMail {
 				// process the email here
 				// TODO we should check the err
@@ -338,6 +363,7 @@ func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, wo
 					msg.notifyMe <- &notifyMsg{err: nil}
 				}
 			}
+			msg.e.Unlock()
 		}
 	}
 }

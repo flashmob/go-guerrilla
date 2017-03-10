@@ -50,11 +50,13 @@ type client struct {
 	log       log.Logger
 }
 
-// Allocate a new client
-func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
+// NewClient allocates a new client.
+func NewClient(conn net.Conn, clientID uint64, logger log.Logger, envelope *mail.Pool) *client {
 	c := &client{
-		conn:        conn,
-		Envelope:    mail.NewEnvelope(getRemoteAddr(conn), clientID),
+		conn: conn,
+		// Envelope will be borrowed from the envelope pool
+		// the envelope could be 'detached' from the client later when processing
+		Envelope:    envelope.Borrow(getRemoteAddr(conn), clientID),
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
@@ -153,7 +155,7 @@ func (c *client) closeConn() {
 }
 
 // init is called after the client is borrowed from the pool, to get it ready for the connection
-func (c *client) init(conn net.Conn, clientID uint64) {
+func (c *client) init(conn net.Conn, clientID uint64, ep *mail.Pool) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)
@@ -164,8 +166,8 @@ func (c *client) init(conn net.Conn, clientID uint64) {
 	c.ConnectedAt = time.Now()
 	c.ID = clientID
 	c.errors = 0
-	c.Envelope.Reseed(getRemoteAddr(conn), clientID)
-
+	// borrow an envelope from the envelope pool
+	c.Envelope = ep.Borrow(getRemoteAddr(conn), clientID)
 }
 
 // getID returns the client's unique ID

@@ -84,7 +84,7 @@ func Redis() Decorator {
 
 	var redisErr error
 
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
@@ -119,10 +119,10 @@ func Redis() Decorator {
 					Log().Error("Redis needs a Hash() process before it")
 				}
 
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else {
 				// nothing to do for this task
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 
 		})

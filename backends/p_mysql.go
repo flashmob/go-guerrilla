@@ -166,7 +166,7 @@ func MySql() Decorator {
 		return nil
 	}))
 
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
@@ -217,7 +217,7 @@ func MySql() Decorator {
 				stmt := mp.prepareInsertQuery(1, db)
 				mp.doQuery(1, db, stmt, &vals)
 				// continue to the next Processor in the decorator chain
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else if task == TaskValidateRcpt {
 				// if you need to validate the e.Rcpt then change to:
 				if len(e.RcptTo) > 0 {
@@ -229,9 +229,9 @@ func MySql() Decorator {
 						return NewResult(response.Canned.FailNoSenderDataCmd), NoSuchUser
 					}
 				}
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else {
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 
 		})

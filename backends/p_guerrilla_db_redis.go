@@ -9,6 +9,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/go-sql-driver/mysql"
 	"io"
+	"math/rand"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -36,7 +37,7 @@ func init() {
 var queryBatcherId = 0
 
 // how many rows to batch at a time
-const GuerrillaDBAndRedisBatchMax = 2
+const GuerrillaDBAndRedisBatchMax = 50
 
 // tick on every...
 const GuerrillaDBAndRedisBatchTimeout = time.Second * 3
@@ -46,6 +47,8 @@ type GuerrillaDBAndRedisBackend struct {
 	batcherWg sync.WaitGroup
 	// cache prepared queries
 	cache stmtCache
+
+	batcherStoppers []chan bool
 }
 
 // statement cache. It's an array, not slice
@@ -61,6 +64,7 @@ type guerrillaDBAndRedisConfig struct {
 	RedisExpireSeconds int    `json:"redis_expire_seconds"`
 	RedisInterface     string `json:"redis_interface"`
 	PrimaryHost        string `json:"primary_mail_host"`
+	BatchTimeout       int    `json:"redis_mysql_batch_timeout,omitempty"`
 }
 
 // Load the backend config for the backend. It has already been unmarshalled
@@ -170,7 +174,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	return stmt
 }
 
-func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
+func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) error {
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
@@ -189,9 +193,13 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	// prepare the query used to insert when rows reaches batchMax
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
+	//if rand.Intn(2) == 1 {
+	//	return errors.New("uggabooka")
+	//}
 	if execErr != nil {
 		Log().WithError(execErr).Error("There was a problem the insert")
 	}
+	return execErr
 }
 
 // Batches the rows from the feeder chan in to a single INSERT statement.
@@ -201,7 +209,12 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 // The goroutine can either exit if there's a panic or feeder channel closes
 // it returns feederOk which signals if the feeder chanel was ok (still open) while returning
 // if it feederOk is false, then it means the feeder chanel is closed
-func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{}, db *sql.DB) (feederOk bool) {
+func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
+	feeder feedChan,
+	db *sql.DB,
+	batcherId int,
+	stop chan bool) (feederOk bool) {
+
 	// controls shutdown
 	defer g.batcherWg.Done()
 	g.batcherWg.Add(1)
@@ -209,22 +222,40 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	var vals []interface{}
 	// how many rows were batched
 	count := 0
-	// The timer will tick every second.
+	// The timer will tick x seconds.
 	// Interrupting the select clause when there's no data on the feeder channel
-	t := time.NewTimer(GuerrillaDBAndRedisBatchTimeout)
+	timeo := GuerrillaDBAndRedisBatchTimeout
+	if g.config.BatchTimeout > 0 {
+		timeo = time.Duration(g.config.BatchTimeout)
+	}
+	t := time.NewTimer(timeo)
 	// prepare the query used to insert when rows reaches batchMax
 	insertStmt := g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
 	// inserts executes a batched insert query, clears the vals and resets the count
-	insert := func(c int) {
+	inserter := func(c int) {
 		if c > 0 {
-			g.doQuery(c, db, insertStmt, &vals)
+			err := g.doQuery(c, db, insertStmt, &vals)
+			if err != nil {
+				// maybe connection prob?
+				// retry the sql query
+				attempts := 3
+				for i := 0; i < attempts; i++ {
+					Log().Infof("retrying query query rows[%c] ", c)
+					time.Sleep(time.Second)
+					err = g.doQuery(c, db, insertStmt, &vals)
+					if err == nil {
+						continue
+					}
+				}
+			}
 		}
 		vals = nil
 		count = 0
 	}
+	rand.Seed(time.Now().UnixNano())
 	defer func() {
 		if r := recover(); r != nil {
-			Log().Error("insertQueryBatcher caught a panic", r)
+			Log().Error("insertQueryBatcher caught a panic", r, string(debug.Stack()))
 		}
 	}()
 	// Keep getting values from feeder and add to batch.
@@ -234,30 +265,33 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(feeder chan []interface{
 	for {
 		select {
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
-		case row, feederOk := <-feeder:
-			if row == nil {
-				Log().Infof("MySQL query batcher exiting (#%d)", queryBatcherId)
-				// Insert any remaining rows
-				insert(count)
-				return feederOk
-			}
+		case <-stop:
+			Log().Infof("MySQL query batcher stopped (#%d)", batcherId)
+			// Insert any remaining rows
+			inserter(count)
+			feederOk = false
+			close(feeder)
+			return
+		case row := <-feeder:
+
 			vals = append(vals, row...)
 			count++
-			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", queryBatcherId)
+			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", batcherId)
 			if count >= GuerrillaDBAndRedisBatchMax {
-				insert(GuerrillaDBAndRedisBatchMax)
+				inserter(GuerrillaDBAndRedisBatchMax)
 			}
 			// stop timer from firing (reset the interrupt)
 			if !t.Stop() {
+				// darin the timer
 				<-t.C
 			}
-			t.Reset(GuerrillaDBAndRedisBatchTimeout)
+			t.Reset(timeo)
 		case <-t.C:
 			// anything to insert?
 			if n := len(vals); n > 0 {
-				insert(count)
+				inserter(count)
 			}
-			t.Reset(GuerrillaDBAndRedisBatchTimeout)
+			t.Reset(timeo)
 		}
 	}
 }
@@ -271,14 +305,23 @@ func trimToLimit(str string, limit int) string {
 }
 
 func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
+	tOut := GuerrillaDBAndRedisBatchTimeout
+	if g.config.BatchTimeout > 0 {
+		tOut = time.Duration(g.config.BatchTimeout)
+	}
+	tOut += 10
+	// don't go to 30 sec or more
+	if tOut >= 30 {
+		tOut = 29
+	}
 	conf := mysql.Config{
 		User:         g.config.MysqlUser,
 		Passwd:       g.config.MysqlPass,
 		DBName:       g.config.MysqlDB,
 		Net:          "tcp",
 		Addr:         g.config.MysqlHost,
-		ReadTimeout:  GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
-		WriteTimeout: GuerrillaDBAndRedisBatchTimeout + (time.Second * 10),
+		ReadTimeout:  tOut * time.Second,
+		WriteTimeout: tOut * time.Second,
 		Params:       map[string]string{"collation": "utf8_general_ci"},
 	}
 	if db, err := sql.Open("mysql", conf.FormatDSN()); err != nil {
@@ -307,6 +350,8 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 	return nil
 }
 
+type feedChan chan []interface{}
+
 // GuerrillaDbReddis is a specialized processor for Guerrilla mail. It is here as an example.
 // It's an example of a 'monolithic' processor.
 func GuerrillaDbReddis() Decorator {
@@ -319,9 +364,12 @@ func GuerrillaDbReddis() Decorator {
 
 	var redisErr error
 
-	feeder := make(chan []interface{}, 1)
+	var feeders []feedChan
+
+	g.batcherStoppers = make([]chan bool, 0)
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
+
 		configType := BaseConfig(&guerrillaDBAndRedisConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 		if err != nil {
@@ -332,37 +380,45 @@ func GuerrillaDbReddis() Decorator {
 		if err != nil {
 			return err
 		}
+		queryBatcherId++
 		// start the query SQL batching where we will send data via the feeder channel
-		go func() {
-			queryBatcherId++
+		stop := make(chan bool)
+		feeder := make(feedChan, 1)
+		go func(qbID int, stop chan bool) {
+			// we loop so that if insertQueryBatcher panics, it can recover and go in again
 			for {
-				if feederOK := g.insertQueryBatcher(feeder, db); !feederOK {
-					Log().Debugf("insertQueryBatcher exited (#%d)", queryBatcherId)
+				if feederOK := g.insertQueryBatcher(feeder, db, qbID, stop); !feederOK {
+					Log().Debugf("insertQueryBatcher exited (#%d)", qbID)
 					return
 				}
-				// if insertQueryBatcher panics, it can recover and go in again
 				Log().Debug("resuming insertQueryBatcher")
 			}
-		}()
+		}(queryBatcherId, stop)
+		g.batcherStoppers = append(g.batcherStoppers, stop)
+		feeders = append(feeders, feeder)
 		return nil
 	}))
 
 	Svc.AddShutdowner(ShutdownWith(func() error {
 		db.Close()
+		Log().Infof("closed mysql")
 		if redisClient.conn != nil {
 			Log().Infof("closed redis")
 			redisClient.conn.Close()
 		}
-		// close the feeder & wait for query batcher to exit.
-		close(feeder)
+		// send a close signal to all query batchers to exit.
+		for i := range g.batcherStoppers {
+			g.batcherStoppers[i] <- true
+		}
 		g.batcherWg.Wait()
+
 		return nil
 	}))
 
 	var vals []interface{}
 	data := newCompressedData()
 
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				Log().Debug("Got mail from chan,", e.RemoteIP)
@@ -414,12 +470,12 @@ func GuerrillaDbReddis() Decorator {
 					e.RemoteIP,
 					trimToLimit(e.MailFrom.String(), 255),
 					e.TLS)
-				// give the values to the query batcher
-				feeder <- vals
-				return c.Process(e, task)
+				// give the values to a random query batcher
+				feeders[rand.Intn(len(feeders))] <- vals
+				return p.Process(e, task)
 
 			} else {
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 		})
 	}

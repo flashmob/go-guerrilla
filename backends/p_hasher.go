@@ -31,7 +31,7 @@ func init() {
 // The hasher decorator computes a hash of the email for each recipient
 // It appends the hashes to envelope's Hashes slice.
 func Hasher() Decorator {
-	return func(c Processor) Processor {
+	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 
 			if task == TaskSaveMail {
@@ -48,9 +48,9 @@ func Hasher() Decorator {
 					sum := h2.Sum([]byte{})
 					e.Hashes = append(e.Hashes, fmt.Sprintf("%x", sum))
 				}
-				return c.Process(e, task)
+				return p.Process(e, task)
 			} else {
-				return c.Process(e, task)
+				return p.Process(e, task)
 			}
 
 		})

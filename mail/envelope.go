@@ -14,6 +14,7 @@ import (
 	"net/textproto"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -59,6 +60,8 @@ type Envelope struct {
 	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
+	// When locked, it means that the envelope is being processed by the backend
+	sync.Mutex
 }
 
 func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
@@ -263,4 +266,68 @@ func fixCharset(charset string) string {
 		return fixed_charset
 	}
 	return charset
+}
+
+// Envelopes have their own pool
+
+type Pool struct {
+	// envelopes that are ready to be borrowed
+	pool chan *Envelope
+	// semaphore to control number of maximum borrowed envelopes
+	sem chan bool
+}
+
+func NewPool(poolSize int) *Pool {
+	return &Pool{
+		pool: make(chan *Envelope, poolSize),
+		sem:  make(chan bool, poolSize),
+	}
+}
+
+func (p *Pool) Borrow(remoteAddr string, clientID uint64) *Envelope {
+	var e *Envelope
+	p.sem <- true // block the envelope until more room
+	select {
+	case e = <-p.pool:
+		e.Reseed(remoteAddr, clientID)
+	default:
+		e = NewEnvelope(remoteAddr, clientID)
+	}
+	return e
+}
+
+// Return returns an envelope back to the envelope pool
+// Note that an envelope will not be recycled while it still is
+// processing
+func (p *Pool) Return(e *Envelope) {
+	// we down't want to recycle an envelope that may still be processing
+	isUnlocked := func() <-chan bool {
+		signal := make(chan bool)
+		// make sure envelope finished processing
+		go func() {
+			// lock will block if still processing
+			e.Lock()
+			// got the lock, it means processing finished
+			e.Unlock()
+			// generate a signal
+			signal <- true
+		}()
+		return signal
+	}()
+
+	select {
+	case <-time.After(time.Second * 30):
+		// envelope still processing, we can't recycle it.
+	case <-isUnlocked:
+		// The envelope was _unlocked_, it finished processing
+		// put back in the pool or destroy
+		select {
+		case p.pool <- e:
+			//placed envelope back in pool
+		default:
+			// pool is full, don't return
+		}
+	}
+	// take a value off the semaphore to make room for more envelopes
+	<-p.sem
 }

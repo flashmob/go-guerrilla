@@ -342,7 +342,7 @@ var funkyLogger = func() backends.Decorator {
 			}),
 	)
 
-	return func(c backends.Processor) backends.Processor {
+	return func(p backends.Processor) backends.Processor {
 		return backends.ProcessWith(
 			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 				if task == backends.TaskValidateRcpt {
@@ -351,13 +351,13 @@ var funkyLogger = func() backends.Decorator {
 						"another funky recipient [%s]",
 						e.RcptTo[len(e.RcptTo)-1])
 					// if valid then forward call to the next processor in the chain
-					return c.Process(e, task)
+					return p.Process(e, task)
 					// if invalid, return a backend result
 					//return backends.NewResult(response.Canned.FailRcptCmd), nil
 				} else if task == backends.TaskSaveMail {
 					backends.Log().Info("Another funky email!")
 				}
-				return c.Process(e, task)
+				return p.Process(e, task)
 			})
 	}
 }
@@ -411,19 +411,25 @@ func talkToServer(address string) {
 	}
 	in := bufio.NewReader(conn)
 	str, err := in.ReadString('\n')
+	//	fmt.Println(str)
 	fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
 	str, err = in.ReadString('\n')
+	//	fmt.Println(str)
 	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 	str, err = in.ReadString('\n')
+	//	fmt.Println(str)
 	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
 	str, err = in.ReadString('\n')
+	//	fmt.Println(str)
 	fmt.Fprint(conn, "DATA\r\n")
 	str, err = in.ReadString('\n')
+	//	fmt.Println(str)
 	fmt.Fprint(conn, "Subject: Test subject\r\n")
 	fmt.Fprint(conn, "\r\n")
 	fmt.Fprint(conn, "A an email body\r\n")
 	fmt.Fprint(conn, ".\r\n")
 	str, err = in.ReadString('\n')
+	//	fmt.Println(str)
 	_ = str
 }
 
@@ -455,7 +461,7 @@ func TestPubSubAPI(t *testing.T) {
 
 	// new config
 	cfg := &AppConfig{
-		PidFile:       "tests/pidfile`.pid",
+		PidFile:       "tests/pidfilex.pid",
 		LogFile:       "tests/testlog",
 		AllowedHosts:  []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
@@ -494,14 +500,14 @@ func TestAPILog(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	d := Daemon{}
 	l := d.Log()
-	l.Info("hai") // to stderr
+	l.Info("logtest1") // to stderr
 	if l.GetLevel() != "info" {
 		t.Error("Log level does not eq info, it is ", l.GetLevel())
 	}
 	d.Logger = nil
 	d.Config = &AppConfig{LogFile: "tests/testlog"}
 	l = d.Log()
-	l.Info("hai") // to tests/testlog
+	l.Info("logtest1") // to tests/testlog
 
 	//
 	l = d.Log()
@@ -515,7 +521,7 @@ func TestAPILog(t *testing.T) {
 		return
 	}
 	// lets interrogate the log
-	if strings.Index(string(b), "hai") < 0 {
+	if strings.Index(string(b), "logtest1") < 0 {
 		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
 }

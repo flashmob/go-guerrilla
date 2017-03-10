@@ -3,6 +3,7 @@ package guerrilla
 import (
 	"errors"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,7 @@ type Poolable interface {
 	// ability to set read/write timeout
 	setTimeout(t time.Duration)
 	// set a new connection and client id
-	init(c net.Conn, clientID uint64)
+	init(c net.Conn, clientID uint64, ep *mail.Pool)
 	// get a unique id
 	getID() uint64
 }
@@ -121,7 +122,7 @@ func (p *Pool) GetActiveClientsCount() int {
 }
 
 // Borrow a Client from the pool. Will block if len(activeClients) > maxClients
-func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger) (Poolable, error) {
+func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger, ep *mail.Pool) (Poolable, error) {
 	p.poolGuard.Lock()
 	defer p.poolGuard.Unlock()
 
@@ -134,9 +135,9 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger) (Poolab
 	case p.sem <- true: // block the client from serving until there is room
 		select {
 		case c = <-p.pool:
-			c.init(conn, clientID)
+			c.init(conn, clientID, ep)
 		default:
-			c = NewClient(conn, clientID, logger)
+			c = NewClient(conn, clientID, logger, ep)
 		}
 		p.activeClientsAdd(c)
 

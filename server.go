@@ -61,6 +61,7 @@ type server struct {
 	logStore     atomic.Value
 	mainlogStore atomic.Value
 	backendStore atomic.Value
+	envelopePool *mail.Pool
 }
 
 type allowedHosts struct {
@@ -76,6 +77,7 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
 		mainlog:         l,
+		envelopePool:    mail.NewPool(sc.MaxClients),
 	}
 	server.backendStore.Store(b)
 	var logOpenError error
@@ -216,6 +218,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			c := p.(*client)
 			if borrow_err == nil {
 				server.handleClient(c)
+				server.envelopePool.Return(c.Envelope)
 				server.clientPool.Return(c)
 			} else {
 				server.log.WithError(borrow_err).Info("couldn't borrow a new client")
@@ -225,7 +228,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(server.clientPool.Borrow(conn, clientID, server.log))
+		}(server.clientPool.Borrow(conn, clientID, server.log, server.envelopePool))
 
 	}
 }
