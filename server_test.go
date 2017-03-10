@@ -90,6 +90,43 @@ func TestHandleClient(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestAllowsHosts(t *testing.T) {
+	s := server{}
+	allowedHosts := []string{
+		"spam4.me",
+		"grr.la",
+		"newhost.com",
+		"example.*",
+		"*.test",
+		"wild*.card",
+		"multiple*wild*cards.*",
+	}
+	s.setAllowedHosts(allowedHosts)
+
+	testTable := map[string]bool{
+		"spam4.me":                true,
+		"dont.match":              false,
+		"example.com":             true,
+		"another.example.com":     false,
+		"anything.test":           true,
+		"wild.card":               true,
+		"wild.card.com":           false,
+		"multipleXwildXcards.com": true,
+	}
+
+	for host, allows := range testTable {
+		if res := s.allowsHost(host); res != allows {
+			t.Error(host, ": expected", allows, "but got", res)
+		}
+	}
+
+	// only wildcard - should match anything
+	s.setAllowedHosts([]string{"*"})
+	if !s.allowsHost("match.me") {
+		t.Error("match.me: expected true but got false")
+	}
+}
+
 // TODO
 // - test github issue #44 and #42
 // - test other commands
