@@ -16,6 +16,7 @@ import (
 	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/response"
+	"path/filepath"
 )
 
 const (
@@ -243,6 +244,18 @@ func (server *server) allowsHost(host string) bool {
 	defer server.hosts.Unlock()
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
+	}
+	if _, ok := server.hosts.table["*"]; ok {
+		return true
+	}
+	for pattern := range server.hosts.table {
+		matched, err := filepath.Match(pattern, host)
+		if err != nil {
+			return false
+		}
+		if matched {
+			return true
+		}
 	}
 	return false
 }
