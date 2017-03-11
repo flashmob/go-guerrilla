@@ -14,19 +14,34 @@ It's a small SMTP server written in Go, for the purpose of receiving large volum
 Written for GuerrillaMail.com which processes hundreds of thousands of emails
 every hour.
 
-The purpose of this daemon is to grab the email, save it to the database
-and disconnect as quickly as possible.
+The purpose of this daemon is to grab the email, save it,
+and disconnect as quickly as possible, essentially performing the services of a
+Mail Transfer Agent (MTA).
 
-A typical user of this software would probably want to look into 
-`backends/guerrilla_db_redis.go` source file to use as an example to 
-customize for their own systems.
+A typical user of this software would probably use it as a package in their own
+Go project in order to receive and deliver email.
 
-This server does not attempt to filter HTML, check for spam or do any 
-sender verification. These steps should be performed by other programs,
- (or perhaps your own custom backend?).
-The server does not send any email including bounces.
+Go-Guerrilla allows you to customize how the email is delivered. 
+
+Out of the box, Go-Guerrilla does not attempt to filter HTML, check for spam or do any 
+sender verification. However, it comes with a modular middleware-like backend system which 
+support a range of different features and ways of delivering email. 
+See the list of available _Processors_ below.
+
 
 The software is using MIT License (MIT) - contributors welcome.
+
+### Features
+
+- Multi-server. The daemon can spawn multiple servers at once, all sharing the same backend
+for saving email.
+- Config hot-reloading. Add/Remove/Enable/Disable servers without restarting. Reload TLS configuration, and most other settings on the fly.
+- Graceful shutdown: Minimise loss of email if you need to shutdown/restart.
+- Pooling: The daemon uses pooling where possible. It's friendly to the garbage collector.
+- Modular, component based, backend system for processing email that's easy to extend.  
+- Backend system arranged in a producer/consumer type structure, making use of Go's channels.
+- Fuzz tested.
+- Can be used as a package in your Go project.
 
 ### Roadmap / Contributing & Bounties
 
