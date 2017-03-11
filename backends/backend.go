@@ -210,7 +210,8 @@ func (s *service) shutdown() Errors {
 	return errors
 }
 
-// AddProcessor adds a new processor, which becomes available to the backend_config.process_stack option
+// AddProcessor adds a new processor, which becomes available to the backend_config.save_process option
+// and also the backend_config.validate_process option
 // Use to add your own custom processor when using backends as a package, or after importing an external
 // processor.
 func (s *service) AddProcessor(name string, p ProcessorConstructor) {

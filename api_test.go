@@ -100,7 +100,7 @@ func TestSMTPCustomBackend(t *testing.T) {
 	cfg.Servers = append(cfg.Servers, sc)
 	bcfg := backends.BackendConfig{
 		"save_workers_size":  3,
-		"process_stack":      "HeadersParser|Header|Hasher|Debugger",
+		"save_process":       "HeadersParser|Header|Hasher|Debugger",
 		"log_received_mails": true,
 		"primary_mail_host":  "example.com",
 	}
@@ -126,7 +126,7 @@ func TestSMTPLoadFile(t *testing.T) {
     "backend_config" :
         {
             "log_received_mails" : true,
-            "process_stack": "HeadersParser|Header|Hasher|Debugger",
+            "save_process": "HeadersParser|Header|Hasher|Debugger",
             "save_workers_size":  3
         },
     "servers" : [
@@ -154,7 +154,7 @@ func TestSMTPLoadFile(t *testing.T) {
     "backend_config" :
         {
             "log_received_mails" : true,
-            "process_stack": "HeadersParser|Header|Hasher|Debugger",
+            "save_process": "HeadersParser|Header|Hasher|Debugger",
             "save_workers_size":  3
         },
     "servers" : [
@@ -366,9 +366,12 @@ var funkyLogger = func() backends.Decorator {
 func TestSetAddProcessor(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	cfg := &AppConfig{
-		LogFile:       "tests/testlog",
-		AllowedHosts:  []string{"grr.la"},
-		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":     "HeadersParser|Debugger|FunkyLogger",
+			"validate_process": "FunkyLogger",
+		},
 	}
 	d := Daemon{Config: cfg}
 	d.AddProcessor("FunkyLogger", funkyLogger)
@@ -442,9 +445,12 @@ func TestReloadConfig(t *testing.T) {
 	d.Start()
 
 	cfg := &AppConfig{
-		LogFile:       "tests/testlog",
-		AllowedHosts:  []string{"grr.la"},
-		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":     "HeadersParser|Debugger|FunkyLogger",
+			"validate_process": "FunkyLogger",
+		},
 	}
 	// Look mom, reloading the config without shutting down!
 	d.ReloadConfig(cfg)
@@ -461,10 +467,13 @@ func TestPubSubAPI(t *testing.T) {
 
 	// new config
 	cfg := &AppConfig{
-		PidFile:       "tests/pidfilex.pid",
-		LogFile:       "tests/testlog",
-		AllowedHosts:  []string{"grr.la"},
-		BackendConfig: backends.BackendConfig{"process_stack": "HeadersParser|Debugger|FunkyLogger"},
+		PidFile:      "tests/pidfilex.pid",
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":     "HeadersParser|Debugger|FunkyLogger",
+			"validate_process": "FunkyLogger",
+		},
 	}
 
 	var i = 0

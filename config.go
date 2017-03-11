@@ -242,12 +242,12 @@ func (c *AppConfig) setBackendDefaults() error {
 		c.BackendConfig = backends.BackendConfig{
 			"log_received_mails": true,
 			"save_workers_size":  1,
-			"process_stack":      "HeadersParser|Header|Debugger",
+			"save_process":       "HeadersParser|Header|Debugger",
 			"primary_mail_host":  h,
 		}
 	} else {
-		if _, ok := c.BackendConfig["process_stack"]; !ok {
-			c.BackendConfig["process_stack"] = "HeadersParser|Header|Debugger"
+		if _, ok := c.BackendConfig["save_process"]; !ok {
+			c.BackendConfig["save_process"] = "HeadersParser|Header|Debugger"
 		}
 		if _, ok := c.BackendConfig["primary_mail_host"]; !ok {
 			h, err := os.Hostname()

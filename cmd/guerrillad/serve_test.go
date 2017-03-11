@@ -34,7 +34,7 @@ var configJsonA = `
     ],
     "backend_config": {
     	"save_workers_size" : 1,
-    	"process_stack": "HeadersParser|Debugger",
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": true
     },
     "servers" : [
@@ -83,7 +83,7 @@ var configJsonB = `
     ],
     "backend_config": {
     	"save_workers_size" : 1,
-    	"process_stack": "HeadersParser|Debugger",
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": false
     },
     "servers" : [
@@ -130,7 +130,7 @@ var configJsonC = `
             "save_workers_size" : 3,
             "primary_mail_host":"sharklasers.com",
             "save_workers_size" : 1,
-	    "process_stack": "HeadersParser|Debugger",
+	    "save_process": "HeadersParser|Debugger",
 	    "log_received_mails": true
         },
     "servers" : [
@@ -179,7 +179,7 @@ var configJsonD = `
     ],
     "backend_config": {
         "save_workers_size" : 1,
-    	"process_stack": "HeadersParser|Debugger",
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": false
     },
     "servers" : [
@@ -229,7 +229,7 @@ var configJsonE = `
     "backend_config" :
         {
             "process_stack_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
-            "process_stack": "GuerrillaRedisDB",
+            "save_process": "GuerrillaRedisDB",
             "log_received_mails" : true,
             "mysql_db":"gmail_mail",
             "mysql_host":"127.0.0.1:3306",

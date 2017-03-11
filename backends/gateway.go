@@ -27,7 +27,8 @@ type BackendGateway struct {
 	// waits for backend workers to start/stop
 	wg           sync.WaitGroup
 	workStoppers []chan bool
-	chains       []Processor
+	processors   []Processor
+	validators   []Processor
 
 	// controls access to state
 	sync.Mutex
@@ -39,8 +40,10 @@ type BackendGateway struct {
 type GatewayConfig struct {
 	// WorkersSize controls how many concurrent workers to start. Defaults to 1
 	WorkersSize int `json:"save_workers_size,omitempty"`
-	// ProcessorStack controls which processors to chain in a stack.
-	ProcessorStack string `json:"process_stack,omitempty"`
+	// SaveProcess controls which processors to chain in a stack for saving email tasks
+	SaveProcess string `json:"save_process,omitempty"`
+	// ValidateProcess is like ProcessorStack, but for recipient validation tasks
+	ValidateProcess string `json:"validate_process,omitempty"`
 	// TimeoutSave is the number of seconds before timeout when saving an email
 	TimeoutSave int `json:"gw_save_timeout,omitempty"`
 	// TimeoutValidateRcpt is how many seconds before timeout when validating a recipient
@@ -191,10 +194,10 @@ func (gw *BackendGateway) Reinitialize() error {
 // newChain creates a new Processor by chaining multiple Processors in a call stack
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
-// This function uses the config value process_stack to figure out which Decorator to use
-func (gw *BackendGateway) newChain() (Processor, error) {
+// This function uses the config value save_process or validate_process to figure out which Decorator to use
+func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
-	cfg := strings.ToLower(strings.TrimSpace(gw.gwConfig.ProcessorStack))
+	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
 	if len(cfg) == 0 {
 		cfg = strings.ToLower(defaultProcessor)
 	}
@@ -241,14 +244,22 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			gw.State = BackendStateError
 			return errors.New("Must have at least 1 worker")
 		}
-		gw.chains = make([]Processor, 0)
+		gw.processors = make([]Processor, 0)
+		gw.validators = make([]Processor, 0)
 		for i := 0; i < workersSize; i++ {
-			p, err := gw.newChain()
+			p, err := gw.newStack(gw.gwConfig.SaveProcess)
 			if err != nil {
 				gw.State = BackendStateError
 				return err
 			}
-			gw.chains = append(gw.chains, p)
+			gw.processors = append(gw.processors, p)
+
+			v, err := gw.newStack(gw.gwConfig.ValidateProcess)
+			if err != nil {
+				gw.State = BackendStateError
+				return err
+			}
+			gw.validators = append(gw.validators, v)
 		}
 		// initialize processors
 		if err := Svc.initialize(cfg); err != nil {
@@ -282,7 +293,12 @@ func (gw *BackendGateway) Start() error {
 			stop := make(chan bool)
 			go func(workerId int, stop chan bool) {
 				// blocks here until the worker exits
-				gw.workDispatcher(gw.conveyor, gw.chains[workerId], workerId+1, stop)
+				gw.workDispatcher(
+					gw.conveyor,
+					gw.processors[workerId],
+					gw.validators[workerId],
+					workerId+1,
+					stop)
 				gw.wg.Done()
 			}(i, stop)
 			gw.workStoppers = append(gw.workStoppers, stop)
@@ -319,7 +335,12 @@ func (gw *BackendGateway) validateRcptTimeout() time.Duration {
 	return time.Duration(gw.gwConfig.TimeoutValidateRcpt)
 }
 
-func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, workerId int, stop chan bool) {
+func (gw *BackendGateway) workDispatcher(
+	workIn chan *workerMsg,
+	save Processor,
+	validate Processor,
+	workerId int,
+	stop chan bool) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -345,7 +366,7 @@ func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, wo
 			if msg.task == TaskSaveMail {
 				// process the email here
 				// TODO we should check the err
-				result, _ := p.Process(msg.e, TaskSaveMail)
+				result, _ := save.Process(msg.e, TaskSaveMail)
 				if result.Code() < 300 {
 					// if all good, let the gateway know that it was queued
 					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
@@ -354,7 +375,7 @@ func (gw *BackendGateway) workDispatcher(workIn chan *workerMsg, p Processor, wo
 					msg.notifyMe <- &notifyMsg{err: errors.New(result.String())}
 				}
 			} else if msg.task == TaskValidateRcpt {
-				_, err := p.Process(msg.e, TaskValidateRcpt)
+				_, err := validate.Process(msg.e, TaskValidateRcpt)
 				if err != nil {
 					// validation failed
 					msg.notifyMe <- &notifyMsg{err: err}

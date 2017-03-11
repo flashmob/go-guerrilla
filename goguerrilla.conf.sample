@@ -12,7 +12,7 @@
     "backend_config": {
         "log_received_mails": true,
         "save_workers_size": 1,
-        "process_stack" : "HeadersParser|Header|Debugger",
+        "save_process" : "HeadersParser|Header|Debugger",
         "primary_mail_host" : "mail.example.com"
     },
     "servers" : [

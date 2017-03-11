@@ -19,7 +19,7 @@ func TestStates(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	c := BackendConfig{
-		"process_stack":      "HeadersParser|Debugger",
+		"save_process":       "HeadersParser|Debugger",
 		"log_received_mails": true,
 		"save_workers_size":  "1",
 	}
@@ -30,10 +30,10 @@ func TestInitialize(t *testing.T) {
 		t.Error("Gateway did not init because:", err)
 		t.Fail()
 	}
-	if gateway.chains == nil {
+	if gateway.processors == nil {
 		t.Error("gateway.chains should not be nil")
-	} else if len(gateway.chains) != 1 {
-		t.Error("len(gateway.chains) should be 1, but got", len(gateway.chains))
+	} else if len(gateway.processors) != 1 {
+		t.Error("len(gateway.chains) should be 1, but got", len(gateway.processors))
 	}
 
 	if gateway.conveyor == nil {
@@ -50,7 +50,7 @@ func TestInitialize(t *testing.T) {
 
 func TestStartProcessStop(t *testing.T) {
 	c := BackendConfig{
-		"process_stack":      "HeadersParser|Debugger",
+		"save_process":       "HeadersParser|Debugger",
 		"log_received_mails": true,
 		"save_workers_size":  2,
 	}
