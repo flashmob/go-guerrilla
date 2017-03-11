@@ -30,6 +30,7 @@ test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad
 	$(GO_VARS) $(GO) test -v ./response
 	$(GO_VARS) $(GO) test -v ./backends
+	$(GO_VARS) $(GO) test -v ./mail
 
 testrace: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v . -race

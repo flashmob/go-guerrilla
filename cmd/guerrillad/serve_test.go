@@ -228,7 +228,7 @@ var configJsonE = `
     ],
     "backend_config" :
         {
-            "process_stack_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
+            "save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
             "save_process": "GuerrillaRedisDB",
             "log_received_mails" : true,
             "mysql_db":"gmail_mail",

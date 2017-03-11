@@ -7,10 +7,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/sloonz/go-qprintable"
 	"gopkg.in/iconv.v1"
 	"io"
 	"io/ioutil"
+	"mime/quotedprintable"
 	"net/textproto"
 	"regexp"
 	"strings"
@@ -238,9 +238,7 @@ func fromBase64(data string) string {
 }
 
 func fromQuotedP(data string) string {
-	buf := bytes.NewBufferString(data)
-	decoder := qprintable.NewDecoder(qprintable.BinaryEncoding, buf)
-	res, _ := ioutil.ReadAll(decoder)
+	res, _ := ioutil.ReadAll(quotedprintable.NewReader(strings.NewReader(data)))
 	return string(res)
 }
 
