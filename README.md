@@ -14,19 +14,33 @@ It's a small SMTP server written in Go, for the purpose of receiving large volum
 Written for GuerrillaMail.com which processes hundreds of thousands of emails
 every hour.
 
-The purpose of this daemon is to grab the email, save it to the database
-and disconnect as quickly as possible.
+The purpose of this daemon is to grab the email, save it,
+and disconnect as quickly as possible, essentially performing the services of a
+Mail Transfer Agent (MTA).
 
-A typical user of this software would probably want to look into
-`backends/guerrilla_db_redis.go` source file to use as an example to
-customize for their own systems.
+A typical user of this software would probably use it as a package in their own
+Go project in order to receive and deliver email.
 
-This server does not attempt to filter HTML, check for spam or do any
-sender verification. These steps should be performed by other programs,
- (or perhaps your own custom backend?).
-The server does not send any email including bounces.
+Go-Guerrilla allows you to customize how the email is delivered.
+
+Out of the box, Go-Guerrilla does not attempt to filter HTML, check for spam or do any
+sender verification. However, it comes with a modular middleware-like backend system which
+support a range of different features and ways of delivering email.
+See the list of available _Processors_ below.
 
 The software is using MIT License (MIT) - contributors welcome.
+
+### Features
+
+- Multi-server. The daemon can spawn multiple servers at once, all sharing the same backend
+for saving email.
+- Config hot-reloading. Add/Remove/Enable/Disable servers without restarting. Reload TLS configuration, and most other settings on the fly.
+- Graceful shutdown: Minimise loss of email if you need to shutdown/restart.
+- Pooling: The daemon uses pooling where possible. It's friendly to the garbage collector.
+- Modular, component based, backend system for processing email that's easy to extend.  
+- Backend system arranged in a producer/consumer type structure, making use of Go's channels.
+- Fuzz tested.
+- Can be used as a package in your Go project.
 
 ### Roadmap / Contributing & Bounties
 
@@ -172,20 +186,37 @@ Guerrilla SMTPd can also be imported and used as a package in your project.
 ## Import Guerrilla.
 ```go
 import "github.com/flashmob/go-guerrilla"
+
+
 ```
 
 ## Implement the `Backend` interface
 Or use one of the implementations in the `backends` sub-package). This is how
 your application processes emails received by the Guerrilla app.
 ```go
+import "github.com/flashmob/go-guerrilla/mail"
+import "github.com/flashmob/go-guerrilla/backends"
+
 type CustomBackend struct {...}
 
-func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult {
-  err := saveSomewhere(c.Data)
+func (cb *CustomBackend) Process(e *mail.Envelope) backends.Result {
+  err := saveSomewhere(e.NewReader())
   if err != nil {
-    return guerrilla.NewBackendResult(fmt.Sprintf("554 Error: %s", err.Error()))
+    return guerrilla.NewResult(fmt.Sprintf("554 Error: %s", err.Error()))
   }
-  return guerrilla.NewBackendResult("250 OK")
+  return guerrilla.NewResult("250 OK")
+}
+```
+
+## Create a logger
+
+```go
+import "github.com/flashmob/go-guerrilla/log"
+
+mainlog, err := log.GetLogger(log.OutputStderr.String());
+if  err != nil {
+    fmt.Println("Cannot open log:", err)
+    os.Exit(1)
 }
 ```
 
@@ -193,11 +224,11 @@ func (cb *CustomBackend) Process(c *guerrilla.Envelope) guerrilla.BackendResult 
 See Configuration section below for setting configuration options.
 ```go
 config := &guerrilla.AppConfig{
-  Servers: []*guerrilla.ServerConfig{...},
+  Servers: []guerrilla.ServerConfig{...},
   AllowedHosts: []string{...}
 }
 backend := &CustomBackend{...}
-app, err := guerrilla.New(config, backend)
+app, err := guerrilla.New(config, backend, mainlog)
 ```
 
 ## Start the app.
@@ -282,15 +313,47 @@ The Json parser is very strict on syntax. If there's a parse error and it
 doesn't give much clue, then test your syntax here:
 http://jsonlint.com/#
 
-Email Saving Backends
+Email Processing Backend
 =====================
 
-Backends provide for a modular way to save email and for the ability to
-extend this functionality. They can be swapped in or out via the config.
-Currently, the server comes with two example backends:
+The main job of a go-guerrilla backend is to validate recipients and deliver emails. The term
+"delivery" is often synonymous with saving email to secondary storage.
 
-- dummy : used for testing purposes
-- guerrilla_db_redis: example uses MySQL and Redis to store email, used on Guerrilla Mail
+The default backend implementation manages multiple workers. These workers are composed of
+smaller components called "Processors" which are chained using the config to perform a series of steps.
+Each processor specifies a distinct feature of behaviour. For example, a processor may save
+the emails to a particular storage system such as MySQL, or it may add additional headers before
+passing the email to the next _processor_.
+
+To extend or add a new feature, one would write a new Processor, then add it to the config.
+There are a few default _processors_ to get you started.
+
+### Documentation
+
+See the full documentation here:
+[About Backends: introduction, configuration, extending](https://github.com/flashmob/go-guerrilla/wiki/About-Backends:-introduction,-configuring-and-extending)
+
+### Included Processors
+
+| Processor | Description |
+|-----------|-------------|
+|Compressor|Sets a zlib compressor that other processors can use later|
+|Debugger|Logs the email envelope to help with testing|
+|Hasher|Processes each envelope to produce unique hashes to be used for ids later|
+|Header|Add a delivery header to the envelope|
+|HeadersParser|Parses MIME headers and also populates the Subject field of the envelope|
+|MySQL|Saves the emails to MySQL.|
+|Redis|Saves the email data to Redis.|
+|GuerrillaDbRedis|A 'monolithic' processor used at Guerrilla Mail; included for example
+
+### External Processors
+
+| Processor | Description |
+|-----------|-------------|
+|[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir. [MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project|
+|[FastCgi](https://github.com/flashmob/fastcgi-processor)|Deliver email directly to PHP-FPM or a similar FastCGI backend.
+
+Have a processor that you would like to share? Submit a PR to add it to the list!
 
 Web Dashboard
 =============
@@ -300,8 +363,8 @@ An optional web-based dashboard is built into Go-Guerrilla. To use it, set the d
 Releases
 ========
 
-(Master branch - Release Candidate 1 for v1.6)
-Large refactoring of the code.
+(Master branch - Release Candidate 1 for v2.0)
+Large refactoring of the code. 
 - Introduced "backends": modular architecture for saving email
 - Issue: Use as a package in your own projects! https://github.com/flashmob/go-guerrilla/issues/20
 - Issue: Do not include dot-suffix in emails https://github.com/flashmob/go-guerrilla/issues/24

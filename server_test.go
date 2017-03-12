@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"bufio"
-	"fmt"
 	"net/textproto"
 	"strings"
 	"sync"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
 )
 
@@ -42,7 +42,9 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
+	backend, err := backends.New(
+		backends.BackendConfig{"log_received_mails": true, "save_workers_size": 1},
+		mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}
@@ -66,7 +68,7 @@ func TestHandleClient(t *testing.T) {
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1, mainlog)
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -76,14 +78,14 @@ func TestHandleClient(t *testing.T) {
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
 	line, _ := r.ReadLine()
-	fmt.Println(line)
+	//	fmt.Println(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	w.PrintfLine("HELO test.test.com")
 	line, _ = r.ReadLine()
-	fmt.Println(line)
+	//fmt.Println(line)
 	w.PrintfLine("QUIT")
 	line, _ = r.ReadLine()
-	fmt.Println("line is:", line)
+	//fmt.Println("line is:", line)
 	expected := "221 2.0.0 Bye"
 	if strings.Index(line, expected) != 0 {
 		t.Error("expected", expected, "but got:", line)

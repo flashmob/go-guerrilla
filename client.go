@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ClientState indicates which part of the SMTP transaction a given client is in.
@@ -31,7 +31,7 @@ const (
 )
 
 type client struct {
-	*envelope.Envelope
+	*mail.Envelope
 	ID          uint64
 	ConnectedAt time.Time
 	KilledAt    time.Time
@@ -51,19 +51,20 @@ type client struct {
 	log       log.Logger
 }
 
-// Allocate a new client
-func NewClient(conn net.Conn, clientID uint64, logger log.Logger) *client {
+// NewClient allocates a new client.
+func NewClient(conn net.Conn, clientID uint64, logger log.Logger, envelope *mail.Pool) *client {
 	c := &client{
 		conn: conn,
-		Envelope: &envelope.Envelope{
-			RemoteAddress: getRemoteAddr(conn),
-		},
+		// Envelope will be borrowed from the envelope pool
+		// the envelope could be 'detached' from the client later when processing
+		Envelope:    envelope.Borrow(getRemoteAddr(conn), clientID),
 		ConnectedAt: time.Now(),
 		bufin:       newSMTPBufferedReader(conn),
 		bufout:      bufio.NewWriter(conn),
 		ID:          clientID,
 		log:         logger,
 	}
+
 	// used for reading the DATA state
 	c.smtpReader = textproto.NewReader(c.bufin.Reader)
 	return c
@@ -113,18 +114,14 @@ func (c *client) sendResponse(r ...interface{}) {
 // -End of DATA command
 // TLS handhsake
 func (c *client) resetTransaction() {
-	c.MailFrom = envelope.EmailAddress{}
-	c.RcptTo = []envelope.EmailAddress{}
-	c.Data.Reset()
-	c.Subject = ""
-	c.Header = nil
+	c.Envelope.ResetTransaction()
 }
 
 // isInTransaction returns true if the connection is inside a transaction.
 // A transaction starts after a MAIL command gets issued by the client.
 // Call resetTransaction to end the transaction
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := c.MailFrom == (envelope.EmailAddress{})
+	isMailFromEmpty := c.MailFrom == (mail.Address{})
 	if isMailFromEmpty {
 		return false
 	}
@@ -159,24 +156,19 @@ func (c *client) closeConn() {
 }
 
 // init is called after the client is borrowed from the pool, to get it ready for the connection
-func (c *client) init(conn net.Conn, clientID uint64) {
+func (c *client) init(conn net.Conn, clientID uint64, ep *mail.Pool) {
 	c.conn = conn
 	// reset our reader & writer
 	c.bufout.Reset(conn)
 	c.bufin.Reset(conn)
-	// reset the data buffer, keep it allocated
-	c.Data.Reset()
 	// reset session data
 	c.state = 0
 	c.KilledAt = time.Time{}
 	c.ConnectedAt = time.Now()
 	c.ID = clientID
-	c.TLS = false
 	c.errors = 0
-	c.Helo = ""
-	c.Header = nil
-	c.RemoteAddress = getRemoteAddr(conn)
-
+	// borrow an envelope from the envelope pool
+	c.Envelope = ep.Borrow(getRemoteAddr(conn), clientID)
 }
 
 // getID returns the client's unique ID

@@ -6,15 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/envelope"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -47,7 +46,6 @@ const (
 // Server listens for SMTP clients on the port specified in its config
 type server struct {
 	configStore     atomic.Value // stores guerrilla.ServerConfig
-	backend         backends.Backend
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
@@ -62,23 +60,26 @@ type server struct {
 	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
 	logStore     atomic.Value
 	mainlogStore atomic.Value
+	backendStore atomic.Value
+	envelopePool *mail.Pool
 }
 
 type allowedHosts struct {
-	table map[string]bool // host lookup table
-	m     sync.Mutex      // guard access to the map
+	table      map[string]bool // host lookup table
+	sync.Mutex                 // guard access to the map
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
 func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
 	server := &server{
-		backend:         b,
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
 		mainlog:         l,
+		envelopePool:    mail.NewPool(sc.MaxClients),
 	}
+	server.backendStore.Store(b)
 	var logOpenError error
 	if sc.LogFile == "" {
 		// none set, use the same log file as mainlog
@@ -136,6 +137,19 @@ func (s *server) configureLog() {
 	}
 }
 
+// setBackend Sets the backend to use for processing email envelopes
+func (s *server) setBackend(b backends.Backend) {
+	s.backendStore.Store(b)
+}
+
+// backend gets the backend used to process email envelopes
+func (s *server) backend() backends.Backend {
+	if b, ok := s.backendStore.Load().(backends.Backend); ok {
+		return b
+	}
+	return nil
+}
+
 // Set the timeout for the server and all clients
 func (server *server) setTimeout(seconds int) {
 	duration := time.Duration(int64(seconds))
@@ -156,8 +170,8 @@ func (server *server) isEnabled() bool {
 
 // Set the allowed hosts for the server
 func (server *server) setAllowedHosts(allowedHosts []string) {
-	defer server.hosts.m.Unlock()
-	server.hosts.m.Lock()
+	server.hosts.Lock()
+	defer server.hosts.Unlock()
 	server.hosts.table = make(map[string]bool, len(allowedHosts))
 	for _, h := range allowedHosts {
 		server.hosts.table[strings.ToLower(h)] = true
@@ -204,6 +218,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			c := p.(*client)
 			if borrow_err == nil {
 				server.handleClient(c)
+				server.envelopePool.Return(c.Envelope)
 				server.clientPool.Return(c)
 			} else {
 				server.log.WithError(borrow_err).Info("couldn't borrow a new client")
@@ -213,7 +228,7 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(server.clientPool.Borrow(conn, clientID, server.log))
+		}(server.clientPool.Borrow(conn, clientID, server.log, server.envelopePool))
 
 	}
 }
@@ -239,8 +254,8 @@ func (server *server) GetActiveClientsCount() int {
 
 // Verifies that the host is a valid recipient.
 func (server *server) allowsHost(host string) bool {
-	defer server.hosts.m.Unlock()
-	server.hosts.m.Lock()
+	server.hosts.Lock()
+	defer server.hosts.Unlock()
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
@@ -297,9 +312,9 @@ func (server *server) handleClient(client *client) {
 	}).Info("Handle client")
 
 	// Initial greeting
-	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s gr:%d",
+	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
 		sc.Hostname, Version, client.ID,
-		server.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339), runtime.NumGoroutine())
+		server.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339))
 
 	helo := fmt.Sprintf("250 %s Hello", sc.Hostname)
 	// ehlo is a multi-line reply and need additional \r\n at the end
@@ -321,7 +336,7 @@ func (server *server) handleClient(client *client) {
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
-			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -341,17 +356,17 @@ func (server *server) handleClient(client *client) {
 			input, err := server.readCommand(client, sc.MaxSize)
 			server.log.Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteIP)
 				return
 			} else if err == LineLimitExceeded {
 				client.sendResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				server.log.WithError(err).Warnf("Read error: %s", client.RemoteAddress)
+				server.log.WithError(err).Warnf("Read error: %s", client.RemoteIP)
 				client.kill()
 				break
 			}
@@ -391,28 +406,29 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
-				mail := input[10:]
-				from := envelope.EmailAddress{}
-
-				if !(strings.Index(mail, "<>") == 0) &&
-					!(strings.Index(mail, " <>") == 0) {
+				addr := input[10:]
+				if !(strings.Index(addr, "<>") == 0) &&
+					!(strings.Index(addr, " <>") == 0) {
 					// Not Bounce, extract mail.
-					from, err = extractEmail(mail)
-				}
+					if from, err := extractEmail(addr); err != nil {
+						client.sendResponse(err)
+						break
+					} else {
+						client.MailFrom = from
+						server.log.WithFields(map[string]interface{}{
+							"event":   "mailfrom",
+							"helo":    client.Helo,
+							"domain":  from.Host,
+							"address": getRemoteAddr(client.conn),
+							"id":      client.ID,
+						}).Info("Mail from")
+					}
 
-				if err != nil {
-					client.sendResponse(err)
 				} else {
-					server.log.WithFields(map[string]interface{}{
-						"event":   "mailfrom",
-						"helo":    client.Helo,
-						"domain":  from.Host,
-						"address": client.RemoteAddress,
-						"id":      client.ID,
-					}).Info("Mail from")
-					client.MailFrom = from
-					client.sendResponse(response.Canned.SuccessMailCmd)
+					// bounce has empty from address
+					client.MailFrom = mail.Address{}
 				}
+				client.sendResponse(response.Canned.SuccessMailCmd)
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
 				if len(client.RcptTo) > RFC2821LimitRecipients {
@@ -426,8 +442,15 @@ func (server *server) handleClient(client *client) {
 					if !server.allowsHost(to.Host) {
 						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
 					} else {
-						client.RcptTo = append(client.RcptTo, to)
-						client.sendResponse(response.Canned.SuccessRcptCmd)
+						client.PushRcpt(to)
+						rcptError := server.backend().ValidateRcpt(client.Envelope)
+						if rcptError != nil {
+							client.PopRcpt()
+							client.sendResponse(response.Canned.FailRcptCmd + " " + rcptError.Error())
+						} else {
+							client.sendResponse(response.Canned.SuccessRcptCmd)
+						}
+
 					}
 				}
 
@@ -493,15 +516,16 @@ func (server *server) handleClient(client *client) {
 					client.kill()
 				}
 				server.log.WithError(err).Warn("Error reading data")
+				client.resetTransaction()
 				break
 			}
 
-			res := server.backend.Process(client.Envelope)
+			res := server.backend().Process(client.Envelope)
 			if res.Code() < 300 {
 				client.messagesSent++
 				server.log.WithFields(map[string]interface{}{
 					"helo":          client.Helo,
-					"remoteAddress": client.RemoteAddress,
+					"remoteAddress": getRemoteAddr(client.conn),
 					"success":       true,
 				}).Info("Received message")
 			}
@@ -521,7 +545,7 @@ func (server *server) handleClient(client *client) {
 					advertiseTLS = ""
 					client.resetTransaction()
 				} else {
-					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteAddress)
+					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}

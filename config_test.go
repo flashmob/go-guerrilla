@@ -22,9 +22,8 @@ var configJsonA = `
 {
     "log_file" : "./tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/go-guerrilla.pid",
+    "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -38,7 +37,7 @@ var configJsonA = `
             "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":true,
+            "start_tls_on":false,
             "tls_always_on":false,
             "max_clients": 2
         },
@@ -64,7 +63,7 @@ var configJsonA = `
             "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:9999",
-            "start_tls_on":true,
+            "start_tls_on":false,
             "tls_always_on":false,
             "max_clients": 2
         },
@@ -77,7 +76,7 @@ var configJsonA = `
             "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:3333",
-            "start_tls_on":true,
+            "start_tls_on":false,
             "tls_always_on":false,
             "max_clients": 2
         }
@@ -96,9 +95,8 @@ var configJsonB = `
 {
     "log_file" : "./tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/different-go-guerrilla.pid",
+    "pid_file" : "tests/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -126,6 +124,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:2527",
             "start_tls_on":true,
             "tls_always_on":false,
+            "log_file" : "./tests/testlog",
             "max_clients": 2
         },
 
@@ -138,7 +137,7 @@ var configJsonB = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
             "start_tls_on":false,
-            "tls_always_on":true,
+            "tls_always_on":false,
             "max_clients":1
         },
 
@@ -182,7 +181,7 @@ func TestSampleConfig(t *testing.T) {
 		ac := &AppConfig{}
 		if err := ac.Load(jsonBytes); err != nil {
 			// sample config can have broken tls certs
-			if strings.Index(err.Error(), "could not stat key") != 0 {
+			if strings.Index(err.Error(), "cannot use TLS config for [127.0.0.1:25") != 0 {
 				t.Error("Cannot load config", fileName, "|", err)
 				t.FailNow()
 			}
@@ -199,39 +198,46 @@ func TestConfigChangeEvents(t *testing.T) {
 	oldconf.Load([]byte(configJsonA))
 	logger, _ := log.GetLogger(oldconf.LogFile)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, _ := backends.New("dummy", bcfg, logger)
-	app, _ := New(oldconf, backend, logger)
+	backend, err := backends.New(bcfg, logger)
+	if err != nil {
+		t.Error("cannot create backend", err)
+	}
+	app, err := New(oldconf, backend, logger)
+	if err != nil {
+		t.Error("cannot create daemon", err)
+	}
 	// simulate timestamp change
+
 	time.Sleep(time.Second + time.Millisecond*500)
 	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
-	newconf.Servers[0].LogFile = "/dev/stderr" // test for log file change
-	newconf.LogLevel = "off"
+	newconf.Servers[0].LogFile = "off" // test for log file change
+	newconf.LogLevel = "info"
 	newconf.LogFile = "off"
-	expectedEvents := map[string]bool{
-		"config_change:pid_file":        false,
-		"config_change:log_file":        false,
-		"config_change:log_level":       false,
-		"config_change:allowed_hosts":   false,
-		"server_change:new_server":      false, // 127.0.0.1:4654 will be added
-		"server_change:remove_server":   false, // 127.0.0.1:9999 server removed
-		"server_change:stop_server":     false, // 127.0.0.1:3333: server (disabled)
-		"server_change:new_log_file":    false, // 127.0.0.1:2526
-		"server_change:reopen_log_file": false, // 127.0.0.1:2527
-		"server_change:timeout":         false, // 127.0.0.1:2526 timeout
+	expectedEvents := map[Event]bool{
+		EventConfigPidFile:         false,
+		EventConfigLogFile:         false,
+		EventConfigLogLevel:        false,
+		EventConfigAllowedHosts:    false,
+		EventConfigServerNew:       false, // 127.0.0.1:4654 will be added
+		EventConfigServerRemove:    false, // 127.0.0.1:9999 server removed
+		EventConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
+		EventConfigServerLogFile:   false, // 127.0.0.1:2526
+		EventConfigServerLogReopen: false, // 127.0.0.1:2527
+		EventConfigServerTimeout:   false, // 127.0.0.1:2526 timeout
 		//"server_change:tls_config":    false, // 127.0.0.1:2526
-		"server_change:max_clients": false, // 127.0.0.1:2526
-		"server_change:tls_config":  false, // 127.0.0.1:2527 timestamp changed on certificates
+		EventConfigServerMaxClients: false, // 127.0.0.1:2526
+		EventConfigServerTLSConfig:  false, // 127.0.0.1:2527 timestamp changed on certificates
 	}
-	toUnsubscribe := map[string]func(c *AppConfig){}
-	toUnsubscribeS := map[string]func(c *ServerConfig){}
+	toUnsubscribe := map[Event]func(c *AppConfig){}
+	toUnsubscribeSrv := map[Event]func(c *ServerConfig){}
 
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
-		func(e string) {
-			if strings.Index(e, "config_change") != -1 {
+		func(e Event) {
+			if strings.Index(e.String(), "config_change") != -1 {
 				f := func(c *AppConfig) {
 					expectedEvents[e] = true
 				}
@@ -243,7 +249,7 @@ func TestConfigChangeEvents(t *testing.T) {
 					expectedEvents[e] = true
 				}
 				app.Subscribe(event, f)
-				toUnsubscribeS[event] = f
+				toUnsubscribeSrv[event] = f
 			}
 
 		}(event)
@@ -255,7 +261,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	for unevent, unfun := range toUnsubscribe {
 		app.Unsubscribe(unevent, unfun)
 	}
-	for unevent, unfun := range toUnsubscribeS {
+	for unevent, unfun := range toUnsubscribeSrv {
 		app.Unsubscribe(unevent, unfun)
 	}
 	for event, val := range expectedEvents {

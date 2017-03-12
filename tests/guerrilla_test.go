@@ -64,7 +64,7 @@ func init() {
 	} else {
 		setupCerts(config)
 		logger, _ = log.GetLogger(config.LogFile)
-		backend, _ := getBackend("dummy", config.BackendConfig, logger)
+		backend, _ := getBackend(config.BackendConfig, logger)
 		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
@@ -75,9 +75,8 @@ var configJson = `
 {
     "log_file" : "./testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/go-guerrilla.pid",
+    "pid_file" : "go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -114,8 +113,13 @@ var configJson = `
 }
 `
 
-func getBackend(backendName string, backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
-	return backends.New(backendName, backendConfig, l)
+func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
+	b, err := backends.New(backendConfig, l)
+	if err != nil {
+		fmt.Println("backend init error", err)
+		os.Exit(1)
+	}
+	return b, err
 }
 
 func setupCerts(c *TestConfig) {
@@ -189,7 +193,6 @@ func TestGreeting(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-
 		// 1. plaintext connection
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
 		if err != nil {
@@ -237,6 +240,7 @@ func TestGreeting(t *testing.T) {
 		conn.Close()
 
 	} else {
+		fmt.Println("Nope", startErrors)
 		if startErrors := app.Start(); startErrors != nil {
 			t.Error(startErrors)
 			t.FailNow()
@@ -333,6 +337,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			}
 
 			for i := 0; i < 101; i++ {
+				//fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
 				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break
@@ -1097,7 +1102,7 @@ func TestDataCommand(t *testing.T) {
 				bufin,
 				email+"\r\n.\r\n")
 			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK : queued as s0m3l337Ha5hva1u3LOL"
+			expected := "250 2.0.0 OK : queued as "
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}

@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
@@ -91,21 +92,24 @@ func applyConfig(c *Config) {
 }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {
+	var sess *session
 	cookie, err := r.Cookie("SID")
+	fmt.Println("cookie", cookie, err.Error())
 	if err != nil {
-		// TODO error
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-	sess, sidExists := sessions[cookie.Value]
-	if !sidExists {
-		// No SID cookie
+		// Haven't set this cookie yet.
 		sess = startSession(w, r)
+	} else {
+		var sidExists bool
+		sess, sidExists = sessions[cookie.Value]
+		if !sidExists {
+			// No SID cookie in our store, start a new session
+			sess = startSession(w, r)
+		}
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		// TODO Internal error
 		return
 	}
 	sess.ws = conn
