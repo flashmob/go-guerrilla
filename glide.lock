@@ -1,5 +1,5 @@
-hash: f50310b578ee0843edaa21515f34e04d659a39b4d2ee77cc5046152ba5c93003
-updated: 2017-03-12T16:16:53.851633642-07:00
+hash: 9b3a0edd571c70602c69b140883f5f14b8cfb151dc4ee54fb21acba4772f69ab
+updated: 2017-03-12T17:09:35.504459835-07:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
@@ -13,9 +13,9 @@ imports:
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
-  version: 599cba5e7b6137d46ddf58fb1765f5d928e69604
+  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/gorilla/websocket
-  version: b258b4fadb573ac412f187b9f31974ea99d32f50
+  version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/rakyll/statik
