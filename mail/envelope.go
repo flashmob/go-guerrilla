@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const maxHeaderChunk = iota + (3 << 10) // 3KB
+const maxHeaderChunk = 1 + (3 << 10) // 3KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {

@@ -30,7 +30,7 @@
             "log_file" : "stderr"
         },
         {
-            "is_enabled" : true,
+            "is_enabled" : false,
             "host_name":"mail.test.com",
             "max_size":1000000,
             "private_key_file":"/path/to/pem/file/test.com.key",

@@ -1,0 +1,51 @@
+{
+    "log_file" : "stderr",
+    "log_level" : "info",
+    "pid_file" : "/tmp/go-guerrilla.pid",
+    "allowed_hosts": ["guerrillamail.com","guerrillamailblock.com","sharklasers.com","guerrillamail.net","guerrillamail.org","guerrillamail.biz","spam4.me","grr.la","guerrillamail.de","hinippon.com","jamitsoft.com"],
+    "backend_name" : "process-line",
+    "backend_config" :
+        {
+            "save_process_s": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql|GuerrillaRedisDB",
+            "save_process": "HeadersParser|Debugger|Hasher|Header|Compressor|GuerrillaRedisDB",
+            "log_received_mails" : true,
+            "mysql_db":"gmail_mail",
+            "mysql_host":"127.0.0.1:3306",
+            "mysql_pass":"ok",
+            "mysql_user":"root",
+            "mail_table":"new_mail",
+            "redis_interface" : "127.0.0.1:6379",
+        	"redis_expire_seconds" : 7200,
+            "save_workers_size" : 3,
+            "primary_mail_host":"sharklasers.com"
+        },
+    "servers" : [
+        {
+            "is_enabled" : true,
+            "host_name":"mail.guerrillamail.com",
+            "max_size": 100017,
+            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+            "timeout":160,
+            "listen_interface":"127.0.0.1:2526",
+            "start_tls_on":true,
+            "tls_always_on":false,
+            "max_clients": 1,
+            "log_file":"stderr"
+        },
+
+        {
+            "is_enabled" : true,
+            "host_name":"mail.guerrillamail.com",
+            "max_size":1000001,
+            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:4653",
+            "start_tls_on":false,
+            "tls_always_on":true,
+            "max_clients":1,
+            "log_file":"./server2log"
+        }
+    ]
+}

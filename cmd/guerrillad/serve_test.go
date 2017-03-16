@@ -332,7 +332,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	backend, err := backends.New(bcfg, mainlog)
 	app, err := guerrilla.New(oldconf, backend, mainlog)
 	if err != nil {
-		//log.Info("Failed to create new app", err)
+		t.Error("Failed to create new app", err)
 	}
 	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
 	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
@@ -382,7 +382,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
-	os.Truncate("../../tests/testlog", 0)
+
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 
 	mainlog, _ = log.GetLogger("../../tests/testlog")
@@ -441,7 +441,7 @@ func TestServe(t *testing.T) {
 	}
 
 	// cleanup
-
+	os.Truncate("../../tests/testlog", 0)
 	os.Remove("configJsonA.json")
 	os.Remove("./pidfile.pid")
 	os.Remove("./pidfile2.pid")
@@ -467,8 +467,8 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration) // allow the server to start
 	// now change the config by adding a server
-	conf := &CmdConfig{}                                 // blank one
-	conf.load([]byte(configJsonA))                       // load configJsonA
+	conf := &guerrilla.AppConfig{}                       // blank one
+	conf.Load([]byte(configJsonA))                       // load configJsonA
 	newServer := conf.Servers[0]                         // copy the first server config
 	newServer.ListenInterface = "127.0.0.1:2526"         // change it
 	newConf := conf                                      // copy the cmdConfg
@@ -534,8 +534,8 @@ func TestServerStartEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 	// now change the config by adding a server
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonA)) // load configJsonA
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonA)) // load configJsonA
 
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[1].IsEnabled = true
@@ -604,8 +604,8 @@ func TestServerStopEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 	// now change the config by enabling a server
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonA)) // load configJsonA
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonA)) // load configJsonA
 
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[1].IsEnabled = true
@@ -682,8 +682,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -696,8 +696,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 	time.Sleep(testPauseDuration)
 
 	// now connect and try RCPT TO with an invalid host
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
-		t.Error("Could not connect to new server", conf.AppConfig.Servers[1].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
+		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 secure.test.com Hello"
@@ -729,8 +729,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 	time.Sleep(testPauseDuration) // pause for config to reload
 
 	// now repeat the same conversion, RCPT TO should be accepted
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
-		t.Error("Could not connect to new server", conf.AppConfig.Servers[1].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
+		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 secure.test.com Hello"
@@ -785,8 +785,8 @@ func TestTLSConfigEvent(t *testing.T) {
 	mainlog, _ = log.GetLogger("../../tests/testlog")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -799,8 +799,8 @@ func TestTLSConfigEvent(t *testing.T) {
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
-		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+		if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+			t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 		} else {
 			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 				expect := "250 mail.test.com Hello"
@@ -817,7 +817,7 @@ func TestTLSConfigEvent(t *testing.T) {
 								ServerName:         "127.0.0.1",
 							})
 							if err := tlsConn.Handshake(); err != nil {
-								t.Error("Failed to handshake", conf.AppConfig.Servers[0].ListenInterface)
+								t.Error("Failed to handshake", conf.Servers[0].ListenInterface)
 							} else {
 								conn = tlsConn
 								mainlog.Info("TLS Handshake succeeded")
@@ -889,8 +889,8 @@ func TestBadTLSStart(t *testing.T) {
 		}
 		// next run the server
 		ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-		conf := &CmdConfig{}           // blank one
-		conf.load([]byte(configJsonD)) // load configJsonD
+		conf := &guerrilla.AppConfig{} // blank one
+		conf.Load([]byte(configJsonD)) // load configJsonD
 
 		cmd := &cobra.Command{}
 		configPath = "configJsonD.json"
@@ -929,8 +929,8 @@ func TestBadTLSReload(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -942,8 +942,8 @@ func TestBadTLSReload(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -969,8 +969,8 @@ func TestBadTLSReload(t *testing.T) {
 
 	// we should still be able to to talk to it
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -1006,8 +1006,8 @@ func TestSetTimeoutEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -1034,8 +1034,8 @@ func TestSetTimeoutEvent(t *testing.T) {
 	time.Sleep(testPauseDuration) // config reload
 
 	var waitTimeout sync.WaitGroup
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		waitTimeout.Add(1)
 		go func() {
@@ -1084,8 +1084,8 @@ func TestDebugLevelChange(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	conf.LogLevel = "debug"
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
@@ -1098,8 +1098,8 @@ func TestDebugLevelChange(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -1123,8 +1123,8 @@ func TestDebugLevelChange(t *testing.T) {
 	time.Sleep(testPauseDuration) // log to change
 
 	// connect again, this time we should see info
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "NOOP"); err == nil {
 			expect := "200 2.0.0 OK"

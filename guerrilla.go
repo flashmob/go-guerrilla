@@ -450,7 +450,7 @@ func (g *guerrilla) Start() error {
 
 func (g *guerrilla) Shutdown() {
 
-	// shot down the servers first
+	// shut down the servers first
 	g.mapServers(func(s *server) {
 		if s.state == ServerStateRunning {
 			s.Shutdown()

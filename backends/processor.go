@@ -46,3 +46,6 @@ type DefaultProcessor struct{}
 func (w DefaultProcessor) Process(e *mail.Envelope, task SelectTask) (Result, error) {
 	return BackendResultOK, nil
 }
+
+// if no processors specified, skip operation
+type NoopProcessor struct{ DefaultProcessor }

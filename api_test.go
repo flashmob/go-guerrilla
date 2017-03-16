@@ -257,13 +257,13 @@ func TestReopenLog(t *testing.T) {
 func TestSetConfig(t *testing.T) {
 
 	os.Truncate("test/testlog", 0)
-	cfg := &AppConfig{LogFile: "tests/testlog"}
+	cfg := AppConfig{LogFile: "tests/testlog"}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
-	d := Daemon{Config: cfg}
+	d := Daemon{Config: &cfg}
 
 	// lets add a new server
 	sc.ListenInterface = "127.0.0.1:2527"
@@ -301,13 +301,13 @@ func TestSetConfig(t *testing.T) {
 func TestSetConfigError(t *testing.T) {
 
 	os.Truncate("tests/testlog", 0)
-	cfg := &AppConfig{LogFile: "tests/testlog"}
+	cfg := AppConfig{LogFile: "tests/testlog"}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
-	d := Daemon{Config: cfg}
+	d := Daemon{Config: &cfg}
 
 	// lets add a new server with bad TLS
 	sc.ListenInterface = "127.0.0.1:2527"
@@ -444,7 +444,7 @@ func TestReloadConfig(t *testing.T) {
 	d := Daemon{}
 	d.Start()
 
-	cfg := &AppConfig{
+	cfg := AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
@@ -466,7 +466,7 @@ func TestPubSubAPI(t *testing.T) {
 	d.Start()
 
 	// new config
-	cfg := &AppConfig{
+	cfg := AppConfig{
 		PidFile:      "tests/pidfilex.pid",
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -490,7 +490,7 @@ func TestPubSubAPI(t *testing.T) {
 
 	d.Unsubscribe(EventConfigPidFile, pidEvHandler)
 	cfg.PidFile = "tests/pidfile2.pid"
-	d.Publish(EventConfigPidFile, cfg)
+	d.Publish(EventConfigPidFile, &cfg)
 	d.ReloadConfig(cfg)
 
 	b, err := ioutil.ReadFile("tests/testlog")

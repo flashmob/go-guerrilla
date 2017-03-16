@@ -33,7 +33,7 @@ var quotes = struct {
 		"214-The Dude: No, you're not wrong Walter, you're just an ass-hole." +
 		"214 Walter Sobchak: Okay then.",
 	14: "214-Private Snoop: you see what happens lebowski?" + CRLF +
-		"214-The Dude: nobody calls me lebowski, you got the wrong guy, I'm the the dude, man." + CRLF +
+		"214-The Dude: nobody calls me lebowski, you got the wrong guy, I'm the dude, man." + CRLF +
 		"214-Private Snoop: Your name's Lebowski, Lebowski. Your wife is Bunny." + CRLF +
 		"214-The Dude: My wife? Bunny? Do you see a wedding ring on my finger? " + CRLF +
 		"214 Does this place look like I'm f**kin married? The toilet seat's up man!",

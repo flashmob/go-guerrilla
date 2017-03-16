@@ -41,6 +41,8 @@ const (
 	EventConfigServerMaxClients
 	// when a server's TLS config changed
 	EventConfigServerTLSConfig
+	//
+	EventConfigPostLoad
 )
 
 var eventList = [...]string{

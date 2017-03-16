@@ -137,7 +137,7 @@ func (s *server) configureLog() {
 	}
 }
 
-// setBackend Sets the backend to use for processing email envelopes
+// setBackend sets the backend to use for processing email envelopes
 func (s *server) setBackend(b backends.Backend) {
 	s.backendStore.Store(b)
 }
