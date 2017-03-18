@@ -4,7 +4,7 @@
 Go-Guerrilla SMTP Daemon
 ====================
 
-An lightweight & modern SMTP server written in Go, made for receiving large volumes of mail.
+A lightweight SMTP server written in Go, made for receiving large volumes of mail.
 To be used as a package in your Go project, or as a stand-alone daemon by running the "guerrillad" binary.
 
 Supports MySQL and Redis out-of-the-box, with many other vendor provided _processors_,
@@ -15,7 +15,7 @@ See below for a list of available processors.
 
 ### What is Go-Guerrilla?
 
-It's an SMTP written in Go, for the purpose of receiving large volume of email.
+It's an SMTP server written in Go, for the purpose of receiving large volumes of email.
 It started as a project for GuerrillaMail.com which processes millions of emails every day,
 and needed a daemon with less bloat & written in a more memory-safe language that can 
 take advantage of modern multi-core architectures.
@@ -79,7 +79,7 @@ Getting started
 
 #### Dependencies
 
-Go-guerrilla uses [Glide](https://github.com/Masterminds/glide) to manage 
+Go-Guerrilla uses [Glide](https://github.com/Masterminds/glide) to manage 
 dependencies. If you have glide installed, just run `glide install` as usual.
  
 You can also run `$ go get ./..` if you don't want to use glide, and then run `$ make test`
@@ -138,7 +138,7 @@ import (
 
 ```
 
-You may use ``$ go get ./...`` to get all dependencies, also go-guerrilla uses 
+You may use ``$ go get ./...`` to get all dependencies, also Go-Guerrilla uses 
 [glide](https://github.com/Masterminds/glide) for dependency management.
 
 #### 2. Start a server
@@ -190,10 +190,28 @@ Please continue to the [API documentation](https://github.com/flashmob/go-guerri
 - [Pub/Sub](https://github.com/flashmob/go-guerrilla/wiki/Using-as-a-package#pubsub)
 - [More Examples](https://github.com/flashmob/go-guerrilla/wiki/Using-as-a-package#more-examples)
 
+Use as a Daemon
+==========================================================
+
+### Manual for using from the command line
+
+- [guerrillad command](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#guerrillad-command)
+    - [Starting](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#starting)
+    - [Re-loading configuration](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#re-loading-the-config)
+    - [Re-open logs](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#re-open-log-file)
+    - [Examples](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#examples)
+
+### Other topics
+
+- [Using Nginx as a proxy](https://github.com/flashmob/go-guerrilla/wiki/Using-Nginx-as-a-proxy)
+- [Testing STARTTLS](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#testing-starttls)
+- [Benchmarking](https://github.com/flashmob/go-guerrilla/wiki/Profiling#benchmarking)
+
+
 Email Processing Backend
 =====================
 
-The main job of a go-guerrilla backend is to validate recipients and deliver emails. The term
+The main job of a Go-Guerrilla backend is to validate recipients and deliver emails. The term
 "delivery" is often synonymous with saving email to secondary storage.
 
 The default backend implementation manages multiple workers. These workers are composed of 
@@ -249,16 +267,7 @@ For such purposes as load balancing, terminating TLS early,
  want to use older SSL versions), 
  it is possible to [use NGINX as a proxy](https://github.com/flashmob/go-guerrilla/wiki/Using-Nginx-as-a-proxy).
 
-Starting / Usage
-==========================================================
 
-- [guerrillad command](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#guerrillad-command)
-    - [Starting](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#starting)
-    - [Re-loading config](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#re-loading-the-config)
-    - [Re-open logs](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#re-open-log-file)
-    - [Examples](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#examples)
-- [Testing STARTTLS](https://github.com/flashmob/go-guerrilla/wiki/Running-from-command-line#testing-starttls)
-- [Benchmarking](https://github.com/flashmob/go-guerrilla/wiki/Profiling#benchmarking)
 
 Credits
 =======
