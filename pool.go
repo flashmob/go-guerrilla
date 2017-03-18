@@ -150,12 +150,13 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger, ep *mai
 
 // Return returns a Client back to the pool.
 func (p *Pool) Return(c Poolable) {
+	p.activeClientsRemove(c)
 	select {
 	case p.pool <- c:
 	default:
 		// hasta la vista, baby...
 	}
-	p.activeClientsRemove(c)
+
 	<-p.sem // make room for the next serving client
 }
 

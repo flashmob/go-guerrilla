@@ -1,5 +1,5 @@
 hash: edbacc9b8ae3fcad4c01969c3efc5d815d79ffdc544d0bd56c501018696c2285
-updated: 2017-03-11T23:00:44.323885211+11:00
+updated: 2017-03-17T11:29:21.745184616+11:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
@@ -13,7 +13,7 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/Sirupsen/logrus
-  version: 0208149b40d863d2c1a2f8fe5753096a9cf2cc8b
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/spf13/cobra
   version: b62566898a99f2db9c68ed0026aa0a052e59678d
 - name: github.com/spf13/pflag

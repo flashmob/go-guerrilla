@@ -38,7 +38,7 @@ func getMockServerConfig() *ServerConfig {
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	var logOpenError error
 	var mainlog log.Logger
-	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
@@ -62,7 +62,7 @@ func TestHandleClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
 	sc := getMockServerConfig()
-	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}

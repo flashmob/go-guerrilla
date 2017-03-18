@@ -37,13 +37,13 @@ var (
 func init() {
 	// log to stderr on startup
 	var err error
-	mainlog, err = log.GetLogger(log.OutputStderr.String())
+	mainlog, err = log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
 	if err != nil {
 		mainlog.WithError(err).Errorf("Failed creating a logger to %s", log.OutputStderr)
 	}
-	cfgFile := "goguerrilla.conf"
-	if _, err := os.Stat("goguerrilla.conf"); err != nil {
-		cfgFile = "goguerrilla.conf.json"
+	cfgFile := "goguerrilla.conf" // deprecated default name
+	if _, err := os.Stat(cfgFile); err != nil {
+		cfgFile = "goguerrilla.conf.json" // use the new name
 	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
 		cfgFile, "Path to the configuration file")
@@ -99,7 +99,6 @@ func serve(cmd *cobra.Command, args []string) {
 		mainlog.WithError(err).Fatal("Error while reading config")
 	}
 	d.SetConfig(*ac)
-	mainlog.SetLevel(ac.LogLevel)
 
 	// Check that max clients is not greater than system open file limit.
 	fileLimit := getFileLimit()

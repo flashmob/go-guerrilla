@@ -510,7 +510,7 @@ func TestAPILog(t *testing.T) {
 	d := Daemon{}
 	l := d.Log()
 	l.Info("logtest1") // to stderr
-	if l.GetLevel() != "info" {
+	if l.GetLevel() != log.InfoLevel.String() {
 		t.Error("Log level does not eq info, it is ", l.GetLevel())
 	}
 	d.Logger = nil

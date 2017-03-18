@@ -62,7 +62,7 @@ func init() {
 		initErr = errors.New("Could not Unmarshal config," + err.Error())
 	} else {
 		setupCerts(config)
-		logger, _ = log.GetLogger(config.LogFile)
+		logger, _ = log.GetLogger(config.LogFile, "debug")
 		backend, _ := getBackend(config.BackendConfig, logger)
 		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}

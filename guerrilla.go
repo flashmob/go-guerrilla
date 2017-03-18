@@ -67,7 +67,7 @@ func (ls *logStore) mainlog() log.Logger {
 	if v, ok := ls.Load().(log.Logger); ok {
 		return v
 	}
-	l, _ := log.GetLogger(log.OutputStderr.String())
+	l, _ := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
 	return l
 }
 
@@ -86,7 +86,11 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	g.setMainlog(l)
 
 	if ac.LogLevel != "" {
-		g.mainlog().SetLevel(ac.LogLevel)
+		if h, ok := l.(*log.HookedLogger); ok {
+			if h, err := log.GetLogger(h.GetLogDest(), ac.LogLevel); err == nil {
+				g.setMainlog(h)
+			}
+		}
 	}
 
 	g.state = GuerrillaStateNew
@@ -204,7 +208,7 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe(EventConfigLogFile, func(c *AppConfig) {
 		var err error
 		var l log.Logger
-		if l, err = log.GetLogger(c.LogFile); err == nil {
+		if l, err = log.GetLogger(c.LogFile, c.LogLevel); err == nil {
 			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				// it will change server's logger when the next client gets accepted
@@ -225,11 +229,14 @@ func (g *guerrilla) subscribeEvents() {
 
 	// when log level changes, apply to mainlog and server logs
 	g.Subscribe(EventConfigLogLevel, func(c *AppConfig) {
-		g.mainlog().SetLevel(c.LogLevel)
-		g.mapServers(func(server *server) {
-			server.log.SetLevel(c.LogLevel)
-		})
-		g.mainlog().Infof("log level changed to [%s]", c.LogLevel)
+		l, err := log.GetLogger(g.mainlog().GetLogDest(), c.LogLevel)
+		if err == nil {
+			g.logStore.Store(l)
+			g.mapServers(func(server *server) {
+				server.logStore.Store(l)
+			})
+			g.mainlog().Infof("log level changed to [%s]", c.LogLevel)
+		}
 	})
 
 	// write out our pid whenever the file name changes in the config
@@ -320,7 +327,8 @@ func (g *guerrilla) subscribeEvents() {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			var err error
 			var l log.Logger
-			if l, err = log.GetLogger(sc.LogFile); err == nil {
+			level := g.mainlog().GetLevel()
+			if l, err = log.GetLogger(sc.LogFile, level); err == nil {
 				g.setMainlog(l)
 				backends.Svc.SetMainlog(l)
 				// it will change to the new logger on the next accepted client
@@ -341,13 +349,13 @@ func (g *guerrilla) subscribeEvents() {
 	// when the daemon caught a sighup, event for individual server
 	g.Subscribe(EventConfigServerLogReopen, func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
-			server.log.Reopen()
+			server.log().Reopen()
 			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
 		}
 	})
 	// when the backend changes
 	g.Subscribe(EventConfigBackendConfig, func(appConfig *AppConfig) {
-		logger, _ := log.GetLogger(appConfig.LogFile)
+		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
 		// shutdown the backend first.
 		var err error
 		if err = g.backend().Shutdown(); err != nil {
@@ -472,7 +480,6 @@ func (g *guerrilla) Shutdown() {
 
 // SetLogger sets the logger for the app and propagates it to sub-packages (eg.
 func (g *guerrilla) SetLogger(l log.Logger) {
-	l.SetLevel(g.Config.LogLevel)
 	g.setMainlog(l)
 	backends.Svc.SetMainlog(l)
 }

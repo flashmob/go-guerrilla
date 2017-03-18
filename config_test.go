@@ -196,7 +196,7 @@ func TestConfigChangeEvents(t *testing.T) {
 
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
-	logger, _ := log.GetLogger(oldconf.LogFile)
+	logger, _ := log.GetLogger(oldconf.LogFile, oldconf.LogLevel)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, logger)
 	if err != nil {
@@ -213,8 +213,8 @@ func TestConfigChangeEvents(t *testing.T) {
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
-	newconf.Servers[0].LogFile = "off" // test for log file change
-	newconf.LogLevel = "info"
+	newconf.Servers[0].LogFile = log.OutputOff.String() // test for log file change
+	newconf.LogLevel = log.InfoLevel.String()
 	newconf.LogFile = "off"
 	expectedEvents := map[Event]bool{
 		EventConfigPidFile:         false,

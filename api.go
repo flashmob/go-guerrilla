@@ -48,11 +48,10 @@ func (d *Daemon) Start() (err error) {
 			return err
 		}
 		if d.Logger == nil {
-			d.Logger, err = log.GetLogger(d.Config.LogFile)
+			d.Logger, err = log.GetLogger(d.Config.LogFile, d.Config.LogLevel)
 			if err != nil {
 				return err
 			}
-			d.Logger.SetLevel(d.Config.LogLevel)
 		}
 		if d.Backend == nil {
 			d.Backend, err = backends.New(d.Config.BackendConfig, d.Logger)
@@ -200,13 +199,16 @@ func (d *Daemon) Log() log.Logger {
 		return d.Logger
 	}
 	out := log.OutputStderr.String()
-	if d.Config != nil && len(d.Config.LogFile) > 0 {
-		out = d.Config.LogFile
+	level := log.InfoLevel.String()
+	if d.Config != nil {
+		if len(d.Config.LogFile) > 0 {
+			out = d.Config.LogFile
+		}
+		if len(d.Config.LogLevel) > 0 {
+			level = d.Config.LogLevel
+		}
 	}
-	l, err := log.GetLogger(out)
-	if err == nil {
-		l.SetLevel("info")
-	}
+	l, _ := log.GetLogger(out, level)
 	return l
 
 }
@@ -231,7 +233,7 @@ func (d *Daemon) configureDefaults() error {
 // then attaches to the logs once the config is loaded.
 // This will propagate down to the servers / backend too.
 func (d *Daemon) resetLogger() error {
-	l, err := log.GetLogger(d.Config.LogFile)
+	l, err := log.GetLogger(d.Config.LogFile, d.Config.LogLevel)
 	if err != nil {
 		return err
 	}
