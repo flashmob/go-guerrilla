@@ -46,7 +46,7 @@ const procMySQLReadTimeout = time.Second * 10
 const procMySQLWriteTimeout = time.Second * 10
 
 type MysqlProcessorConfig struct {
-	MysqlTable  string `json:"mail_table"`
+	MysqlTable  string `json:"mysql_mail_table"`
 	MysqlDB     string `json:"mysql_db"`
 	MysqlHost   string `json:"mysql_host"`
 	MysqlPass   string `json:"mysql_pass"`
@@ -95,9 +95,11 @@ func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 		return g.cache[rows-1]
 	}
 	sqlstr := "INSERT INTO " + g.config.MysqlTable + " "
-	sqlstr += "(`date`, `to`, `from`, `subject`, `body`,  `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`, `message_id`)"
-	sqlstr += " values "
-	values := "(NOW(), ?, ?, ?, ? , ?, 0, ?, '', ?, 0, ?, ?, ?, ?)"
+	sqlstr += "(`date`, `to`, `from`, `subject`, `body`,  `mail`, `spam_score`, "
+	sqlstr += "`hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, "
+	sqlstr += "`return_path`, `is_tls`, `message_id`, `reply_to`, `sender`)"
+	sqlstr += " VALUES "
+	values := "(NOW(), ?, ?, ?, ? , ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)"
 	// add more rows
 	comma := ""
 	for i := 0; i < rows; i++ {
@@ -217,11 +219,26 @@ func MySql() Decorator {
 				}
 
 				for i := range e.RcptTo {
-					to = trimToLimit(strings.TrimSpace(e.RcptTo[i].User)+"@"+config.PrimaryHost, 255)
 
-					mid := m.fillAddressFromHeader(e, "Message-Id")
+					// use the To header, otherwise rcpt to
+					to = trimToLimit(m.fillAddressFromHeader(e, "To"), 255)
+					if to == "" {
+						// trimToLimit(strings.TrimSpace(e.RcptTo[i].User)+"@"+config.PrimaryHost, 255)
+						to = trimToLimit(strings.TrimSpace(e.RcptTo[i].String()), 255)
+					}
+					mid := trimToLimit(m.fillAddressFromHeader(e, "Message-Id"), 255)
 					if mid == "" {
 						mid = fmt.Sprintf("%s.%s@%s", hash, e.RcptTo[i].User, config.PrimaryHost)
+					}
+					// replyTo is the 'Reply-to' header, it may be blank
+					replyTo := trimToLimit(m.fillAddressFromHeader(e, "Reply-To"), 255)
+					// sender is the 'Sender' header, it may be blank
+					sender := trimToLimit(m.fillAddressFromHeader(e, "Sender"), 255)
+
+					recipient := trimToLimit(strings.TrimSpace(e.RcptTo[i].String()), 255)
+					contentType := ""
+					if v, ok := e.Header["Content-Type"]; ok {
+						contentType = trimToLimit(v[0], 255)
 					}
 
 					// build the values for the query
@@ -246,11 +263,14 @@ func MySql() Decorator {
 
 					vals = append(vals,
 						hash, // hash (redis hash if saved in redis)
-						to,   // recipient
+						contentType,
+						recipient,
 						m.ip2bint(e.RemoteIP).Bytes(),         // ip_addr store as varbinary(16)
 						trimToLimit(e.MailFrom.String(), 255), // return_path
-						e.TLS, // is_tls
-						mid,   // message_id
+						e.TLS,   // is_tls
+						mid,     // message_id
+						replyTo, // reply_to
+						sender,
 					)
 
 					stmt := m.prepareInsertQuery(1, db)
