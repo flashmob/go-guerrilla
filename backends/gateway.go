@@ -318,12 +318,18 @@ func (gw *BackendGateway) Start() error {
 			stop := make(chan bool)
 			go func(workerId int, stop chan bool) {
 				// blocks here until the worker exits
-				gw.workDispatcher(
-					gw.conveyor,
-					gw.processors[workerId],
-					gw.validators[workerId],
-					workerId+1,
-					stop)
+				for {
+					state := gw.workDispatcher(
+						gw.conveyor,
+						gw.processors[workerId],
+						gw.validators[workerId],
+						workerId+1,
+						stop)
+					// keep running after panic
+					if state != dispatcherStatePanic {
+						break
+					}
+				}
 				gw.wg.Done()
 			}(i, stop)
 			gw.workStoppers = append(gw.workStoppers, stop)
@@ -368,38 +374,60 @@ func (gw *BackendGateway) validateRcptTimeout() time.Duration {
 	return t
 }
 
+type dispatcherState int
+
+const (
+	dispatcherStateStopped dispatcherState = iota
+	dispatcherStateIdle
+	dispatcherStateWorking
+	dispatcherStateNotify
+	dispatcherStatePanic
+)
+
 func (gw *BackendGateway) workDispatcher(
 	workIn chan *workerMsg,
 	save Processor,
 	validate Processor,
 	workerId int,
-	stop chan bool) {
+	stop chan bool) (state dispatcherState) {
+
+	var msg *workerMsg
 
 	defer func() {
+
+		// panic recovery mechanism: it may panic when processing
+		// since processors may call arbitrary code, some may be 3rd party / unstable
+		// we need to detect the panic, and notify the backend that it failed & unlock the envelope
 		if r := recover(); r != nil {
-			// recover form closed channel
 			Log().Error("worker recovered from panic:", r, string(debug.Stack()))
+
+			if state == dispatcherStateWorking {
+				msg.notifyMe <- &notifyMsg{err: errors.New("storage failed")}
+				msg.e.Unlock()
+			}
+			state = dispatcherStatePanic
+			return
 		}
-		// close any connections / files
-		Svc.shutdown()
+		// state is dispatcherStateStopped if it reached here
+		return
 
 	}()
+	state = dispatcherStateIdle
 	Log().Infof("processing worker started (#%d)", workerId)
 	for {
 		select {
 		case <-stop:
+			state = dispatcherStateStopped
 			Log().Infof("stop signal for worker (#%d)", workerId)
 			return
-		case msg := <-workIn:
-			if msg == nil {
-				Log().Debugf("worker stopped (#%d)", workerId)
-				return
-			}
+		case msg = <-workIn:
 			msg.e.Lock()
+			state = dispatcherStateWorking
 			if msg.task == TaskSaveMail {
 				// process the email here
 				// TODO we should check the err
 				result, _ := save.Process(msg.e, TaskSaveMail)
+				state = dispatcherStateNotify
 				if result.Code() < 300 {
 					// if all good, let the gateway know that it was queued
 					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
@@ -409,6 +437,7 @@ func (gw *BackendGateway) workDispatcher(
 				}
 			} else if msg.task == TaskValidateRcpt {
 				_, err := validate.Process(msg.e, TaskValidateRcpt)
+				state = dispatcherStateNotify
 				if err != nil {
 					// validation failed
 					msg.notifyMe <- &notifyMsg{err: err}
@@ -419,6 +448,7 @@ func (gw *BackendGateway) workDispatcher(
 			}
 			msg.e.Unlock()
 		}
+		state = dispatcherStateIdle
 	}
 }
 
