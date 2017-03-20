@@ -1,5 +1,6 @@
 .idea
 goguerrilla.conf
+goguerrilla.conf.json
 /guerrillad
 vendor
 go-guerrilla.wiki
