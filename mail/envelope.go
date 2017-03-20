@@ -157,19 +157,21 @@ func (e *Envelope) ResetTransaction() {
 	e.RcptTo = []Address{}
 	// reset the data buffer, keep it allocated
 	e.Data.Reset()
+
+	// todo: these are probably good candidates for buffers / use sync.Pool
+	e.Subject = ""
+	e.Header = nil
+	e.Hashes = make([]string, 0)
+	e.DeliveryHeader = ""
+	e.Values = make(map[string]interface{})
 }
 
 // Seed is called when used with a new connection, once it's accepted
 func (e *Envelope) Reseed(RemoteIP string, clientID uint64) {
-	e.Subject = ""
 	e.RemoteIP = RemoteIP
-	e.Helo = ""
-	e.Header = nil
-	e.TLS = false
-	e.Hashes = make([]string, 0)
-	e.DeliveryHeader = ""
-	e.Values = make(map[string]interface{})
 	e.QueuedId = queuedID(clientID)
+	e.Helo = ""
+	e.TLS = false
 }
 
 // PushRcpt adds a recipient email address to the envelope
