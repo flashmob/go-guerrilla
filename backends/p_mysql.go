@@ -2,6 +2,7 @@ package backends
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/flashmob/go-guerrilla/response"
+	"math/big"
+	"net"
 	"runtime/debug"
 )
 
@@ -74,9 +77,9 @@ func (m *MysqlProcessor) connect(config *MysqlProcessorConfig) (*sql.DB, error) 
 		return nil, err
 	}
 	// do we have permission to access the table?
-	_, err = db.Query("SELECT mail_id FROM " + m.config.MysqlTable + "LIMIT 1")
+	_, err = db.Query("SELECT mail_id FROM " + m.config.MysqlTable + " LIMIT 1")
 	if err != nil {
-		Log().Error("cannot select table", err)
+		//Log().Error("cannot select table", err)
 		return nil, err
 	}
 	Log().Info("connected to mysql on tcp ", config.MysqlHost)
@@ -92,9 +95,9 @@ func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 		return g.cache[rows-1]
 	}
 	sqlstr := "INSERT INTO " + g.config.MysqlTable + " "
-	sqlstr += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
+	sqlstr += "(`date`, `to`, `from`, `subject`, `body`,  `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`, `message_id`)"
 	sqlstr += " values "
-	values := "(NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
+	values := "(NOW(), ?, ?, ?, ? , ?, 0, ?, '', ?, 0, ?, ?, ?, ?)"
 	// add more rows
 	comma := ""
 	for i := 0; i < rows; i++ {
@@ -112,8 +115,7 @@ func (g *MysqlProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	return stmt
 }
 
-func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) {
-	var execErr error
+func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) (execErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			Log().Error("Recovered form panic:", r, string(debug.Stack()))
@@ -133,6 +135,30 @@ func (g *MysqlProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *
 	if execErr != nil {
 		Log().WithError(execErr).Error("There was a problem the insert")
 	}
+	return
+}
+
+// for storing ip addresses in the ip_addr column
+func (g *MysqlProcessor) ip2bint(ip string) *big.Int {
+	bint := big.NewInt(0)
+	addr := net.ParseIP(ip)
+	if strings.Index(ip, "::") > 0 {
+		bint.SetBytes(addr.To16())
+	} else {
+		bint.SetBytes(addr.To4())
+	}
+	return bint
+}
+
+func (g *MysqlProcessor) fillAddressFromHeader(e *mail.Envelope, headerKey string) string {
+	if v, ok := e.Header[headerKey]; ok {
+		addr, err := mail.NewAddress(v[0])
+		if err != nil {
+			return ""
+		}
+		return addr.String()
+	}
+	return ""
 }
 
 func MySql() Decorator {
@@ -140,8 +166,9 @@ func MySql() Decorator {
 	var config *MysqlProcessorConfig
 	var vals []interface{}
 	var db *sql.DB
-	mp := &MysqlProcessor{}
+	m := &MysqlProcessor{}
 
+	// open the database connection (it will also check if we can select the table)
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&MysqlProcessorConfig{})
 		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
@@ -149,16 +176,15 @@ func MySql() Decorator {
 			return err
 		}
 		config = bcfg.(*MysqlProcessorConfig)
-		mp.config = config
-		db, err = mp.connect(config)
+		m.config = config
+		db, err = m.connect(config)
 		if err != nil {
-			Log().Errorf("cannot open mysql: %s", err)
 			return err
 		}
 		return nil
 	}))
 
-	// shutdown
+	// shutdown will close the database connection
 	Svc.AddShutdowner(ShutdownWith(func() error {
 		if db != nil {
 			return db.Close()
@@ -171,9 +197,10 @@ func MySql() Decorator {
 
 			if task == TaskSaveMail {
 				var to, body string
-				to = trimToLimit(strings.TrimSpace(e.RcptTo[0].User)+"@"+config.PrimaryHost, 255)
+
 				hash := ""
 				if len(e.Hashes) > 0 {
+					// if saved in redis, hash will be the redis key
 					hash = e.Hashes[0]
 					e.QueuedId = e.Hashes[0]
 				}
@@ -189,33 +216,50 @@ func MySql() Decorator {
 					body = "redis"
 				}
 
-				// build the values for the query
-				vals = []interface{}{} // clear the vals
-				vals = append(vals,
-					to,
-					trimToLimit(e.MailFrom.String(), 255),
-					trimToLimit(e.Subject, 255),
-					body)
-				if body == "redis" {
-					// data already saved in redis
-					vals = append(vals, "")
-				} else if co != nil {
-					// use a compressor (automatically adds e.DeliveryHeader)
-					vals = append(vals, co.String())
+				for i := range e.RcptTo {
+					to = trimToLimit(strings.TrimSpace(e.RcptTo[i].User)+"@"+config.PrimaryHost, 255)
 
-				} else {
-					vals = append(vals, e.String())
+					mid := m.fillAddressFromHeader(e, "Message-Id")
+					if mid == "" {
+						mid = fmt.Sprintf("%s.%s@%s", hash, e.RcptTo[i].User, config.PrimaryHost)
+					}
+
+					// build the values for the query
+					vals = []interface{}{} // clear the vals
+					vals = append(vals,
+						to,
+						trimToLimit(e.MailFrom.String(), 255), // from
+						trimToLimit(e.Subject, 255),
+						body, // body describes how to interpret the data, eg 'redis' means stored in redis, and 'gzip' stored in mysql, using gzip compression
+					)
+					// `mail` column
+					if body == "redis" {
+						// data already saved in redis
+						vals = append(vals, "")
+					} else if co != nil {
+						// use a compressor (automatically adds e.DeliveryHeader)
+						vals = append(vals, co.String())
+
+					} else {
+						vals = append(vals, e.String())
+					}
+
+					vals = append(vals,
+						hash, // hash (redis hash if saved in redis)
+						to,   // recipient
+						m.ip2bint(e.RemoteIP).Bytes(),         // ip_addr store as varbinary(16)
+						trimToLimit(e.MailFrom.String(), 255), // return_path
+						e.TLS, // is_tls
+						mid,   // message_id
+					)
+
+					stmt := m.prepareInsertQuery(1, db)
+					err := m.doQuery(1, db, stmt, &vals)
+					if err != nil {
+						return NewResult(fmt.Sprint("554 Error: could not save email")), StorageError
+					}
 				}
 
-				vals = append(vals,
-					hash,
-					to,
-					e.RemoteIP,
-					trimToLimit(e.MailFrom.String(), 255),
-					e.TLS)
-
-				stmt := mp.prepareInsertQuery(1, db)
-				mp.doQuery(1, db, stmt, &vals)
 				// continue to the next Processor in the decorator chain
 				return p.Process(e, task)
 			} else if task == TaskValidateRcpt {
@@ -225,10 +269,11 @@ func MySql() Decorator {
 					// validate only the _last_ recipient that was appended
 					last := e.RcptTo[len(e.RcptTo)-1]
 					if len(last.User) > 255 {
-						// TODO what kind of response to send?
-						return NewResult(response.Canned.FailNoSenderDataCmd), NoSuchUser
+						// return with an error
+						return NewResult(response.Canned.FailRcptCmd), NoSuchUser
 					}
 				}
+				// continue to the next processor
 				return p.Process(e, task)
 			} else {
 				return p.Process(e, task)

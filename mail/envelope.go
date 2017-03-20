@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"mime/quotedprintable"
+	"net/mail"
 	"net/textproto"
 	"regexp"
 	"strings"
@@ -32,6 +33,26 @@ func (ep *Address) String() string {
 
 func (ep *Address) IsEmpty() bool {
 	return ep.User == "" && ep.Host == ""
+}
+
+var ap = mail.AddressParser{}
+
+// NewAddress takes a string of an RFC 5322 address of the
+// form "Gogh Fir <gf@example.com>" or "foo@example.com".
+func NewAddress(str string) (Address, error) {
+	a, err := ap.Parse(str)
+	if err != nil {
+		return Address{}, err
+	}
+	pos := strings.Index(a.Address, "@")
+	if pos > 0 {
+		return Address{
+				User: a.Address[0:pos],
+				Host: a.Address[pos+1:],
+			},
+			nil
+	}
+	return Address{}, errors.New("invalid address")
 }
 
 // Email represents a single SMTP message.
@@ -130,7 +151,7 @@ func (e *Envelope) String() string {
 	return e.DeliveryHeader + e.Data.String()
 }
 
-// ResetTransaction is called when the transaction is reset (but save connection)
+// ResetTransaction is called when the transaction is reset (keeping the connection open)
 func (e *Envelope) ResetTransaction() {
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}

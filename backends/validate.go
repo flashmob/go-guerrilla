@@ -13,4 +13,5 @@ var (
 	StorageTimeout      = RcptError(errors.New("storage timeout"))
 	QuotaExceeded       = RcptError(errors.New("quota exceeded"))
 	UserSuspended       = RcptError(errors.New("user suspended"))
+	StorageError        = RcptError(errors.New("storage error"))
 )
