@@ -92,7 +92,6 @@ func Redis() Decorator {
 				if len(e.Hashes) > 0 {
 					e.QueuedId = e.Hashes[0]
 					hash = e.Hashes[0]
-
 					var stringer fmt.Stringer
 					// a compressor was set
 					if c, ok := e.Values["zlib-compressor"]; ok {
@@ -101,22 +100,22 @@ func Redis() Decorator {
 						stringer = e
 					}
 					redisErr = redisClient.redisConnection(config.RedisInterface)
-
-					if redisErr == nil {
-						_, doErr := redisClient.conn.Do("SETEX", hash, config.RedisExpireSeconds, stringer)
-						if doErr != nil {
-							redisErr = doErr
-						}
-					}
 					if redisErr != nil {
-						Log().WithError(redisErr).Warn("Error while talking to redis")
+						Log().WithError(redisErr).Warn("Error while connecting to redis")
 						result := NewResult(response.Canned.FailBackendTransaction)
 						return result, redisErr
-					} else {
-						e.Values["redis"] = "redis" // the backend system will know to look in redis for the message data
 					}
+					_, doErr := redisClient.conn.Do("SETEX", hash, config.RedisExpireSeconds, stringer)
+					if doErr != nil {
+						Log().WithError(doErr).Warn("Error while SETEX to redis")
+						result := NewResult(response.Canned.FailBackendTransaction)
+						return result, redisErr
+					}
+					e.Values["redis"] = "redis" // the next processor will know to look in redis for the message data
 				} else {
 					Log().Error("Redis needs a Hash() process before it")
+					result := NewResult(response.Canned.FailBackendTransaction)
+					return result, StorageError
 				}
 
 				return p.Process(e, task)

@@ -10,14 +10,23 @@ import (
 	"time"
 )
 
+// Daemon provides a convenient API when using go-guerrilla as a package in your Go project.
+// Is's facade for Guerrilla, AppConfig, backends.Backend and log.Logger
 type Daemon struct {
 	Config  *AppConfig
 	Logger  log.Logger
 	Backend backends.Backend
 
+	// Guerrilla will be managed through the API
 	g Guerrilla
 
 	configLoadTime time.Time
+	subs           []deferredSub
+}
+
+type deferredSub struct {
+	topic Event
+	fn    interface{}
 }
 
 const defaultInterface = "127.0.0.1:2525"
@@ -39,11 +48,10 @@ func (d *Daemon) Start() (err error) {
 			return err
 		}
 		if d.Logger == nil {
-			d.Logger, err = log.GetLogger(d.Config.LogFile)
+			d.Logger, err = log.GetLogger(d.Config.LogFile, d.Config.LogLevel)
 			if err != nil {
 				return err
 			}
-			d.Logger.SetLevel(d.Config.LogLevel)
 		}
 		if d.Backend == nil {
 			d.Backend, err = backends.New(d.Config.BackendConfig, d.Logger)
@@ -55,6 +63,11 @@ func (d *Daemon) Start() (err error) {
 		if err != nil {
 			return err
 		}
+		for i := range d.subs {
+			d.Subscribe(d.subs[i].topic, d.subs[i].fn)
+
+		}
+		d.subs = make([]deferredSub, 0)
 	}
 	err = d.g.Start()
 	if err == nil {
@@ -75,41 +88,42 @@ func (d *Daemon) Shutdown() {
 }
 
 // LoadConfig reads in the config from a JSON file.
+// Note: if d.Config is nil, the sets d.Config with the unmarshalled AppConfig which will be returned
 func (d *Daemon) LoadConfig(path string) (AppConfig, error) {
+	var ac AppConfig
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return *d.Config, fmt.Errorf("Could not read config file: %s", err.Error())
+		return ac, fmt.Errorf("Could not read config file: %s", err.Error())
 	}
-	d.Config = &AppConfig{}
-	if err := d.Config.Load(data); err != nil {
-		return *d.Config, err
+	err = ac.Load(data)
+	if err != nil {
+		return ac, err
 	}
-	d.configLoadTime = time.Now()
-	return *d.Config, nil
+	if d.Config == nil {
+		d.Config = &ac
+	}
+	return ac, nil
 }
 
 // SetConfig is same as LoadConfig, except you can pass AppConfig directly
 // does not emit any change events, instead use ReloadConfig after daemon has started
-func (d *Daemon) SetConfig(c *AppConfig) error {
-	// Config.Load takes []byte so we need to serialize
-	data, err := json.Marshal(c)
+func (d *Daemon) SetConfig(c AppConfig) error {
+	// need to call c.Load, thus need to convert the config
+	// d.load takes json bytes, marshal it
+	data, err := json.Marshal(&c)
 	if err != nil {
 		return err
 	}
-	// put the data into a fresh d.Config
-	d.Config = &AppConfig{}
-	if err := d.Config.Load(data); err != nil {
+	err = c.Load(data)
+	if err != nil {
 		return err
 	}
-	d.configLoadTime = time.Now()
+	d.Config = &c
 	return nil
 }
 
 // Reload a config using the passed in AppConfig and emit config change events
-func (d *Daemon) ReloadConfig(c *AppConfig) error {
-	if d.Config == nil {
-		return errors.New("d.Config nil")
-	}
+func (d *Daemon) ReloadConfig(c AppConfig) error {
 	oldConfig := *d.Config
 	err := d.SetConfig(c)
 	if err != nil {
@@ -124,16 +138,13 @@ func (d *Daemon) ReloadConfig(c *AppConfig) error {
 
 // Reload a config from a file and emit config change events
 func (d *Daemon) ReloadConfigFile(path string) error {
-	if d.Config == nil {
-		return errors.New("d.Config nil")
-	}
-	var oldConfig AppConfig
-	oldConfig = *d.Config
-	_, err := d.LoadConfig(path)
+	ac, err := d.LoadConfig(path)
 	if err != nil {
 		d.Log().WithError(err).Error("Error while reloading config from file")
 		return err
-	} else {
+	} else if d.Config != nil {
+		oldConfig := *d.Config
+		d.Config = &ac
 		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
 		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
@@ -142,22 +153,42 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 
 // ReopenLogs send events to re-opens all log files.
 // Typically, one would call this after rotating logs
-func (d *Daemon) ReopenLogs() {
+func (d *Daemon) ReopenLogs() error {
+	if d.Config == nil {
+		return errors.New("d.Config nil")
+	}
 	d.Config.EmitLogReopenEvents(d.g)
+	return nil
 }
 
 // Subscribe for subscribing to config change events
 func (d *Daemon) Subscribe(topic Event, fn interface{}) error {
+	if d.g == nil {
+		d.subs = append(d.subs, deferredSub{topic, fn})
+		return nil
+	}
+
 	return d.g.Subscribe(topic, fn)
 }
 
 // for publishing config change events
 func (d *Daemon) Publish(topic Event, args ...interface{}) {
+	if d.g == nil {
+		return
+	}
 	d.g.Publish(topic, args...)
 }
 
 // for unsubscribing from config change events
 func (d *Daemon) Unsubscribe(topic Event, handler interface{}) error {
+	if d.g == nil {
+		for i := range d.subs {
+			if d.subs[i].topic == topic && d.subs[i].fn == handler {
+				d.subs = append(d.subs[:i], d.subs[i+1:]...)
+			}
+		}
+		return nil
+	}
 	return d.g.Unsubscribe(topic, handler)
 }
 
@@ -168,13 +199,16 @@ func (d *Daemon) Log() log.Logger {
 		return d.Logger
 	}
 	out := log.OutputStderr.String()
-	if d.Config != nil && len(d.Config.LogFile) > 0 {
-		out = d.Config.LogFile
+	level := log.InfoLevel.String()
+	if d.Config != nil {
+		if len(d.Config.LogFile) > 0 {
+			out = d.Config.LogFile
+		}
+		if len(d.Config.LogLevel) > 0 {
+			level = d.Config.LogLevel
+		}
 	}
-	l, err := log.GetLogger(out)
-	if err == nil {
-		l.SetLevel("info")
-	}
+	l, _ := log.GetLogger(out, level)
 	return l
 
 }
@@ -199,7 +233,7 @@ func (d *Daemon) configureDefaults() error {
 // then attaches to the logs once the config is loaded.
 // This will propagate down to the servers / backend too.
 func (d *Daemon) resetLogger() error {
-	l, err := log.GetLogger(d.Config.LogFile)
+	l, err := log.GetLogger(d.Config.LogFile, d.Config.LogLevel)
 	if err != nil {
 		return err
 	}

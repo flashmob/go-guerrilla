@@ -55,8 +55,6 @@ type server struct {
 	closedListener  chan (bool)
 	hosts           allowedHosts // stores map[string]bool for faster lookup
 	state           int
-	mainlog         log.Logger
-	log             log.Logger
 	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
 	logStore     atomic.Value
 	mainlogStore atomic.Value
@@ -76,23 +74,21 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		closedListener:  make(chan (bool), 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
-		mainlog:         l,
 		envelopePool:    mail.NewPool(sc.MaxClients),
 	}
+	server.logStore.Store(l)
 	server.backendStore.Store(b)
-	var logOpenError error
-	if sc.LogFile == "" {
+	logFile := sc.LogFile
+	if logFile == "" {
 		// none set, use the same log file as mainlog
-		server.log, logOpenError = log.GetLogger(server.mainlog.GetLogDest())
-	} else {
-		server.log, logOpenError = log.GetLogger(sc.LogFile)
+		logFile = server.mainlog().GetLogDest()
 	}
+	// set level to same level as mainlog level
+	mainlog, logOpenError := log.GetLogger(logFile, server.mainlog().GetLevel())
+	server.mainlogStore.Store(mainlog)
 	if logOpenError != nil {
-		server.log.WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+		server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
 	}
-
-	// set to same level
-	server.log.SetLevel(server.mainlog.GetLevel())
 
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
@@ -120,24 +116,7 @@ func (s *server) configureSSL() error {
 	return nil
 }
 
-// configureLog checks to see if there is a new logger, so that the server.log can be safely changed
-// this function is not gorotine safe, although it'll read the new value safely
-func (s *server) configureLog() {
-	// when log changed
-	if l, ok := s.logStore.Load().(log.Logger); ok {
-		if l != s.log {
-			s.log = l
-		}
-	}
-	// when mainlog changed
-	if ml, ok := s.mainlogStore.Load().(log.Logger); ok {
-		if ml != s.mainlog {
-			s.mainlog = ml
-		}
-	}
-}
-
-// setBackend Sets the backend to use for processing email envelopes
+// setBackend sets the backend to use for processing email envelopes
 func (s *server) setBackend(b backends.Backend) {
 	s.backendStore.Store(b)
 }
@@ -191,27 +170,26 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", server.listenInterface, err.Error())
 	}
 
-	server.log.Infof("Listening on TCP %s", server.listenInterface)
+	server.log().Infof("Listening on TCP %s", server.listenInterface)
 	server.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		server.log.Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
+		server.log().Debugf("[%s] Waiting for a new client. Next Client ID: %d", server.listenInterface, clientID+1)
 		conn, err := listener.Accept()
-		server.configureLog()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				server.log.Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
+				server.log().Infof("Server [%s] has stopped accepting new clients", server.listenInterface)
 				// the listener has been closed, wait for clients to exit
-				server.log.Infof("shutting down pool [%s]", server.listenInterface)
+				server.log().Infof("shutting down pool [%s]", server.listenInterface)
 				server.clientPool.ShutdownState()
 				server.clientPool.ShutdownWait()
 				server.state = ServerStateStopped
 				server.closedListener <- true
 				return nil
 			}
-			server.mainlog.WithError(err).Info("Temporary error accepting client")
+			server.mainlog().WithError(err).Info("Temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrow_err error) {
@@ -221,14 +199,14 @@ func (server *server) Start(startWG *sync.WaitGroup) error {
 				server.envelopePool.Return(c.Envelope)
 				server.clientPool.Return(c)
 			} else {
-				server.log.WithError(borrow_err).Info("couldn't borrow a new client")
+				server.log().WithError(borrow_err).Info("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				conn.Close()
 
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(server.clientPool.Borrow(conn, clientID, server.log, server.envelopePool))
+		}(server.clientPool.Borrow(conn, clientID, server.log(), server.envelopePool))
 
 	}
 }
@@ -298,7 +276,7 @@ func (server *server) isShuttingDown() bool {
 // Handles an entire client SMTP exchange
 func (server *server) handleClient(client *client) {
 	defer func() {
-		server.log.WithFields(map[string]interface{}{
+		server.log().WithFields(map[string]interface{}{
 			"event": "disconnect",
 			"id":    client.ID,
 		}).Info("Disconnect client")
@@ -306,7 +284,7 @@ func (server *server) handleClient(client *client) {
 	}()
 
 	sc := server.configStore.Load().(ServerConfig)
-	server.log.WithFields(map[string]interface{}{
+	server.log().WithFields(map[string]interface{}{
 		"event": "connect",
 		"id":    client.ID,
 	}).Info("Handle client")
@@ -332,11 +310,11 @@ func (server *server) handleClient(client *client) {
 	if sc.TLSAlwaysOn {
 		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 		if !ok {
-			server.mainlog.Error("Failed to load *tls.Config")
+			server.mainlog().Error("Failed to load *tls.Config")
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
-			server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+			server.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -354,19 +332,19 @@ func (server *server) handleClient(client *client) {
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := server.readCommand(client, sc.MaxSize)
-			server.log.Debugf("Client sent: %s", input)
+			server.log().Debugf("Client sent: %s", input)
 			if err == io.EOF {
-				server.log.WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
+				server.log().WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				server.log.WithError(err).Warnf("Timeout: %s", client.RemoteIP)
+				server.log().WithError(err).Warnf("Timeout: %s", client.RemoteIP)
 				return
 			} else if err == LineLimitExceeded {
 				client.sendResponse(response.Canned.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				server.log.WithError(err).Warnf("Read error: %s", client.RemoteIP)
+				server.log().WithError(err).Warnf("Read error: %s", client.RemoteIP)
 				client.kill()
 				break
 			}
@@ -401,6 +379,24 @@ func (server *server) handleClient(client *client) {
 				quote := response.GetQuote()
 				client.sendResponse("214-OK\r\n" + quote)
 
+			case sc.XClientOn && strings.Index(cmd, "XCLIENT ") == 0:
+				if toks := strings.Split(input[8:], " "); len(toks) > 0 {
+					for i := range toks {
+						if vals := strings.Split(toks[i], "="); len(vals) == 2 {
+							if vals[1] == "[UNAVAILABLE]" {
+								// skip
+								continue
+							}
+							if vals[0] == "ADDR" {
+								client.RemoteIP = vals[1]
+							}
+							if vals[0] == "HELO" {
+								client.Helo = vals[1]
+							}
+						}
+					}
+				}
+				client.sendResponse(response.Canned.SuccessMailCmd)
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
@@ -415,7 +411,7 @@ func (server *server) handleClient(client *client) {
 						break
 					} else {
 						client.MailFrom = from
-						server.log.WithFields(map[string]interface{}{
+						server.log().WithFields(map[string]interface{}{
 							"event":   "mailfrom",
 							"helo":    client.Helo,
 							"domain":  from.Host,
@@ -515,7 +511,7 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailReadErrorDataCmd, err.Error())
 					client.kill()
 				}
-				server.log.WithError(err).Warn("Error reading data")
+				server.log().WithError(err).Warn("Error reading data")
 				client.resetTransaction()
 				break
 			}
@@ -523,7 +519,7 @@ func (server *server) handleClient(client *client) {
 			res := server.backend().Process(client.Envelope)
 			if res.Code() < 300 {
 				client.messagesSent++
-				server.log.WithFields(map[string]interface{}{
+				server.log().WithFields(map[string]interface{}{
 					"helo":          client.Helo,
 					"remoteAddress": getRemoteAddr(client.conn),
 					"success":       true,
@@ -540,12 +536,12 @@ func (server *server) handleClient(client *client) {
 			if !client.TLS && sc.StartTLSOn {
 				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 				if !ok {
-					server.mainlog.Error("Failed to load *tls.Config")
+					server.mainlog().Error("Failed to load *tls.Config")
 				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()
 				} else {
-					server.log.WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+					server.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
 					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}
@@ -558,15 +554,37 @@ func (server *server) handleClient(client *client) {
 		}
 
 		if client.bufout.Buffered() > 0 {
-			if server.log.IsDebug() {
-				server.log.Debugf("Writing response to client: \n%s", client.response.String())
+			if server.log().IsDebug() {
+				server.log().Debugf("Writing response to client: \n%s", client.response.String())
 			}
 			err := server.flushResponse(client)
 			if err != nil {
-				server.log.WithError(err).Debug("Error writing response")
+				server.log().WithError(err).Debug("Error writing response")
 				return
 			}
 		}
 
 	}
+}
+
+func (s *server) log() log.Logger {
+	if l, ok := s.logStore.Load().(log.Logger); ok {
+		return l
+	}
+	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
+	if err == nil {
+		s.logStore.Store(l)
+	}
+	return l
+}
+
+func (s *server) mainlog() log.Logger {
+	if l, ok := s.mainlogStore.Load().(log.Logger); ok {
+		return l
+	}
+	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
+	if err == nil {
+		s.mainlogStore.Store(l)
+	}
+	return l
 }

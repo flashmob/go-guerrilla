@@ -44,10 +44,10 @@ type GatewayConfig struct {
 	SaveProcess string `json:"save_process,omitempty"`
 	// ValidateProcess is like ProcessorStack, but for recipient validation tasks
 	ValidateProcess string `json:"validate_process,omitempty"`
-	// TimeoutSave is the number of seconds before timeout when saving an email
-	TimeoutSave int `json:"gw_save_timeout,omitempty"`
-	// TimeoutValidateRcpt is how many seconds before timeout when validating a recipient
-	TimeoutValidateRcpt int `json:"gw_val_rcpt_timeout,omitempty"`
+	// TimeoutSave is duration before timeout when saving an email, eg "29s"
+	TimeoutSave string `json:"gw_save_timeout,omitempty"`
+	// TimeoutValidateRcpt duration before timeout when validating a recipient, eg "1s"
+	TimeoutValidateRcpt string `json:"gw_val_rcpt_timeout,omitempty"`
 }
 
 // workerMsg is what get placed on the BackendGateway.saveMailChan channel
@@ -109,18 +109,37 @@ func New(backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	return b, nil
 }
 
-// Process distributes an envelope to one of the backend workers
+var workerMsgPool = sync.Pool{
+	// if not available, then create a new one
+	New: func() interface{} {
+		return &workerMsg{}
+	},
+}
+
+// reset resets a workerMsg that has been borrowed from the pool
+func (w *workerMsg) reset(e *mail.Envelope, task SelectTask) {
+	if w.notifyMe == nil {
+		w.notifyMe = make(chan *notifyMsg)
+	}
+	w.e = e
+	w.task = task
+}
+
+// Process distributes an envelope to one of the backend workers with a TaskSaveMail task
 func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	if gw.State != BackendStateRunning {
 		return NewResult(response.Canned.FailBackendNotRunning + gw.State.String())
 	}
+	// borrow a workerMsg from the pool
+	workerMsg := workerMsgPool.Get().(*workerMsg)
+	workerMsg.reset(e, TaskSaveMail)
 	// place on the channel so that one of the save mail workers can pick it up
-	savedNotify := make(chan *notifyMsg)
-	gw.conveyor <- &workerMsg{e, savedNotify, TaskSaveMail}
+	gw.conveyor <- workerMsg
 	// wait for the save to complete
 	// or timeout
 	select {
-	case status := <-savedNotify:
+	case status := <-workerMsg.notifyMe:
+		defer workerMsgPool.Put(workerMsg) // can be recycled since we used the notifyMe channel
 		if status.err != nil {
 			return NewResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
@@ -138,13 +157,18 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 	if gw.State != BackendStateRunning {
 		return StorageNotAvailable
 	}
+	if _, ok := gw.validators[0].(NoopProcessor); ok {
+		// no validator processors configured
+		return nil
+	}
 	// place on the channel so that one of the save mail workers can pick it up
-	notify := make(chan *notifyMsg)
-	gw.conveyor <- &workerMsg{e, notify, TaskValidateRcpt}
+	workerMsg := workerMsgPool.Get().(*workerMsg)
+	workerMsg.reset(e, TaskValidateRcpt)
+	gw.conveyor <- workerMsg
 	// wait for the validation to complete
 	// or timeout
 	select {
-	case status := <-notify:
+	case status := <-workerMsg.notifyMe:
 		if status.err != nil {
 			return status.err
 		}
@@ -179,7 +203,7 @@ func (gw *BackendGateway) Reinitialize() error {
 	if gw.State != BackendStateShuttered {
 		return errors.New("backend must be in BackendStateshuttered state to Reinitialize")
 	}
-	//
+	// clear the Initializers and Shutdowners
 	Svc.reset()
 
 	err := gw.Initialize(gw.config)
@@ -191,7 +215,7 @@ func (gw *BackendGateway) Reinitialize() error {
 	return err
 }
 
-// newChain creates a new Processor by chaining multiple Processors in a call stack
+// newStack creates a new Processor by chaining multiple Processors in a call stack
 // Decorators are functions of Decorator type, source files prefixed with p_*
 // Each decorator does a specific task during the processing stage.
 // This function uses the config value save_process or validate_process to figure out which Decorator to use
@@ -199,7 +223,8 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
 	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
 	if len(cfg) == 0 {
-		cfg = strings.ToLower(defaultProcessor)
+		//cfg = strings.ToLower(defaultProcessor)
+		return NoopProcessor{}, nil
 	}
 	items := strings.Split(cfg, "|")
 	for i := range items {
@@ -238,43 +263,43 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 		return errors.New("Can only Initialize in BackendStateNew or BackendStateShuttered state")
 	}
 	err := gw.loadConfig(cfg)
-	if err == nil {
-		workersSize := gw.workersSize()
-		if workersSize < 1 {
-			gw.State = BackendStateError
-			return errors.New("Must have at least 1 worker")
-		}
-		gw.processors = make([]Processor, 0)
-		gw.validators = make([]Processor, 0)
-		for i := 0; i < workersSize; i++ {
-			p, err := gw.newStack(gw.gwConfig.SaveProcess)
-			if err != nil {
-				gw.State = BackendStateError
-				return err
-			}
-			gw.processors = append(gw.processors, p)
-
-			v, err := gw.newStack(gw.gwConfig.ValidateProcess)
-			if err != nil {
-				gw.State = BackendStateError
-				return err
-			}
-			gw.validators = append(gw.validators, v)
-		}
-		// initialize processors
-		if err := Svc.initialize(cfg); err != nil {
+	if err != nil {
+		gw.State = BackendStateError
+		return err
+	}
+	workersSize := gw.workersSize()
+	if workersSize < 1 {
+		gw.State = BackendStateError
+		return errors.New("Must have at least 1 worker")
+	}
+	gw.processors = make([]Processor, 0)
+	gw.validators = make([]Processor, 0)
+	for i := 0; i < workersSize; i++ {
+		p, err := gw.newStack(gw.gwConfig.SaveProcess)
+		if err != nil {
 			gw.State = BackendStateError
 			return err
 		}
-		if gw.conveyor == nil {
-			gw.conveyor = make(chan *workerMsg, workersSize)
+		gw.processors = append(gw.processors, p)
+
+		v, err := gw.newStack(gw.gwConfig.ValidateProcess)
+		if err != nil {
+			gw.State = BackendStateError
+			return err
 		}
-		// ready to start
-		gw.State = BackendStateInitialized
-		return nil
+		gw.validators = append(gw.validators, v)
 	}
-	gw.State = BackendStateError
-	return err
+	// initialize processors
+	if err := Svc.initialize(cfg); err != nil {
+		gw.State = BackendStateError
+		return err
+	}
+	if gw.conveyor == nil {
+		gw.conveyor = make(chan *workerMsg, workersSize)
+	}
+	// ready to start
+	gw.State = BackendStateInitialized
+	return nil
 }
 
 // Start starts the worker goroutines, assuming it has been initialized or shuttered before
@@ -293,12 +318,18 @@ func (gw *BackendGateway) Start() error {
 			stop := make(chan bool)
 			go func(workerId int, stop chan bool) {
 				// blocks here until the worker exits
-				gw.workDispatcher(
-					gw.conveyor,
-					gw.processors[workerId],
-					gw.validators[workerId],
-					workerId+1,
-					stop)
+				for {
+					state := gw.workDispatcher(
+						gw.conveyor,
+						gw.processors[workerId],
+						gw.validators[workerId],
+						workerId+1,
+						stop)
+					// keep running after panic
+					if state != dispatcherStatePanic {
+						break
+					}
+				}
 				gw.wg.Done()
 			}(i, stop)
 			gw.workStoppers = append(gw.workStoppers, stop)
@@ -313,7 +344,7 @@ func (gw *BackendGateway) Start() error {
 // workersSize gets the number of workers to use for saving email by reading the save_workers_size config value
 // Returns 1 if no config value was set
 func (gw *BackendGateway) workersSize() int {
-	if gw.gwConfig.WorkersSize == 0 {
+	if gw.gwConfig.WorkersSize <= 0 {
 		return 1
 	}
 	return gw.gwConfig.WorkersSize
@@ -321,52 +352,81 @@ func (gw *BackendGateway) workersSize() int {
 
 // saveTimeout returns the maximum amount of seconds to wait before timing out a save processing task
 func (gw *BackendGateway) saveTimeout() time.Duration {
-	if gw.gwConfig.TimeoutSave == 0 {
+	if gw.gwConfig.TimeoutSave == "" {
 		return saveTimeout
 	}
-	return time.Duration(gw.gwConfig.TimeoutSave)
+	t, err := time.ParseDuration(gw.gwConfig.TimeoutSave)
+	if err != nil {
+		return saveTimeout
+	}
+	return t
 }
 
 // validateRcptTimeout returns the maximum amount of seconds to wait before timing out a recipient validation  task
 func (gw *BackendGateway) validateRcptTimeout() time.Duration {
-	if gw.gwConfig.TimeoutValidateRcpt == 0 {
+	if gw.gwConfig.TimeoutValidateRcpt == "" {
 		return validateRcptTimeout
 	}
-	return time.Duration(gw.gwConfig.TimeoutValidateRcpt)
+	t, err := time.ParseDuration(gw.gwConfig.TimeoutValidateRcpt)
+	if err != nil {
+		return validateRcptTimeout
+	}
+	return t
 }
+
+type dispatcherState int
+
+const (
+	dispatcherStateStopped dispatcherState = iota
+	dispatcherStateIdle
+	dispatcherStateWorking
+	dispatcherStateNotify
+	dispatcherStatePanic
+)
 
 func (gw *BackendGateway) workDispatcher(
 	workIn chan *workerMsg,
 	save Processor,
 	validate Processor,
 	workerId int,
-	stop chan bool) {
+	stop chan bool) (state dispatcherState) {
+
+	var msg *workerMsg
 
 	defer func() {
+
+		// panic recovery mechanism: it may panic when processing
+		// since processors may call arbitrary code, some may be 3rd party / unstable
+		// we need to detect the panic, and notify the backend that it failed & unlock the envelope
 		if r := recover(); r != nil {
-			// recover form closed channel
-			Log().Error("worker recovered form panic:", r, string(debug.Stack()))
+			Log().Error("worker recovered from panic:", r, string(debug.Stack()))
+
+			if state == dispatcherStateWorking {
+				msg.notifyMe <- &notifyMsg{err: errors.New("storage failed")}
+				msg.e.Unlock()
+			}
+			state = dispatcherStatePanic
+			return
 		}
-		// close any connections / files
-		Svc.shutdown()
+		// state is dispatcherStateStopped if it reached here
+		return
 
 	}()
+	state = dispatcherStateIdle
 	Log().Infof("processing worker started (#%d)", workerId)
 	for {
 		select {
 		case <-stop:
+			state = dispatcherStateStopped
 			Log().Infof("stop signal for worker (#%d)", workerId)
 			return
-		case msg := <-workIn:
-			if msg == nil {
-				Log().Debugf("worker stopped (#%d)", workerId)
-				return
-			}
+		case msg = <-workIn:
 			msg.e.Lock()
+			state = dispatcherStateWorking
 			if msg.task == TaskSaveMail {
 				// process the email here
-				// TODO we should check the err
 				result, _ := save.Process(msg.e, TaskSaveMail)
+				state = dispatcherStateNotify
 				if result.Code() < 300 {
 					// if all good, let the gateway know that it was queued
 					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
@@ -376,6 +436,7 @@ func (gw *BackendGateway) workDispatcher(
 				}
 			} else if msg.task == TaskValidateRcpt {
 				_, err := validate.Process(msg.e, TaskValidateRcpt)
+				state = dispatcherStateNotify
 				if err != nil {
 					// validation failed
 					msg.notifyMe <- &notifyMsg{err: err}
@@ -386,6 +447,7 @@ func (gw *BackendGateway) workDispatcher(
 			}
 			msg.e.Unlock()
 		}
+		state = dispatcherStateIdle
 	}
 }
 

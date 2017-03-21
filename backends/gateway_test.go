@@ -58,7 +58,7 @@ func TestStartProcessStop(t *testing.T) {
 	gateway := &BackendGateway{}
 	err := gateway.Initialize(c)
 
-	mainlog, _ := log.GetLogger(log.OutputOff.String())
+	mainlog, _ := log.GetLogger(log.OutputOff.String(), "debug")
 	Svc.SetMainlog(mainlog)
 
 	if err != nil {

@@ -1,8 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -10,10 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -26,11 +24,10 @@ var (
 
 	serveCmd = &cobra.Command{
 		Use:   "serve",
-		Short: "start the small SMTP server",
+		Short: "start the daemon and start all available servers",
 		Run:   serve,
 	}
 
-	cmdConfig     = CmdConfig{}
 	signalChannel = make(chan os.Signal, 1) // for trapping SIGHUP and friends
 	mainlog       log.Logger
 
@@ -40,12 +37,16 @@ var (
 func init() {
 	// log to stderr on startup
 	var err error
-	mainlog, err = log.GetLogger(log.OutputStderr.String())
+	mainlog, err = log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
 	if err != nil {
 		mainlog.WithError(err).Errorf("Failed creating a logger to %s", log.OutputStderr)
 	}
+	cfgFile := "goguerrilla.conf" // deprecated default name
+	if _, err := os.Stat(cfgFile); err != nil {
+		cfgFile = "goguerrilla.conf.json" // use the new name
+	}
 	serveCmd.PersistentFlags().StringVarP(&configPath, "config", "c",
-		"goguerrilla.conf", "Path to the configuration file")
+		cfgFile, "Path to the configuration file")
 	// intentionally didn't specify default pidFile; value from config is used if flag is empty
 	serveCmd.PersistentFlags().StringVarP(&pidFile, "pidFile", "p",
 		"", "Path to the pid file")
@@ -63,7 +64,11 @@ func sigHandler() {
 	)
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
-			d.ReloadConfigFile(configPath)
+			if ac, err := readConfig(configPath, pidFile); err == nil {
+				d.ReloadConfig(*ac)
+			} else {
+				mainlog.WithError(err).Error("Could not reload config")
+			}
 		} else if sig == syscall.SIGUSR1 {
 			d.ReopenLogs()
 		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
@@ -89,22 +94,22 @@ func sigHandler() {
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 	d = guerrilla.Daemon{Logger: mainlog}
-	err := readConfig(configPath, pidFile)
+	ac, err := readConfig(configPath, pidFile)
 	if err != nil {
 		mainlog.WithError(err).Fatal("Error while reading config")
 	}
-	mainlog.SetLevel(cmdConfig.LogLevel)
+	d.SetConfig(*ac)
 
 	// Check that max clients is not greater than system open file limit.
 	fileLimit := getFileLimit()
 
 	if fileLimit > 0 {
 		maxClients := 0
-		for _, s := range cmdConfig.Servers {
+		for _, s := range ac.Servers {
 			maxClients += s.MaxClients
 		}
 		if maxClients > fileLimit {
-			mainlog.Warnf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			mainlog.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
 				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 		}
 	}
@@ -118,38 +123,15 @@ func serve(cmd *cobra.Command, args []string) {
 
 }
 
-// Superset of `guerrilla.AppConfig` containing options specific
-// the the command line interface.
-type CmdConfig struct {
-	guerrilla.AppConfig
-}
-
-func (c *CmdConfig) load(jsonBytes []byte) error {
-	err := json.Unmarshal(jsonBytes, &c)
-	if err != nil {
-		return fmt.Errorf("Could not parse config file: %s", err.Error())
-	} else {
-		// load in guerrilla.AppConfig
-		return c.AppConfig.Load(jsonBytes)
-	}
-}
-
-func (c *CmdConfig) emitChangeEvents(oldConfig *CmdConfig, app guerrilla.Guerrilla) {
-	// if your CmdConfig has any extra fields, you can emit events here
-	// ...
-	// call other emitChangeEvents
-	c.AppConfig.EmitChangeEvents(&oldConfig.AppConfig, app)
-}
-
-// ReadConfig which should be called at startup, or when a SIG_HUP is caught
-func readConfig(path string, pidFile string) error {
+// ReadConfig is called at startup, or when a SIG_HUP is caught
+func readConfig(path string, pidFile string) (*guerrilla.AppConfig, error) {
 	// Load in the config.
 	// Note here is the only place we can make an exception to the
 	// "treat config values as immutable". For example, here the
 	// command line flags can override config values
 	appConfig, err := d.LoadConfig(path)
 	if err != nil {
-		return fmt.Errorf("Could not read config file: %s", err.Error())
+		return &appConfig, fmt.Errorf("Could not read config file: %s", err.Error())
 	}
 	// override config pidFile with with flag from the command line
 	if len(pidFile) > 0 {
@@ -157,8 +139,10 @@ func readConfig(path string, pidFile string) error {
 	} else if len(appConfig.PidFile) == 0 {
 		appConfig.PidFile = defaultPidFile
 	}
-	d.SetConfig(&appConfig)
-	return nil
+	if verbose {
+		appConfig.LogLevel = "debug"
+	}
+	return &appConfig, nil
 }
 
 func getFileLimit() int {

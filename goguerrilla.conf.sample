@@ -9,18 +9,18 @@
       "guerrillamail.org"
     ],
     "pid_file" : "/var/run/go-guerrilla.pid",
+    "dashboard": {
+          "is_enabled": true,
+          "listen_interface": ":8080",
+          "tick_interval": "5s",
+          "max_window": "24h",
+          "ranking_aggregation_interval": "6h"
+        },
     "backend_config": {
         "log_received_mails": true,
         "save_workers_size": 1,
         "save_process" : "HeadersParser|Header|Debugger",
         "primary_mail_host" : "mail.example.com"
-    },
-    "dashboard": {
-      "is_enabled": true,
-      "listen_interface": ":8080",
-      "tick_interval": "5s",
-      "max_window": "24h",
-      "ranking_aggregation_interval": "6h"
     },
     "servers" : [
         {
@@ -37,7 +37,7 @@
             "log_file" : "stderr"
         },
         {
-            "is_enabled" : true,
+            "is_enabled" : false,
             "host_name":"mail.test.com",
             "max_size":1000000,
             "private_key_file":"/path/to/pem/file/test.com.key",

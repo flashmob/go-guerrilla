@@ -16,7 +16,18 @@ func TestMimeHeaderDecode(t *testing.T) {
 		t.Error("expecting André Pirard, got:", str)
 	}
 }
+func TestNewAddress(t *testing.T) {
 
+	addr, err := NewAddress("<hoop>")
+	if err == nil {
+		t.Error("there should be an error:", addr)
+	}
+
+	addr, err = NewAddress(`Gogh Fir <tesst@test.com>`)
+	if err != nil {
+		t.Error("there should be no error:", addr.Host, err)
+	}
+}
 func TestEnvelope(t *testing.T) {
 	e := NewEnvelope("127.0.0.1", 22)
 

@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"mime/quotedprintable"
+	"net/mail"
 	"net/textproto"
 	"regexp"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"time"
 )
 
-const maxHeaderChunk = iota + (3 << 10) // 3KB
+const maxHeaderChunk = 1 + (3 << 10) // 3KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
@@ -32,6 +33,26 @@ func (ep *Address) String() string {
 
 func (ep *Address) IsEmpty() bool {
 	return ep.User == "" && ep.Host == ""
+}
+
+var ap = mail.AddressParser{}
+
+// NewAddress takes a string of an RFC 5322 address of the
+// form "Gogh Fir <gf@example.com>" or "foo@example.com".
+func NewAddress(str string) (Address, error) {
+	a, err := ap.Parse(str)
+	if err != nil {
+		return Address{}, err
+	}
+	pos := strings.Index(a.Address, "@")
+	if pos > 0 {
+		return Address{
+				User: a.Address[0:pos],
+				Host: a.Address[pos+1:],
+			},
+			nil
+	}
+	return Address{}, errors.New("invalid address")
 }
 
 // Email represents a single SMTP message.
@@ -130,25 +151,27 @@ func (e *Envelope) String() string {
 	return e.DeliveryHeader + e.Data.String()
 }
 
-// ResetTransaction is called when the transaction is reset (but save connection)
+// ResetTransaction is called when the transaction is reset (keeping the connection open)
 func (e *Envelope) ResetTransaction() {
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}
 	// reset the data buffer, keep it allocated
 	e.Data.Reset()
+
+	// todo: these are probably good candidates for buffers / use sync.Pool (after profiling)
+	e.Subject = ""
+	e.Header = nil
+	e.Hashes = make([]string, 0)
+	e.DeliveryHeader = ""
+	e.Values = make(map[string]interface{})
 }
 
 // Seed is called when used with a new connection, once it's accepted
 func (e *Envelope) Reseed(RemoteIP string, clientID uint64) {
-	e.Subject = ""
 	e.RemoteIP = RemoteIP
-	e.Helo = ""
-	e.Header = nil
-	e.TLS = false
-	e.Hashes = make([]string, 0)
-	e.DeliveryHeader = ""
-	e.Values = make(map[string]interface{})
 	e.QueuedId = queuedID(clientID)
+	e.Helo = ""
+	e.TLS = false
 }
 
 // PushRcpt adds a recipient email address to the envelope
