@@ -143,19 +143,6 @@ func (hook *LogrusHook) openCreate(dest string) (err error) {
 func (hook *LogrusHook) Fire(entry *log.Entry) error {
 	hookMu.Lock()
 	defer hookMu.Unlock()
-	/*
-		if hook.fd != nil {
-			// save the old formatter
-			oldhook := entry.Logger.Formatter
-			defer func() {
-				// set the back to the old hook after we're done
-				entry.Logger.Formatter = oldhook
-			}()
-			// use the plain text hook
-			entry.Logger.Formatter = hook.plainTxtFormatter
-			// todo : `go go test -v -race` detected a race condition, try log.SetFormatter()
-		}
-	*/
 	if line, err := entry.String(); err == nil {
 		r := strings.NewReader(line)
 		if _, err = io.Copy(hook.w, r); err != nil {

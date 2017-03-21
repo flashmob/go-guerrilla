@@ -95,10 +95,3 @@ func TestHandleClient(t *testing.T) {
 
 // TODO
 // - test github issue #44 and #42
-// - test other commands
-
-// also, could test
-// - test allowsHost() and allowsHost()
-// - test isInTransaction() (make sure it returns true after MAIL command, but false after HELO/EHLO/RSET/end of DATA
-// - test to make sure client envelope
-// - perhaps anything else that can be tested in server_test.go

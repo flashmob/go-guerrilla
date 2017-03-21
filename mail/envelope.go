@@ -158,7 +158,7 @@ func (e *Envelope) ResetTransaction() {
 	// reset the data buffer, keep it allocated
 	e.Data.Reset()
 
-	// todo: these are probably good candidates for buffers / use sync.Pool
+	// todo: these are probably good candidates for buffers / use sync.Pool (after profiling)
 	e.Subject = ""
 	e.Header = nil
 	e.Hashes = make([]string, 0)

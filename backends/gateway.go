@@ -425,7 +425,6 @@ func (gw *BackendGateway) workDispatcher(
 			state = dispatcherStateWorking
 			if msg.task == TaskSaveMail {
 				// process the email here
-				// TODO we should check the err
 				result, _ := save.Process(msg.e, TaskSaveMail)
 				state = dispatcherStateNotify
 				if result.Code() < 300 {
