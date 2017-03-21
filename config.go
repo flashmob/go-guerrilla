@@ -61,6 +61,9 @@ type ServerConfig struct {
 	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off".
 	// defaults to AppConfig.Log file setting
 	LogFile string `json:"log_file,omitempty"`
+	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
+	// original client's IP address & client's HELO
+	XClientOn bool `json:"xclient_on,omitempty"`
 
 	// The following used to watch certificate changes so that the TLS can be reloaded
 	_privateKeyFile_mtime int

@@ -93,5 +93,56 @@ func TestHandleClient(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestXClient(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	sc := getMockServerConfig()
+	sc.XClientOn = true
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	// call the serve.handleClient() func in a goroutine.
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+	//	fmt.Println(line)
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	w.PrintfLine("HELO test.test.com")
+	line, _ = r.ReadLine()
+	//fmt.Println(line)
+	w.PrintfLine("XCLIENT ADDR=212.96.64.216 NAME=[UNAVAILABLE]")
+	line, _ = r.ReadLine()
+
+	if client.RemoteIP != "212.96.64.216" {
+		t.Error("client.RemoteIP should be 212.96.64.216, but got:", client.RemoteIP)
+	}
+	expected := "250 2.1.0 OK"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+
+	// try malformed input
+	w.PrintfLine("XCLIENT c")
+	line, _ = r.ReadLine()
+
+	expected = "250 2.1.0 OK"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+
+	w.PrintfLine("QUIT")
+	line, _ = r.ReadLine()
+	wg.Wait() // wait for handleClient to exit
+}
+
 // TODO
 // - test github issue #44 and #42
