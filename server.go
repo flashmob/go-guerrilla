@@ -369,6 +369,24 @@ func (server *server) handleClient(client *client) {
 				quote := response.GetQuote()
 				client.sendResponse("214-OK\r\n" + quote)
 
+			case sc.XClientOn && strings.Index(cmd, "XCLIENT ") == 0:
+				if toks := strings.Split(input[8:], " "); len(toks) > 0 {
+					for i := range toks {
+						if vals := strings.Split(toks[i], "="); len(vals) == 2 {
+							if vals[1] == "[UNAVAILABLE]" {
+								// skip
+								continue
+							}
+							if vals[0] == "ADDR" {
+								client.RemoteIP = vals[1]
+							}
+							if vals[0] == "HELO" {
+								client.Helo = vals[1]
+							}
+						}
+					}
+				}
+				client.sendResponse(response.Canned.SuccessMailCmd)
 			case strings.Index(cmd, "MAIL FROM:") == 0:
 				if client.isInTransaction() {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
