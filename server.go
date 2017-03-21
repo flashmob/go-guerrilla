@@ -287,7 +287,7 @@ func (server *server) handleClient(client *client) {
 	server.log().WithFields(map[string]interface{}{
 		"event": "connect",
 		"id":    client.ID,
-	}).Info("Handle client")
+	}).Infof("Handle client [%s]", client.RemoteIP)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",

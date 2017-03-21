@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
 	"net"
 	"net/textproto"
 	"sync"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ClientState indicates which part of the SMTP transaction a given client is in.

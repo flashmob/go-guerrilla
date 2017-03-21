@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
 
+	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/dashboard"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 // AppConfig is the holder of the configuration of the app

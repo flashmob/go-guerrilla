@@ -3,11 +3,13 @@ package guerrilla
 import (
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/dashboard"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 const (
@@ -442,6 +444,10 @@ func (g *guerrilla) Start() error {
 	}
 	// wait for all servers to start (or fail)
 	startWG.Wait()
+
+	if g.Config.Dashboard.Enabled {
+		go dashboard.Run(&g.Config.Dashboard)
+	}
 
 	// close, then read any errors
 	close(errs)
