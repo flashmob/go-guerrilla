@@ -134,6 +134,7 @@ type Responses struct {
 	FailBackendNotRunning        string
 	FailBackendTransaction       string
 	FailBackendTimeout           string
+	FailRcptCmd                  string
 
 	// The 400's
 	ErrorTooManyRecipients string
@@ -155,7 +156,6 @@ type Responses struct {
 // Called automatically during package load to build up the Responses struct
 func init() {
 
-	// There's even a Wikipedia page for canned responses: https://en.wikipedia.org/wiki/Canned_response
 	Canned = Responses{}
 
 	Canned.FailLineTooLong = (&Response{
@@ -335,6 +335,13 @@ func init() {
 		BasicCode:    554,
 		Class:        ClassPermanentFailure,
 		Comment:      "Error: transaction timeout",
+	}).String()
+
+	Canned.FailRcptCmd = (&Response{
+		EnhancedCode: BadDestinationMailboxAddress,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "User unknown in local recipient table",
 	}).String()
 
 }

@@ -1,5 +1,5 @@
-hash: 1a8fddacae80af03b3cb67287a2a39396a4b38a0c7f805f63325293a19230853
-updated: 2017-02-01T09:34:30.442747666+11:00
+hash: edbacc9b8ae3fcad4c01969c3efc5d815d79ffdc544d0bd56c501018696c2285
+updated: 2017-03-17T11:29:21.745184616+11:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: ab9e5ceb2cc1ca6f36a5813c928c534e837681c2
@@ -13,20 +13,11 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/Sirupsen/logrus
-  version: d26492970760ca5d33129d2d799e34be5c4782eb
-- name: github.com/sloonz/go-qprintable
-  version: 775b3a4592d5bfc47b0ba398ec0d4dba018e5926
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/spf13/cobra
   version: b62566898a99f2db9c68ed0026aa0a052e59678d
 - name: github.com/spf13/pflag
   version: 25f8b5b07aece3207895bf19f7ab517eb3b22a40
-- name: github.com/ziutek/mymysql
-  version: e08c2f35356576b3c3690c252fe5dca728ae9292
-  subpackages:
-  - autorc
-  - godrv
-  - mysql
-  - native
 - name: golang.org/x/sys
   version: 478fcf54317e52ab69f40bb4c7a1520288d7f7ea
   subpackages:

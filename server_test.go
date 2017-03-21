@@ -10,6 +10,7 @@ import (
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
 )
 
@@ -37,11 +38,13 @@ func getMockServerConfig() *ServerConfig {
 func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	var logOpenError error
 	var mainlog log.Logger
-	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
+	backend, err := backends.New(
+		backends.BackendConfig{"log_received_mails": true, "save_workers_size": 1},
+		mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}
@@ -59,13 +62,13 @@ func TestHandleClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
 	sc := getMockServerConfig()
-	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1, mainlog)
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -92,10 +95,3 @@ func TestHandleClient(t *testing.T) {
 
 // TODO
 // - test github issue #44 and #42
-// - test other commands
-
-// also, could test
-// - test allowsHost() and allowsHost()
-// - test isInTransaction() (make sure it returns true after MAIL command, but false after HELO/EHLO/RSET/end of DATA
-// - test to make sure client envelope
-// - perhaps anything else that can be tested in server_test.go

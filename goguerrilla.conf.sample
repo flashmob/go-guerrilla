@@ -9,9 +9,11 @@
       "guerrillamail.org"
     ],
     "pid_file" : "/var/run/go-guerrilla.pid",
-    "backend_name": "dummy",
     "backend_config": {
-        "log_received_mails": true
+        "log_received_mails": true,
+        "save_workers_size": 1,
+        "save_process" : "HeadersParser|Header|Debugger",
+        "primary_mail_host" : "mail.example.com"
     },
     "servers" : [
         {
@@ -28,7 +30,7 @@
             "log_file" : "stderr"
         },
         {
-            "is_enabled" : true,
+            "is_enabled" : false,
             "host_name":"mail.test.com",
             "max_size":1000000,
             "private_key_file":"/path/to/pem/file/test.com.key",

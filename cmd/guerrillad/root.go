@@ -7,8 +7,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "guerrillad",
-	Short: "small SMTP server",
-	Long: `It's a small SMTP server written in Go, for the purpose of receiving large volumes of email.
+	Short: "small SMTP daemon",
+	Long: `It's a small SMTP daemon written in Go, for the purpose of receiving large volumes of email.
 Written for GuerrillaMail.com which processes tens of thousands of emails every hour.`,
 	Run: nil,
 }

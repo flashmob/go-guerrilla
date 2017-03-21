@@ -22,9 +22,8 @@ var configJsonA = `
 {
     "log_file" : "./tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/go-guerrilla.pid",
+    "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -96,9 +95,8 @@ var configJsonB = `
 {
     "log_file" : "./tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/different-go-guerrilla.pid",
+    "pid_file" : "tests/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -126,6 +124,7 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:2527",
             "start_tls_on":true,
             "tls_always_on":false,
+            "log_file" : "./tests/testlog",
             "max_clients": 2
         },
 
@@ -138,7 +137,7 @@ var configJsonB = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
             "start_tls_on":false,
-            "tls_always_on":true,
+            "tls_always_on":false,
             "max_clients":1
         },
 
@@ -197,33 +196,40 @@ func TestConfigChangeEvents(t *testing.T) {
 
 	oldconf := &AppConfig{}
 	oldconf.Load([]byte(configJsonA))
-	logger, _ := log.GetLogger(oldconf.LogFile)
+	logger, _ := log.GetLogger(oldconf.LogFile, oldconf.LogLevel)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, _ := backends.New("dummy", bcfg, logger)
-	app, _ := New(oldconf, backend, logger)
+	backend, err := backends.New(bcfg, logger)
+	if err != nil {
+		t.Error("cannot create backend", err)
+	}
+	app, err := New(oldconf, backend, logger)
+	if err != nil {
+		t.Error("cannot create daemon", err)
+	}
 	// simulate timestamp change
+
 	time.Sleep(time.Second + time.Millisecond*500)
 	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
 	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
-	newconf.Servers[0].LogFile = "off" // test for log file change
-	newconf.LogLevel = "off"
+	newconf.Servers[0].LogFile = log.OutputOff.String() // test for log file change
+	newconf.LogLevel = log.InfoLevel.String()
 	newconf.LogFile = "off"
 	expectedEvents := map[Event]bool{
-		EvConfigPidFile:         false,
-		EvConfigLogFile:         false,
-		EvConfigLogLevel:        false,
-		EvConfigAllowedHosts:    false,
-		EvConfigEvServerNew:     false, // 127.0.0.1:4654 will be added
-		EvConfigServerRemove:    false, // 127.0.0.1:9999 server removed
-		EvConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
-		EvConfigServerLogFile:   false, // 127.0.0.1:2526
-		EvConfigServerLogReopen: false, // 127.0.0.1:2527
-		EvConfigServerTimeout:   false, // 127.0.0.1:2526 timeout
+		EventConfigPidFile:         false,
+		EventConfigLogFile:         false,
+		EventConfigLogLevel:        false,
+		EventConfigAllowedHosts:    false,
+		EventConfigServerNew:       false, // 127.0.0.1:4654 will be added
+		EventConfigServerRemove:    false, // 127.0.0.1:9999 server removed
+		EventConfigServerStop:      false, // 127.0.0.1:3333: server (disabled)
+		EventConfigServerLogFile:   false, // 127.0.0.1:2526
+		EventConfigServerLogReopen: false, // 127.0.0.1:2527
+		EventConfigServerTimeout:   false, // 127.0.0.1:2526 timeout
 		//"server_change:tls_config":    false, // 127.0.0.1:2526
-		EvConfigServerMaxClients: false, // 127.0.0.1:2526
-		EvConfigServerTLSConfig:  false, // 127.0.0.1:2527 timestamp changed on certificates
+		EventConfigServerMaxClients: false, // 127.0.0.1:2526
+		EventConfigServerTLSConfig:  false, // 127.0.0.1:2527 timestamp changed on certificates
 	}
 	toUnsubscribe := map[Event]func(c *AppConfig){}
 	toUnsubscribeSrv := map[Event]func(c *ServerConfig){}
