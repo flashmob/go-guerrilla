@@ -231,9 +231,15 @@ func (server *server) GetActiveClientsCount() int {
 }
 
 // Verifies that the host is a valid recipient.
+// host checking turned off if there is a single entry and it's a dot.
 func (server *server) allowsHost(host string) bool {
 	server.hosts.Lock()
 	defer server.hosts.Unlock()
+	if len(server.hosts.table) == 1 {
+		if _, ok := server.hosts.table["."]; ok {
+			return true
+		}
+	}
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
@@ -429,7 +435,6 @@ func (server *server) handleClient(client *client) {
 						} else {
 							client.sendResponse(response.Canned.SuccessRcptCmd)
 						}
-
 					}
 				}
 
