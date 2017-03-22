@@ -41,8 +41,6 @@ const (
 	EventConfigServerMaxClients
 	// when a server's TLS config changed
 	EventConfigServerTLSConfig
-	//
-	EventConfigPostLoad
 )
 
 var eventList = [...]string{
@@ -70,20 +68,20 @@ func (e Event) String() string {
 }
 
 type EventHandler struct {
-	*evbus.EventBus
+	evbus.Bus
 }
 
 func (h *EventHandler) Subscribe(topic Event, fn interface{}) error {
-	if h.EventBus == nil {
-		h.EventBus = evbus.New()
+	if h.Bus == nil {
+		h.Bus = evbus.New()
 	}
-	return h.EventBus.Subscribe(topic.String(), fn)
+	return h.Bus.Subscribe(topic.String(), fn)
 }
 
 func (h *EventHandler) Publish(topic Event, args ...interface{}) {
-	h.EventBus.Publish(topic.String(), args...)
+	h.Bus.Publish(topic.String(), args...)
 }
 
 func (h *EventHandler) Unsubscribe(topic Event, handler interface{}) error {
-	return h.EventBus.Unsubscribe(topic.String(), handler)
+	return h.Bus.Unsubscribe(topic.String(), handler)
 }
