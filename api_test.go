@@ -443,7 +443,7 @@ func TestReloadConfig(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	d := Daemon{}
 	d.Start()
-
+	defer d.Shutdown()
 	cfg := AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -455,7 +455,6 @@ func TestReloadConfig(t *testing.T) {
 	// Look mom, reloading the config without shutting down!
 	d.ReloadConfig(cfg)
 
-	d.Shutdown()
 }
 
 func TestPubSubAPI(t *testing.T) {
@@ -464,7 +463,7 @@ func TestPubSubAPI(t *testing.T) {
 
 	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
 	d.Start()
-
+	defer d.Shutdown()
 	// new config
 	cfg := AppConfig{
 		PidFile:      "tests/pidfilex.pid",
@@ -539,6 +538,7 @@ func TestAPILog(t *testing.T) {
 func TestSkipAllowsHost(t *testing.T) {
 
 	d := Daemon{}
+	defer d.Shutdown()
 	// setting the allowed hosts to a single entry with a dot will let any host through
 	d.Config = &AppConfig{AllowedHosts: []string{"."}, LogFile: "off"}
 	d.Start()
