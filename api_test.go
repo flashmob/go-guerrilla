@@ -443,7 +443,7 @@ func TestReloadConfig(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	d := Daemon{}
 	d.Start()
-
+	defer d.Shutdown()
 	cfg := AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -455,7 +455,6 @@ func TestReloadConfig(t *testing.T) {
 	// Look mom, reloading the config without shutting down!
 	d.ReloadConfig(cfg)
 
-	d.Shutdown()
 }
 
 func TestPubSubAPI(t *testing.T) {
@@ -464,7 +463,7 @@ func TestPubSubAPI(t *testing.T) {
 
 	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
 	d.Start()
-
+	defer d.Shutdown()
 	// new config
 	cfg := AppConfig{
 		PidFile:      "tests/pidfilex.pid",
@@ -533,4 +532,30 @@ func TestAPILog(t *testing.T) {
 	if strings.Index(string(b), "logtest1") < 0 {
 		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
+}
+
+// Test the allowed_hosts config option with a single entry of ".", which will allow all hosts.
+func TestSkipAllowsHost(t *testing.T) {
+
+	d := Daemon{}
+	defer d.Shutdown()
+	// setting the allowed hosts to a single entry with a dot will let any host through
+	d.Config = &AppConfig{AllowedHosts: []string{"."}, LogFile: "off"}
+	d.Start()
+
+	conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+	if err != nil {
+		t.Error(t)
+		return
+	}
+	in := bufio.NewReader(conn)
+	fmt.Fprint(conn, "HELO test\r\n")
+	fmt.Fprint(conn, "RCPT TO: test@funkyhost.com\r\n")
+	in.ReadString('\n')
+	in.ReadString('\n')
+	str, _ := in.ReadString('\n')
+	if strings.Index(str, "250") != 0 {
+		t.Error("expected 250 reply, got:", str)
+	}
+
 }
