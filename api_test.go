@@ -534,3 +534,28 @@ func TestAPILog(t *testing.T) {
 		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
 }
+
+// Test the allowed_hosts config option with a single entry of ".", which will allow all hosts.
+func TestSkipAllowsHost(t *testing.T) {
+
+	d := Daemon{}
+	// setting the allowed hosts to a single entry with a dot will let any host through
+	d.Config = &AppConfig{AllowedHosts: []string{"."}, LogFile: "off"}
+	d.Start()
+
+	conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+	if err != nil {
+		t.Error(t)
+		return
+	}
+	in := bufio.NewReader(conn)
+	fmt.Fprint(conn, "HELO test\r\n")
+	fmt.Fprint(conn, "RCPT TO: test@funkyhost.com\r\n")
+	in.ReadString('\n')
+	in.ReadString('\n')
+	str, _ := in.ReadString('\n')
+	if strings.Index(str, "250") != 0 {
+		t.Error("expected 250 reply, got:", str)
+	}
+
+}
