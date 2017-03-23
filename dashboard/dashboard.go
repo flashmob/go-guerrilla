@@ -11,11 +11,18 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/rakyll/statik/fs"
+	"sync"
 )
 
 var (
 	config   *Config
 	sessions map[string]*session
+
+	stopRankingManager chan bool = make(chan bool)
+	stopDataListener   chan bool = make(chan bool)
+	stopHttp           chan bool = make(chan bool)
+
+	wg sync.WaitGroup
 )
 
 var upgrader = websocket.Upgrader{
@@ -54,11 +61,41 @@ func Run(c *Config) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	go dataListener(tickInterval)
-	go store.rankingManager()
+	go func() {
+		wg.Add(1)
+		dataListener(tickInterval)
+		wg.Done()
+	}()
+	go func() {
+		wg.Add(1)
+		store.rankingManager()
+		wg.Done()
+	}()
 
-	err := http.ListenAndServe(c.ListenInterface, r)
-	log.WithError(err).Error("Dashboard server failed to start")
+	closer, err := ListenAndServeWithClose(c.ListenInterface, r)
+	if err != nil {
+		stopDataListener <- true
+		stopRankingManager <- true
+		log.WithError(err).Error("Dashboard server failed to start")
+		return
+	}
+	log.Infof("started dashboard, listening on http [%s]", c.ListenInterface)
+	wg.Add(1)
+	for {
+		select {
+		case <-stopHttp:
+			closer.Close()
+			wg.Done()
+			return
+		}
+	}
+}
+
+func Stop() {
+	stopDataListener <- true
+	stopRankingManager <- true
+	stopHttp <- true
+	wg.Wait()
 }
 
 // Parses options in config and applies to global variables

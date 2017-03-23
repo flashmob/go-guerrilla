@@ -117,7 +117,11 @@ func (ds *dataStore) rankingManager() {
 				[]map[string]int{map[string]int{}},
 				ds.topHelo[:len(ds.topIP)-1]...)
 			ds.lock.Unlock()
+
+		case <-stopRankingManager:
+			return
 		}
+
 	}
 }
 
@@ -205,22 +209,27 @@ func dataListener(interval time.Duration) {
 	memStats := &runtime.MemStats{}
 
 	for {
-		t := <-ticker
-		runtime.ReadMemStats(memStats)
-		ramPoint := point{t, memStats.Alloc}
-		nClientPoint := point{t, store.nClients}
-		log.WithFields(map[string]interface{}{
-			"ram":     ramPoint.Y,
-			"clients": nClientPoint.Y,
-		}).Info("Logging analytics data")
+		select {
+		case t := <-ticker:
+			runtime.ReadMemStats(memStats)
+			ramPoint := point{t, memStats.Alloc}
+			nClientPoint := point{t, store.nClients}
+			log.WithFields(map[string]interface{}{
+				"ram":     ramPoint.Y,
+				"clients": nClientPoint.Y,
+			}).Info("Logging analytics data")
 
-		store.addRAMPoint(ramPoint)
-		store.addNClientPoint(nClientPoint)
-		store.notify(&message{tickMessageType, dataFrame{
-			Ram:      ramPoint,
-			NClients: nClientPoint,
-			ranking:  store.aggregateRankings(),
-		}})
+			store.addRAMPoint(ramPoint)
+			store.addNClientPoint(nClientPoint)
+			store.notify(&message{tickMessageType, dataFrame{
+				Ram:      ramPoint,
+				NClients: nClientPoint,
+				ranking:  store.aggregateRankings(),
+			}})
+		case <-stopDataListener:
+			return
+		}
+
 	}
 }
 
