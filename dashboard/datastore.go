@@ -121,7 +121,6 @@ func (ds *dataStore) rankingManager() {
 		case <-stopRankingManager:
 			return
 		}
-
 	}
 }
 
@@ -132,7 +131,9 @@ func (ds *dataStore) aggregateRankings() ranking {
 	topHelo := make(map[string]int, len(ds.topHelo[0]))
 	topIP := make(map[string]int, len(ds.topIP[0]))
 
-	for i := 0; i < nRankingBuffers; i++ {
+	ds.lock.Lock()
+	// Aggregate buffers
+	for i := 1; i < nRankingBuffers; i++ {
 		for domain, count := range ds.topDomain[i] {
 			topDomain[domain] += count
 		}
@@ -143,6 +144,7 @@ func (ds *dataStore) aggregateRankings() ranking {
 			topIP[ip] += count
 		}
 	}
+	ds.lock.Unlock()
 
 	return ranking{
 		TopDomain: topDomain,

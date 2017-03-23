@@ -24,7 +24,7 @@ dependencies:
 	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) install -v
 	cd dashboard/js && npm install && cd ../..
 
-dashboard: dashboard/*
+dashboard: dashboard/*.go */*/*/*.js */*/*/*/*.js
 	cd dashboard/js && npm run build && cd ../..
 	statik -src=dashboard/js/build -dest=dashboard
 
