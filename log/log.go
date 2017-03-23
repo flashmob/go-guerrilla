@@ -65,7 +65,6 @@ type Logger interface {
 // Implements the Logger interface
 // It's a logrus logger wrapper that contains an instance of our LoggerHook
 type HookedLogger struct {
-
 	// satisfy the log.FieldLogger interface
 	*log.Logger
 
@@ -75,6 +74,8 @@ type HookedLogger struct {
 	dest string
 
 	oo OutputOption
+
+	addHooks map[log.Hook]bool
 }
 
 type loggerKey struct {
@@ -174,8 +175,16 @@ func newLogrus(o OutputOption, level string) (*log.Logger, error) {
 }
 
 // AddHook adds a new logrus hook
+// ensures same hook can't be added more than once
 func (l *HookedLogger) AddHook(h log.Hook) {
-	log.AddHook(h)
+	if l.addHooks == nil {
+		l.addHooks = make(map[log.Hook]bool, 0)
+	}
+	if ok := l.addHooks[h]; ok {
+		return
+	}
+	l.Hooks.Add(h)
+	l.addHooks[h] = true
 }
 
 func (l *HookedLogger) IsDebug() bool {

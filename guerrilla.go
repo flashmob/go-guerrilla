@@ -90,6 +90,10 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	if ac.LogLevel != "" {
 		if h, ok := l.(*log.HookedLogger); ok {
 			if h, err := log.GetLogger(h.GetLogDest(), ac.LogLevel); err == nil {
+				// add the dashboard hook
+				if ac.Dashboard.Enabled {
+					h.AddHook(dashboard.LogHook)
+				}
 				g.setMainlog(h)
 			}
 		}
@@ -211,6 +215,9 @@ func (g *guerrilla) subscribeEvents() {
 		var err error
 		var l log.Logger
 		if l, err = log.GetLogger(c.LogFile, c.LogLevel); err == nil {
+			if c.Dashboard.Enabled {
+				l.AddHook(dashboard.LogHook)
+			}
 			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				// it will change server's logger when the next client gets accepted
@@ -233,7 +240,10 @@ func (g *guerrilla) subscribeEvents() {
 	g.Subscribe(EventConfigLogLevel, func(c *AppConfig) {
 		l, err := log.GetLogger(g.mainlog().GetLogDest(), c.LogLevel)
 		if err == nil {
-			g.logStore.Store(l)
+			if c.Dashboard.Enabled {
+				l.AddHook(dashboard.LogHook)
+			}
+			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				server.logStore.Store(l)
 			})
