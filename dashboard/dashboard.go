@@ -22,7 +22,17 @@ var (
 	stopDataListener   chan bool = make(chan bool)
 	stopHttp           chan bool = make(chan bool)
 
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	started sync.WaitGroup
+
+	s state
+)
+
+type state int
+
+const (
+	stateStopped state = iota
+	stateRunning
 )
 
 var upgrader = websocket.Upgrader{
@@ -61,6 +71,21 @@ func Run(c *Config) {
 
 	rand.Seed(time.Now().UnixNano())
 
+	started.Add(1)
+	defer func() {
+		s = stateStopped
+
+	}()
+
+	closer, err := ListenAndServeWithClose(c.ListenInterface, r)
+	if err != nil {
+		log.WithError(err).Error("Dashboard server failed to start")
+		started.Done()
+		return
+	}
+	log.Infof("started dashboard, listening on http [%s]", c.ListenInterface)
+	wg.Add(1)
+
 	go func() {
 		wg.Add(1)
 		dataListener(tickInterval)
@@ -72,30 +97,26 @@ func Run(c *Config) {
 		wg.Done()
 	}()
 
-	closer, err := ListenAndServeWithClose(c.ListenInterface, r)
-	if err != nil {
-		stopDataListener <- true
-		stopRankingManager <- true
-		log.WithError(err).Error("Dashboard server failed to start")
+	s = stateRunning
+	started.Done()
+
+	select {
+	case <-stopHttp:
+		closer.Close()
+		wg.Done()
 		return
-	}
-	log.Infof("started dashboard, listening on http [%s]", c.ListenInterface)
-	wg.Add(1)
-	for {
-		select {
-		case <-stopHttp:
-			closer.Close()
-			wg.Done()
-			return
-		}
 	}
 }
 
 func Stop() {
-	stopDataListener <- true
-	stopRankingManager <- true
-	stopHttp <- true
-	wg.Wait()
+	started.Wait()
+	if s == stateRunning {
+		stopDataListener <- true
+		stopRankingManager <- true
+		stopHttp <- true
+		wg.Wait()
+	}
+
 }
 
 // Parses options in config and applies to global variables
