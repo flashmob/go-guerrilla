@@ -41,9 +41,6 @@ const reducer = (state = initialState, {type, payload}) => {
 				.push(...payload.ram))
 			.setIn(['nClients', 'data'], state.getIn(['nClients', 'data'])
 				.push(...payload.nClients))
-			.set('topDomain', Immutable.fromJS(payload.topDomain))
-			.set('topHelo', Immutable.fromJS(payload.topHelo))
-			.set('topIP', Immutable.fromJS(payload.topIP));
 		if (newState.getIn(['ram', 'data']).count() > state.get('maxPoints')) {
 			newState = newState
 				.setIn(['ram', 'data'], state.getIn(['ram', 'data'])

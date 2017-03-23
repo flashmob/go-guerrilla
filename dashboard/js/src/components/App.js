@@ -47,6 +47,7 @@ class App extends Component {
 		ws.onclose = event => console.log(event);
 		ws.onmessage = event => {
 			const message = JSON.parse(event.data);
+			console.log(message);
 			props.dispatch(message);
 		};
 

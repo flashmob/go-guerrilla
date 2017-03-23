@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"sync"
+
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/rakyll/statik/fs"
-	"sync"
 )
 
 var (

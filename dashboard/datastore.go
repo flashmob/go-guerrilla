@@ -133,7 +133,7 @@ func (ds *dataStore) aggregateRankings() ranking {
 
 	ds.lock.Lock()
 	// Aggregate buffers
-	for i := 1; i < nRankingBuffers; i++ {
+	for i := 0; i < nRankingBuffers; i++ {
 		for domain, count := range ds.topDomain[i] {
 			topDomain[domain] += count
 		}
@@ -304,6 +304,7 @@ func (h logHook) Fire(e *log.Entry) error {
 			ip:     ip,
 		}
 	case "disconnect":
+		log.Infof("disconnect in dashboard, nclients: %d", store.nClients)
 		store.lock.Lock()
 		store.nClients--
 		store.lock.Unlock()
