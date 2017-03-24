@@ -106,7 +106,6 @@ func TestSimulationRun(t *testing.T) {
 
 	// match with quotes or without, ie. time="..." or level=
 	r := regexp.MustCompile(`(.+?)=("[^"]*"|\S*)\s*`)
-	c := 0
 	simStart := time.Now()
 	var start time.Time
 	for scanner.Scan() {
@@ -143,11 +142,6 @@ func TestSimulationRun(t *testing.T) {
 		simStart = simStart.Add(diff) // catch up
 
 		l.WithFields(fields).Info(msg)
-
-		c++
-		if c > 5000 {
-			break
-		}
 
 	}
 
