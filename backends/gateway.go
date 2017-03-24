@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"runtime/debug"
+	"strings"
+
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
-	"runtime/debug"
-	"strings"
 )
 
 var ErrProcessorNotFound error
@@ -146,7 +147,7 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
 
 	case <-time.After(gw.saveTimeout()):
-		Log().Error("Backend has timed out while saving eamil")
+		Log().Error("Backend has timed out while saving email")
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
 }

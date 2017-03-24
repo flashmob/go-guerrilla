@@ -9,7 +9,6 @@ export const createActionTypes = list => {
 };
 
 export const formatBytes = (bytes, decimals) => {
-	console.log(bytes);
 	if (bytes < 1000) return `${bytes} B`;
 	const k = 1000;
 	const dm = decimals || 3;
@@ -21,7 +20,6 @@ export const formatBytes = (bytes, decimals) => {
 };
 
 export const formatNumber = (num, decimals) => {
-	console.log(num);
 	if (num < 1000) return `${num}`;
 	const k = 1000;
 	const dm = decimals || 3;
@@ -29,6 +27,5 @@ export const formatNumber = (num, decimals) => {
 	const i = Math.floor(Math.log(num) / Math.log(k));
 
 	if (i < 0) return '';
-	console.log(parseFloat((num / Math.pow(k, i)).toFixed(dm)));
 	return `${parseFloat((num / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
