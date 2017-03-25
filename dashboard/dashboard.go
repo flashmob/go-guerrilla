@@ -8,11 +8,12 @@ import (
 
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
 	_ "github.com/flashmob/go-guerrilla/dashboard/statik"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/rakyll/statik/fs"
+	"sync/atomic"
 )
 
 var (
@@ -27,6 +28,8 @@ var (
 	started sync.WaitGroup
 
 	s state
+
+	mainlogStore atomic.Value
 )
 
 type state int
@@ -60,9 +63,10 @@ type Config struct {
 }
 
 // Begin collecting data and listening for dashboard clients
-func Run(c *Config) {
+func Run(c *Config, l log.Logger) {
+	mainlogStore.Store(l)
 	statikFS, _ := fs.New()
-
+	//store = newDataStore()
 	applyConfig(c)
 	sessions = map[string]*session{}
 
@@ -80,11 +84,11 @@ func Run(c *Config) {
 
 	closer, err := ListenAndServeWithClose(c.ListenInterface, r)
 	if err != nil {
-		log.WithError(err).Error("Dashboard server failed to start")
+		mainlog().WithError(err).Error("Dashboard server failed to start")
 		started.Done()
 		return
 	}
-	log.Infof("started dashboard, listening on http [%s]", c.ListenInterface)
+	mainlog().Infof("started dashboard, listening on http [%s]", c.ListenInterface)
 	wg.Add(1)
 
 	go func() {
@@ -116,8 +120,17 @@ func Stop() {
 		stopRankingManager <- true
 		stopHttp <- true
 		wg.Wait()
+
 	}
 
+}
+
+func mainlog() log.Logger {
+	if v, ok := mainlogStore.Load().(log.Logger); ok {
+		return v
+	}
+	l, _ := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
+	return l
 }
 
 // Parses options in config and applies to global variables

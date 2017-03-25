@@ -4,8 +4,6 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -216,7 +214,7 @@ func dataListener(interval time.Duration) {
 			runtime.ReadMemStats(memStats)
 			ramPoint := point{t, memStats.Alloc}
 			nClientPoint := point{t, store.nClients}
-			log.WithFields(map[string]interface{}{
+			mainlog().WithFields(map[string]interface{}{
 				"ram":     ramPoint.Y,
 				"clients": nClientPoint.Y,
 			}).Info("Logging analytics data")
@@ -258,56 +256,4 @@ type initFrame struct {
 type message struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
-}
-
-type logHook int
-
-func (h logHook) Levels() []log.Level {
-	return log.AllLevels
-}
-
-// Checks fired logs for information that is relevant to the dashboard
-func (h logHook) Fire(e *log.Entry) error {
-	event, ok := e.Data["event"].(string)
-	if !ok {
-		return nil
-	}
-
-	var helo, ip, domain string
-	if event == "mailfrom" {
-		helo, ok = e.Data["helo"].(string)
-		if !ok {
-			return nil
-		}
-		if len(helo) > 16 {
-			helo = helo[:16]
-		}
-		ip, ok = e.Data["address"].(string)
-		if !ok {
-			return nil
-		}
-		domain, ok = e.Data["domain"].(string)
-		if !ok {
-			return nil
-		}
-	}
-
-	switch event {
-	case "connect":
-		store.lock.Lock()
-		store.nClients++
-		store.lock.Unlock()
-	case "mailfrom":
-		store.newConns <- conn{
-			domain: domain,
-			helo:   helo,
-			ip:     ip,
-		}
-	case "disconnect":
-		log.Infof("disconnect in dashboard, nclients: %d", store.nClients)
-		store.lock.Lock()
-		store.nClients--
-		store.lock.Unlock()
-	}
-	return nil
 }

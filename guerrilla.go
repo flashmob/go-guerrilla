@@ -456,7 +456,7 @@ func (g *guerrilla) Start() error {
 	startWG.Wait()
 
 	if g.Config.Dashboard.Enabled {
-		go dashboard.Run(&g.Config.Dashboard)
+		go dashboard.Run(&g.Config.Dashboard, g.mainlog())
 	}
 
 	// close, then read any errors

@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	log "github.com/Sirupsen/logrus"
 	"io"
 	"net"
 	"net/http"
@@ -31,7 +30,7 @@ func ListenAndServeWithClose(addr string, handler http.Handler) (io.Closer, erro
 	go func() {
 		err := srv.Serve(tcpKeepAliveListener{listener.(*net.TCPListener)})
 		if err != nil {
-			log.Println("HTTP Server Error - ", err)
+			mainlog().Error("HTTP Server Error - ", err)
 		}
 	}()
 

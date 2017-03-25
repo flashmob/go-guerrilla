@@ -4,7 +4,6 @@ import (
 	"math/rand"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/websocket"
 )
 
@@ -39,11 +38,11 @@ func (s *session) receive() {
 		_, message, err := s.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				log.WithError(err).Error("Websocket closed unexpectedly")
+				mainlog().WithError(err).Error("Websocket closed unexpectedly")
 			}
 			break
 		}
-		log.Infof("Message: %s", string(message))
+		mainlog().Infof("Message: %s", string(message))
 	}
 }
 
@@ -66,13 +65,13 @@ transmit:
 
 			err := s.ws.WriteJSON(p)
 			if err != nil {
-				log.WithError(err).Debug("Failed to write next websocket message. Closing connection")
+				mainlog().WithError(err).Debug("Failed to write next websocket message. Closing connection")
 				break transmit
 			}
 		case <-ticker.C:
 			s.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := s.ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				log.WithError(err).Debug("Failed to write next websocket message. Closing connection")
+				mainlog().WithError(err).Debug("Failed to write next websocket message. Closing connection")
 				break transmit
 			}
 		}

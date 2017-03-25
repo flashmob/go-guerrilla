@@ -2,15 +2,24 @@ package dashboard
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/gorilla/websocket"
+	"net/url"
 	"os"
+	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
-	//"fmt"
-	"github.com/flashmob/go-guerrilla/log"
-	"regexp"
-	"strings"
 )
+
+var testlog log.Logger
+
+func init() {
+	testlog, _ = log.GetLogger(log.OutputOff.String(), log.InfoLevel.String())
+}
 
 func TestRunStop(t *testing.T) {
 
@@ -26,7 +35,7 @@ func TestRunStop(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		Run(config)
+		Run(config, testlog)
 		wg.Done()
 	}()
 	// give Run some time to start
@@ -54,7 +63,7 @@ func TestRunStopBadAddress(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		Run(config)
+		Run(config, testlog)
 		wg.Done()
 	}()
 
@@ -82,11 +91,22 @@ func TestSimulationRun(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		Run(config)
+		Run(config, testlog)
 		wg.Done()
 	}()
 	// give Run some time to start
 	time.Sleep(time.Second)
+
+	simulateEvents(t)
+
+	Stop()
+
+	// Wait for Run() to exit
+	wg.Wait()
+
+}
+
+func simulateEvents(t *testing.T) {
 
 	file, err := os.Open("simulation.log")
 
@@ -101,8 +121,7 @@ func TestSimulationRun(t *testing.T) {
 
 	scanner.Split(bufio.ScanLines)
 
-	l, _ := log.GetLogger("stderr", "info")
-	l.AddHook(LogHook)
+	testlog.AddHook(LogHook)
 
 	// match with quotes or without, ie. time="..." or level=
 	r := regexp.MustCompile(`(.+?)=("[^"]*"|\S*)\s*`)
@@ -141,15 +160,9 @@ func TestSimulationRun(t *testing.T) {
 		time.Sleep(diff)              // wait so that we don't go too fast
 		simStart = simStart.Add(diff) // catch up
 
-		l.WithFields(fields).Info(msg)
+		testlog.WithFields(fields).Info(msg)
 
 	}
-
-	Stop()
-
-	// Wait for Run() to exit
-	wg.Wait()
-
 }
 
 // parseItem parses a log item, eg time="2017-03-24T11:55:44+11:00" will be:
@@ -167,4 +180,83 @@ func parseItem(item string) (key string, val string) {
 	}
 	val = strings.TrimSpace(val)
 	return
+}
+
+// Run a simulation from an already captured log
+// Then open a websocket and validate that we are getting some data from it
+func TestWebsocket(t *testing.T) {
+
+	config := &Config{
+		Enabled:               true,
+		ListenInterface:       "127.0.0.1:8082",
+		TickInterval:          "1s",
+		MaxWindow:             "24h",
+		RankingUpdateInterval: "6h",
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		Run(config, testlog)
+		wg.Done()
+	}()
+
+	var simWg sync.WaitGroup
+	go func() {
+		simWg.Add(1)
+		simulateEvents(t)
+		simWg.Done()
+	}()
+
+	time.Sleep(time.Second)
+
+	// lets talk to the websocket
+	u := url.URL{Scheme: "ws", Host: "127.0.0.1:8082", Path: "/ws"}
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		t.Error("cant conect':", err)
+		return
+	}
+
+	simWg.Add(1)
+	go func() {
+		defer func() {
+			simWg.Done()
+		}()
+		i := 0
+		for {
+			c.SetReadDeadline(time.Now().Add(time.Second + 5))
+			_, msg, err := c.ReadMessage()
+			if err != nil {
+				fmt.Println("socket err:", err)
+				t.Error("websocket failed to connect")
+				return
+			}
+			var objmap map[string]*json.RawMessage
+			json.Unmarshal(msg, &objmap)
+
+			if pl, ok := objmap["payload"]; ok {
+				df := &dataFrame{}
+				json.Unmarshal(*pl, &df)
+				if df.NClients.Y > 10 && len(df.TopHelo) > 10 && len(df.TopDomain) > 10 && len(df.TopIP) > 10 {
+					return
+				}
+			}
+			fmt.Println("recv:", string(msg))
+			i++
+			if i > 2 {
+				t.Error("Websocket did get find expected result")
+				return
+			}
+		}
+
+	}()
+	simWg.Wait() // wait for sim to exit, wait for websocket to finish reading
+	Stop()
+	// Wait for Run() to exit
+	wg.Wait()
+	c.Close()
+
 }
