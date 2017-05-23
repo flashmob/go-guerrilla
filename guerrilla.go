@@ -199,7 +199,7 @@ func (g *guerrilla) subscribeEvents() {
 	// allowed_hosts changed, set for all servers
 	g.Subscribe(EventConfigAllowedHosts, func(c *AppConfig) {
 		g.mapServers(func(server *server) {
-			server.setAllowedHosts(c.AllowedHosts,c.AllowedHostsSubdomains)
+			server.setAllowedHosts(c.AllowedHosts, c.AllowedHostsSubdomains)
 		})
 		g.mainlog().Infof("allowed_hosts config changed, a new list was set")
 	})
