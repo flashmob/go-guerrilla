@@ -559,3 +559,134 @@ func TestSkipAllowsHost(t *testing.T) {
 	}
 
 }
+
+// Test the AllowedHostsSubdomains config
+func TestAllowsHostWithSubDomains(t *testing.T) {
+
+	d := Daemon{}
+	defer d.Shutdown()
+	// setting the allowed hosts to a mixture of subdomain allowed and disallowed hosts
+	// also set 'allowed hosts subdomains' to one that is in the allowed hosts and one that is not.
+	d.Config = &AppConfig{AllowedHosts: []string{"domainsandsubdomains.com", "nosubdomains.com"}, AllowedHostsSubdomains: []string{"domainsandsubdomains.com", "onlysubdomains.com"}, LogFile: "off"}
+	d.Start()
+
+	// AllowedHosts and AllowedHostsSubdomains
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@domainsandsubdomains.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "250") != 0 {
+			t.Error("expected 250 reply, got:", str)
+		}
+	}
+	// AllowedHosts only
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@testor.nosubdomains.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "454") != 0 {
+			t.Error("expected 454 reply, got:", str)
+		}
+	}
+	// AllowedHosts and AllowedHostsSubdomains
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@testor.domainsandsubdomains.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "250") != 0 {
+			t.Error("expected 250 reply, got:", str)
+		}
+	}
+	// only AllowedHostsSubdomains
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@iamasubdomain.onlysubdomains.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "250") != 0 {
+			t.Error("expected 250 reply, got:", str)
+		}
+	}
+	// something that is in neither base domain
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@donotallowme.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "454") != 0 {
+			t.Error("expected 454 reply, got:", str)
+		}
+	}
+	// something that is in neither subdomain
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@please.donotallowme.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "454") != 0 {
+			t.Error("expected 454 reply, got:", str)
+		}
+	}
+	// something that looks like a subdomain but is not
+	{
+		conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+		if err != nil {
+			t.Error(t)
+			return
+		}
+		in := bufio.NewReader(conn)
+		fmt.Fprint(conn, "HELO test\r\n")
+		fmt.Fprint(conn, "RCPT TO: test@IAMNOTASUBDOMAINonlysubdomains.com\r\n")
+		in.ReadString('\n')
+		in.ReadString('\n')
+		str, _ := in.ReadString('\n')
+		if strings.Index(str, "454") != 0 {
+			t.Error("expected 454 reply, got:", str)
+		}
+	}
+}

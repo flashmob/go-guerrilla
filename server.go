@@ -1,6 +1,7 @@
 package guerrilla
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
@@ -63,8 +64,9 @@ type server struct {
 }
 
 type allowedHosts struct {
-	table      map[string]bool // host lookup table
-	sync.Mutex                 // guard access to the map
+	table                  map[string]bool // host lookup table
+	allowedHostsSubdomains map[string]bool // what hosts may have subdomains
+	sync.Mutex                             // guard access to the map
 }
 
 // Creates and returns a new ready-to-run Server from a configuration
@@ -148,12 +150,25 @@ func (server *server) isEnabled() bool {
 }
 
 // Set the allowed hosts for the server
-func (server *server) setAllowedHosts(allowedHosts []string) {
+func (server *server) setAllowedHosts(allowedHosts []string, allowedHostsSubdomains []string) {
 	server.hosts.Lock()
 	defer server.hosts.Unlock()
 	server.hosts.table = make(map[string]bool, len(allowedHosts))
 	for _, h := range allowedHosts {
 		server.hosts.table[strings.ToLower(h)] = true
+	}
+
+	// do we have domains what are allowed to have subdomains?
+	if len(allowedHostsSubdomains) > 0 {
+		server.hosts.allowedHostsSubdomains = make(map[string]bool, len(allowedHostsSubdomains))
+		// prepend the host name with a '.' so we are actually accepting a subdomain
+		var buffer bytes.Buffer
+		for _, h := range allowedHostsSubdomains {
+			buffer.Reset()
+			buffer.WriteString(".")
+			buffer.WriteString(strings.ToLower(h))
+			server.hosts.allowedHostsSubdomains[buffer.String()] = true
+		}
 	}
 }
 
@@ -243,6 +258,16 @@ func (server *server) allowsHost(host string) bool {
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
+
+	// do we have hosts we allow subdomains, if so check them
+	if len(server.hosts.allowedHostsSubdomains) > 0 {
+		for allowedHostSubdomain, _ := range server.hosts.allowedHostsSubdomains {
+			if strings.HasSuffix(host, allowedHostSubdomain) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
