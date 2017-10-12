@@ -1,4 +1,4 @@
-package: github.com/flashmob/go-guerrilla
+package: github.com/ganglio/go-guerrilla
 import:
 - package: github.com/sirupsen/logrus
   version: ~0.11.0

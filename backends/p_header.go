@@ -1,7 +1,7 @@
 package backends
 
 import (
-	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/ganglio/go-guerrilla/mail"
 	"strings"
 	"time"
 )
