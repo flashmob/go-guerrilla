@@ -20,9 +20,9 @@ import (
 
 	"time"
 
-	"github.com/ganglio/go-guerrilla"
-	"github.com/ganglio/go-guerrilla/backends"
-	"github.com/ganglio/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 
 	"bufio"
 
@@ -33,7 +33,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/ganglio/go-guerrilla/tests/testcert"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"os"
 )
 

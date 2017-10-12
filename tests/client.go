@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/ganglio/go-guerrilla"
+	"github.com/flashmob/go-guerrilla"
 	"net"
 	"time"
 )

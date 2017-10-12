@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ganglio/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/ganglio/go-guerrilla/response"
+	"github.com/flashmob/go-guerrilla/response"
 	"math/big"
 	"net"
 	"runtime/debug"

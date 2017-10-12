@@ -1,7 +1,7 @@
 package backends
 
 import (
-	"github.com/ganglio/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 type SelectTask int

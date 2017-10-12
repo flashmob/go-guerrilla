@@ -5,7 +5,7 @@ import (
 	"compress/zlib"
 	"database/sql"
 	"fmt"
-	"github.com/ganglio/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/garyburd/redigo/redis"
 	"github.com/go-sql-driver/mysql"
 	"io"

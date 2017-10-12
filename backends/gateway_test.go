@@ -2,8 +2,8 @@ package backends
 
 import (
 	"fmt"
-	"github.com/ganglio/go-guerrilla/log"
-	"github.com/ganglio/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"strings"
 	"testing"
 	"time"
