@@ -5,21 +5,21 @@ import (
 	"compress/zlib"
 	"database/sql"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/garyburd/redigo/redis"
-	"github.com/go-sql-driver/mysql"
 	"io"
 	"math/rand"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/garyburd/redigo/redis"
 )
 
 // ----------------------------------------------------------------------------------
-// Processor Name: GuerrillaRedsDB
+// Processor Name: GuerrillaRedisDB
 // ----------------------------------------------------------------------------------
-// Description   : Saves the body to redis, meta data to mysql. Example only.
+// Description   : Saves the body to redis, meta data to SQL. Example only.
 //               : Limitation: it doesn't save multiple recipients or validate them
 // ----------------------------------------------------------------------------------
 // Config Options: ...
@@ -56,15 +56,13 @@ type stmtCache [GuerrillaDBAndRedisBatchMax]*sql.Stmt
 
 type guerrillaDBAndRedisConfig struct {
 	NumberOfWorkers    int    `json:"save_workers_size"`
-	MysqlTable         string `json:"mail_table"`
-	MysqlDB            string `json:"mysql_db"`
-	MysqlHost          string `json:"mysql_host"`
-	MysqlPass          string `json:"mysql_pass"`
-	MysqlUser          string `json:"mysql_user"`
+	Table              string `json:"mail_table"`
+	Driver             string `json:"sql_driver"`
+	DSN                string `json:"sql_dsn"`
 	RedisExpireSeconds int    `json:"redis_expire_seconds"`
 	RedisInterface     string `json:"redis_interface"`
 	PrimaryHost        string `json:"primary_mail_host"`
-	BatchTimeout       int    `json:"redis_mysql_batch_timeout,omitempty"`
+	BatchTimeout       int    `json:"redis_sql_batch_timeout,omitempty"`
 }
 
 // Load the backend config for the backend. It has already been unmarshalled
@@ -153,7 +151,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	if g.cache[rows-1] != nil {
 		return g.cache[rows-1]
 	}
-	sqlstr := "INSERT INTO " + g.config.MysqlTable + " "
+	sqlstr := "INSERT INTO " + g.config.Table + " "
 	sqlstr += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
 	sqlstr += " values "
 	values := "(NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
@@ -304,7 +302,7 @@ func trimToLimit(str string, limit int) string {
 	return ret
 }
 
-func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
+func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 	tOut := GuerrillaDBAndRedisBatchTimeout
 	if g.config.BatchTimeout > 0 {
 		tOut = time.Duration(g.config.BatchTimeout)
@@ -314,22 +312,12 @@ func (g *GuerrillaDBAndRedisBackend) mysqlConnect() (*sql.DB, error) {
 	if tOut >= 30 {
 		tOut = 29
 	}
-	conf := mysql.Config{
-		User:         g.config.MysqlUser,
-		Passwd:       g.config.MysqlPass,
-		DBName:       g.config.MysqlDB,
-		Net:          "tcp",
-		Addr:         g.config.MysqlHost,
-		ReadTimeout:  tOut * time.Second,
-		WriteTimeout: tOut * time.Second,
-		Params:       map[string]string{"collation": "utf8_general_ci"},
-	}
-	if db, err := sql.Open("mysql", conf.FormatDSN()); err != nil {
-		Log().Error("cannot open mysql", err, "]")
+	if db, err := sql.Open(g.config.Driver, g.config.DSN); err != nil {
+		Log().Error("cannot open database", err, "]")
 		return nil, err
 	} else {
 		// do we have access?
-		_, err = db.Query("SELECT mail_id FROM " + g.config.MysqlTable + " LIMIT 1")
+		_, err = db.Query("SELECT mail_id FROM " + g.config.Table + " LIMIT 1")
 		if err != nil {
 			Log().Error("cannot select table", err)
 			return nil, err
@@ -376,7 +364,7 @@ func GuerrillaDbReddis() Decorator {
 			return err
 		}
 		g.config = bcfg.(*guerrillaDBAndRedisConfig)
-		db, err = g.mysqlConnect()
+		db, err = g.sqlConnect()
 		if err != nil {
 			return err
 		}
@@ -401,7 +389,7 @@ func GuerrillaDbReddis() Decorator {
 
 	Svc.AddShutdowner(ShutdownWith(func() error {
 		db.Close()
-		Log().Infof("closed mysql")
+		Log().Infof("closed sql")
 		if redisClient.conn != nil {
 			Log().Infof("closed redis")
 			redisClient.conn.Close()
