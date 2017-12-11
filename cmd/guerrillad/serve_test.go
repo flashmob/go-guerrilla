@@ -3,12 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	test "github.com/flashmob/go-guerrilla/tests"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
-	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -18,6 +12,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"github.com/spf13/cobra"
 )
 
 var configJsonA = `
@@ -120,10 +121,8 @@ var configJsonC = `
     "backend_name": "guerrilla-redis-db",
     "backend_config" :
         {
-            "mysql_db":"gmail_mail",
-            "mysql_host":"127.0.0.1:3306",
-            "mysql_pass":"ok",
-            "mysql_user":"root",
+            "sql_driver": "mysql",
+            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10&writeTimeout=10",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,

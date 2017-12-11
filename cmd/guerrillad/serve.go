@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,6 +9,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/spf13/cobra"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 const (
