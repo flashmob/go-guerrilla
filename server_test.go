@@ -156,9 +156,9 @@ func TestGatewayTimeout(t *testing.T) {
 		"save_process":        "HeadersParser|Debugger",
 		"log_received_mails":  true,
 		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "2s",
-		"gw_val_rcpt_timeout": "2s",
-		"sleep_seconds":       1,
+		"gw_save_timeout":     "1s",
+		"gw_val_rcpt_timeout": "1s",
+		"sleep_seconds":       2,
 	}
 
 	cfg := &AppConfig{
@@ -203,7 +203,7 @@ func TestGatewayTimeout(t *testing.T) {
 			}
 		}
 		_ = str
-		fmt.Println(str)
+
 		d.Shutdown()
 	}
 }
@@ -215,9 +215,9 @@ func TestGatewayPanic(t *testing.T) {
 		"save_process":        "HeadersParser|Debugger",
 		"log_received_mails":  true,
 		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "1s",
-		"gw_val_rcpt_timeout": "1s",
-		"sleep_seconds":       2,
+		"gw_save_timeout":     "2s",
+		"gw_val_rcpt_timeout": "2s",
+		"sleep_seconds":       1,
 	}
 
 	cfg := &AppConfig{
@@ -264,7 +264,6 @@ func TestGatewayPanic(t *testing.T) {
 			}
 		}
 		_ = str
-		fmt.Println(str)
 		d.Shutdown()
 	}
 
