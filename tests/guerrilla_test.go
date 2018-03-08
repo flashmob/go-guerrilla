@@ -33,8 +33,9 @@ import (
 	"net"
 	"strings"
 
-	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"os"
+
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 )
 
 type TestConfig struct {
@@ -1139,7 +1140,7 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 				conn,
 				bufin,
 				"DATA\r\n")
-			expected := "503 5.5.1 Error: No sender"
+			expected := "503 5.5.1 Error: No recipients"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}
