@@ -30,7 +30,7 @@ import (
 // ----------------------------------------------------------------------------------
 func init() {
 	processors["guerrillaredisdb"] = func() Decorator {
-		return GuerrillaDbReddis()
+		return GuerrillaDbRedis()
 	}
 }
 
@@ -352,9 +352,9 @@ func (c *redisClient) redisConnection(redisInterface string) (err error) {
 
 type feedChan chan []interface{}
 
-// GuerrillaDbReddis is a specialized processor for Guerrilla mail. It is here as an example.
+// GuerrillaDbRedis is a specialized processor for Guerrilla mail. It is here as an example.
 // It's an example of a 'monolithic' processor.
-func GuerrillaDbReddis() Decorator {
+func GuerrillaDbRedis() Decorator {
 
 	g := GuerrillaDBAndRedisBackend{}
 	redisClient := &redisClient{}

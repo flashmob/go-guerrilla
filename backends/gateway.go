@@ -139,14 +139,20 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	// or timeout
 	select {
 	case status := <-workerMsg.notifyMe:
-		defer workerMsgPool.Put(workerMsg) // can be recycled since we used the notifyMe channel
+		workerMsgPool.Put(workerMsg) // can be recycled since we used the notifyMe channel
 		if status.err != nil {
 			return NewResult(response.Canned.FailBackendTransaction + status.err.Error())
 		}
 		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
-
 	case <-time.After(gw.saveTimeout()):
-		Log().Error("Backend has timed out while saving eamil")
+		Log().Error("Backend has timed out while saving email")
+		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
+		go func() {
+			// keep waiting for the backend to finish processing
+			<-workerMsg.notifyMe
+			e.Unlock()
+			workerMsgPool.Put(workerMsg)
+		}()
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
 }
@@ -169,13 +175,20 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 	// or timeout
 	select {
 	case status := <-workerMsg.notifyMe:
+		workerMsgPool.Put(workerMsg)
 		if status.err != nil {
 			return status.err
 		}
 		return nil
 
 	case <-time.After(gw.validateRcptTimeout()):
-		Log().Error("Backend has timed out while validating rcpt")
+		e.Lock()
+		go func() {
+			<-workerMsg.notifyMe
+			e.Unlock()
+			workerMsgPool.Put(workerMsg)
+			Log().Error("Backend has timed out while validating rcpt")
+		}()
 		return StorageTimeout
 	}
 }
@@ -260,7 +273,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	gw.Lock()
 	defer gw.Unlock()
 	if gw.State != BackendStateNew && gw.State != BackendStateShuttered {
-		return errors.New("Can only Initialize in BackendStateNew or BackendStateShuttered state")
+		return errors.New("can only Initialize in BackendStateNew or BackendStateShuttered state")
 	}
 	err := gw.loadConfig(cfg)
 	if err != nil {
@@ -270,7 +283,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	workersSize := gw.workersSize()
 	if workersSize < 1 {
 		gw.State = BackendStateError
-		return errors.New("Must have at least 1 worker")
+		return errors.New("must have at least 1 worker")
 	}
 	gw.processors = make([]Processor, 0)
 	gw.validators = make([]Processor, 0)
@@ -403,7 +416,6 @@ func (gw *BackendGateway) workDispatcher(
 
 			if state == dispatcherStateWorking {
 				msg.notifyMe <- &notifyMsg{err: errors.New("storage failed")}
-				msg.e.Unlock()
 			}
 			state = dispatcherStatePanic
 			return
@@ -421,14 +433,13 @@ func (gw *BackendGateway) workDispatcher(
 			Log().Infof("stop signal for worker (#%d)", workerId)
 			return
 		case msg = <-workIn:
-			msg.e.Lock()
-			state = dispatcherStateWorking
+			state = dispatcherStateWorking // recovers from panic if in this state
 			if msg.task == TaskSaveMail {
 				// process the email here
 				result, _ := save.Process(msg.e, TaskSaveMail)
 				state = dispatcherStateNotify
 				if result.Code() < 300 {
-					// if all good, let the gateway know that it was queued
+					// if all good, let the gateway know that it was saved
 					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
 				} else {
 					// notify the gateway about the error
@@ -445,7 +456,6 @@ func (gw *BackendGateway) workDispatcher(
 					msg.notifyMe <- &notifyMsg{err: nil}
 				}
 			}
-			msg.e.Unlock()
 		}
 		state = dispatcherStateIdle
 	}

@@ -104,7 +104,7 @@ func queuedID(clientID uint64) string {
 func (e *Envelope) ParseHeaders() error {
 	var err error
 	if e.Header != nil {
-		return errors.New("Headers already parsed")
+		return errors.New("headers already parsed")
 	}
 	buf := bytes.NewBuffer(e.Data.Bytes())
 	// find where the header ends, assuming that over 30 kb would be max
@@ -153,6 +153,12 @@ func (e *Envelope) String() string {
 
 // ResetTransaction is called when the transaction is reset (keeping the connection open)
 func (e *Envelope) ResetTransaction() {
+
+	// ensure not processing by the backend, will only get lock if finished, otherwise block
+	e.Lock()
+	// got the lock, it means processing finished
+	e.Unlock()
+
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}
 	// reset the data buffer, keep it allocated
@@ -318,36 +324,13 @@ func (p *Pool) Borrow(remoteAddr string, clientID uint64) *Envelope {
 }
 
 // Return returns an envelope back to the envelope pool
-// Note that an envelope will not be recycled while it still is
-// processing
+// Make sure that envelope finished processing before calling this
 func (p *Pool) Return(e *Envelope) {
-	// we down't want to recycle an envelope that may still be processing
-	isUnlocked := func() <-chan bool {
-		signal := make(chan bool)
-		// make sure envelope finished processing
-		go func() {
-			// lock will block if still processing
-			e.Lock()
-			// got the lock, it means processing finished
-			e.Unlock()
-			// generate a signal
-			signal <- true
-		}()
-		return signal
-	}()
-
 	select {
-	case <-time.After(time.Second * 30):
-		// envelope still processing, we can't recycle it.
-	case <-isUnlocked:
-		// The envelope was _unlocked_, it finished processing
-		// put back in the pool or destroy
-		select {
-		case p.pool <- e:
-			//placed envelope back in pool
-		default:
-			// pool is full, don't return
-		}
+	case p.pool <- e:
+		//placed envelope back in pool
+	default:
+		// pool is full, discard it
 	}
 	// take a value off the semaphore to make room for more envelopes
 	<-p.sem
