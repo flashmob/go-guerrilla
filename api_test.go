@@ -16,16 +16,14 @@ import (
 
 // Test Starting smtp without setting up logger / backend
 func TestSMTP(t *testing.T) {
+	done := make(chan bool)
 	go func() {
 		select {
 		case <-time.After(time.Second * 40):
-			//buf := make([]byte, 1<<16)
-			//stackSize := runtime.Stack(buf, true)
-			//fmt.Printf("%s\n", string(buf[0:stackSize]))
-			//panic("timeout")
 			t.Error("timeout")
 			return
-
+		case <-done:
+			return
 		}
 	}()
 
@@ -52,6 +50,7 @@ func TestSMTP(t *testing.T) {
 	}
 	time.Sleep(time.Second * 2)
 	d.Shutdown()
+	done <- true
 
 }
 
