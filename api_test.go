@@ -16,16 +16,14 @@ import (
 
 // Test Starting smtp without setting up logger / backend
 func TestSMTP(t *testing.T) {
+	done := make(chan bool)
 	go func() {
 		select {
 		case <-time.After(time.Second * 40):
-			//buf := make([]byte, 1<<16)
-			//stackSize := runtime.Stack(buf, true)
-			//fmt.Printf("%s\n", string(buf[0:stackSize]))
-			//panic("timeout")
 			t.Error("timeout")
 			return
-
+		case <-done:
+			return
 		}
 	}()
 
@@ -52,6 +50,7 @@ func TestSMTP(t *testing.T) {
 	}
 	time.Sleep(time.Second * 2)
 	d.Shutdown()
+	done <- true
 
 }
 
@@ -414,25 +413,19 @@ func talkToServer(address string) {
 	}
 	in := bufio.NewReader(conn)
 	str, err := in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "DATA\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "Subject: Test subject\r\n")
 	fmt.Fprint(conn, "\r\n")
 	fmt.Fprint(conn, "A an email body\r\n")
 	fmt.Fprint(conn, ".\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	_ = str
 }
 
