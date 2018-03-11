@@ -1,5 +1,5 @@
 hash: ab5586e1ee56f15336e425d99f774acd4f6bc0f042ab597248366592d8c0b1bf
-updated: 2018-03-11T09:23:13.245258041+11:00
+updated: 2018-03-11T11:39:28.566276841+11:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: 68a521d7cbbb7a859c2608b06342f384b3bd5f5a
@@ -16,8 +16,6 @@ imports:
   version: 274df120e9065bdd08eb1120e0375e3dc1ae8465
   subpackages:
   - fs
-- name: github.com/Sirupsen/logrus
-  version: d682213848ed68c0a260ca37d6dd5ace8423f5ba
 - name: github.com/sirupsen/logrus
   version: d682213848ed68c0a260ca37d6dd5ace8423f5ba
 - name: github.com/spf13/cobra
