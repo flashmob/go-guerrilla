@@ -15,6 +15,7 @@ import (
 // Accounts for folding headers.
 var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
 
+// ParseHeaders is deprecated, see mail.Envelope.ParseHeaders instead
 func ParseHeaders(mailData string) map[string]string {
 	var headerSectionEnds int
 	for i, char := range mailData[:len(mailData)-4] {
@@ -25,7 +26,6 @@ func ParseHeaders(mailData string) map[string]string {
 		}
 	}
 	headers := make(map[string]string)
-	// TODO header comments and textproto Reader instead of regex
 	matches := headerRegex.FindAllStringSubmatch(mailData[:headerSectionEnds], -1)
 	for _, h := range matches {
 		name := textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(strings.Replace(h[1], "\r\n", "", -1)))

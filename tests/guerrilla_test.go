@@ -33,8 +33,9 @@ import (
 	"net"
 	"strings"
 
-	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"os"
+
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 )
 
 type TestConfig struct {
@@ -62,8 +63,8 @@ func init() {
 		initErr = errors.New("Could not Unmarshal config," + err.Error())
 	} else {
 		setupCerts(config)
-		logger, _ = log.GetLogger(config.LogFile)
-		backend, _ := getBackend("dummy", config.BackendConfig, logger)
+		logger, _ = log.GetLogger(config.LogFile, "debug")
+		backend, _ := getBackend(config.BackendConfig, logger)
 		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
@@ -74,9 +75,8 @@ var configJson = `
 {
     "log_file" : "./testlog",
     "log_level" : "debug",
-    "pid_file" : "/var/run/go-guerrilla.pid",
+    "pid_file" : "go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_name" : "dummy",
     "backend_config" :
         {
             "log_received_mails" : true
@@ -113,8 +113,13 @@ var configJson = `
 }
 `
 
-func getBackend(backendName string, backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
-	return backends.New(backendName, backendConfig, l)
+func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
+	b, err := backends.New(backendConfig, l)
+	if err != nil {
+		fmt.Println("backend init error", err)
+		os.Exit(1)
+	}
+	return b, err
 }
 
 func setupCerts(c *TestConfig) {
@@ -188,7 +193,6 @@ func TestGreeting(t *testing.T) {
 		t.FailNow()
 	}
 	if startErrors := app.Start(); startErrors == nil {
-
 		// 1. plaintext connection
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
 		if err != nil {
@@ -236,6 +240,7 @@ func TestGreeting(t *testing.T) {
 		conn.Close()
 
 	} else {
+		fmt.Println("Nope", startErrors)
 		if startErrors := app.Start(); startErrors != nil {
 			t.Error(startErrors)
 			t.FailNow()
@@ -332,6 +337,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			}
 
 			for i := 0; i < 101; i++ {
+				//fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
 				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break
@@ -1096,7 +1102,139 @@ func TestDataCommand(t *testing.T) {
 				bufin,
 				email+"\r\n.\r\n")
 			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK : queued as s0m3l337Ha5hva1u3LOL"
+			expected := "250 2.0.0 OK : queued as "
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}
+
+// Fuzzer crashed the server by submitting "DATA\r\n" as the first command
+func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				"DATA\r\n")
+			expected := "503 5.5.1 Error: No recipients"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+			}
+
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+	// don't forget to reset
+	os.Truncate("./testlog", 0)
+}
+
+// Appears to hang the fuzz test, but not server.
+func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	str := "X_\r\nMAIL FROM:<u\xfd\xfdrU" +
+		"\x10c22695140\xfd727235530" +
+		" Walter Sobchak\x1a\tDon" +
+		"ny, x_6_, Donnyre   " +
+		"\t\t outof89 !om>\r\nMAI" +
+		"L\t\t \t\tFROM:<C4o\xfd\xfdr@e" +
+		"xample.c22695140\xfd727" +
+		"235530 Walter Sobcha" +
+		"k: Donny, you>re out" +
+		" of your element!om>" +
+		"\r\nMAIL RCPT TO:t@IRS" +
+		"ETRCPTIRSETRCP:<\x00\xfd\xfdr" +
+		"@example 7A924_F__4_" +
+		"c22695140\xfd-061.0x30C" +
+		"8bC87fE4d3 Walter MA" +
+		"IL Donny, youiq__n_l" +
+		"wR8qs_0RBcw_0hIY_pS_" +
+		"___x9_E0___sL598_G82" +
+		"_6 out   your elemen" +
+		"t!>\r\nX _9KB___X_p:<o" +
+		"ut\xfd\xfdr@example9gTnr2N" +
+		"__Vl_T7U_AqfU_dPfJ_0" +
+		"HIqKK0037f6W_KGM_y_Z" +
+		"_9_96_w_815Q572py2_9" +
+		"F\xfd727235530Walter\tSo" +
+		"bchakRSET MAIL from:" +
+		" : cows eat\t\t  grass" +
+		" , _S___46_PbG03_iW'" +
+		"__v5L2_2L_J61u_38J55" +
+		"_PpwQ_Fs_7L_3p7S_t__" +
+		"g9XP48T_9HY_EDl_c_C3" +
+		"3_3b708EreT_OR out 9" +
+		"9_pUY4 \t\t\t     \x05om>\r" +
+		"\n FROM<u\xfd\xfdr@example." +
+		"<\xfd-05110602 Walter S" +
+		"obchak: Donny, \t\t  w" +
+		"50TI__m_5EsC___n_l_d" +
+		"__57GP9G02_32n_FR_xw" +
+		"_2_103___rnED5PGIKN7" +
+		"BBs3VIuNV_514qDBp_Gs" +
+		"_qj4\tre out all cows" +
+		" eatof your element\x03" +
+		"om>\r\n_2 FROM:<u\x10\xfdr@e" +
+		"xample.oQ_VLq909_E_5" +
+		"AQ7_4_\xfd1935012674150" +
+		"6773818422493001838." +
+		"-010\tWalter\tSobchak:" +
+		" Donny, youyouteIz2y" +
+		"__Z2q5_qoA're Q6MP2_" +
+		"CT_z70____0c0nU7_83d" +
+		"4jn_eFD7h_9MbPjr_s_L" +
+		"9_X23G_7 of _kU_L9Yz" +
+		"_K52345QVa902H1__Hj_" +
+		"Nl_PP2tW2ODi0_V80F15" +
+		"_i65i_V5uSQdiG eleme" +
+		"nt!om>\r\n"
+
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+
+			response, err := Command(
+				conn,
+				bufin,
+				str)
+			expected := "554 5.5.1 Unrecognized command"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}

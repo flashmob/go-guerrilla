@@ -24,8 +24,21 @@ dependencies:
 guerrillad: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
+guerrilladrace: *.go */*.go */*/*.go
+	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
+
+
 test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v .
 	$(GO_VARS) $(GO) test -v ./tests
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad
 	$(GO_VARS) $(GO) test -v ./response
+	$(GO_VARS) $(GO) test -v ./backends
+	$(GO_VARS) $(GO) test -v ./mail
+
+testrace: *.go */*.go */*/*.go
+	$(GO_VARS) $(GO) test -v . -race
+	$(GO_VARS) $(GO) test -v ./tests -race
+	$(GO_VARS) $(GO) test -v ./cmd/guerrillad -race
+	$(GO_VARS) $(GO) test -v ./response -race
+	$(GO_VARS) $(GO) test -v ./backends -race

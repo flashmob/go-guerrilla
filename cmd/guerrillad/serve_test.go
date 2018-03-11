@@ -33,8 +33,9 @@ var configJsonA = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
+    	"save_workers_size" : 1,
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": true
     },
     "servers" : [
@@ -45,7 +46,7 @@ var configJsonA = `
             "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
-            "listen_interface":"127.0.0.1:25",
+            "listen_interface":"127.0.0.1:3536",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000,
@@ -81,8 +82,9 @@ var configJsonB = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
+    	"save_workers_size" : 1,
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": false
     },
     "servers" : [
@@ -93,7 +95,7 @@ var configJsonB = `
             "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
             "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
-            "listen_interface":"127.0.0.1:25",
+            "listen_interface":"127.0.0.1:3536",
             "start_tls_on":true,
             "tls_always_on":false,
             "max_clients": 1000,
@@ -119,15 +121,16 @@ var configJsonC = `
     "backend_name": "guerrilla-redis-db",
     "backend_config" :
         {
-            "mysql_db":"gmail_mail",
-            "mysql_host":"127.0.0.1:3306",
-            "mysql_pass":"ok",
-            "mysql_user":"root",
+            "sql_driver": "mysql",
+            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10&writeTimeout=10",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,
             "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com"
+            "primary_mail_host":"sharklasers.com",
+            "save_workers_size" : 1,
+	    "save_process": "HeadersParser|Debugger",
+	    "log_received_mails": true
         },
     "servers" : [
         {
@@ -173,10 +176,68 @@ var configJsonD = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "dummy",
     "backend_config": {
+        "save_workers_size" : 1,
+    	"save_process": "HeadersParser|Debugger",
         "log_received_mails": false
     },
+    "servers" : [
+        {
+            "is_enabled" : true,
+            "host_name":"mail.test.com",
+            "max_size": 1000000,
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:2552",
+            "start_tls_on":true,
+            "tls_always_on":false,
+            "max_clients": 1000,
+            "log_file" : "../../tests/testlog"
+        },
+        {
+            "is_enabled" : true,
+            "host_name":"secure.test.com",
+            "max_size":1000000,
+            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
+            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            "timeout":180,
+            "listen_interface":"127.0.0.1:4655",
+            "start_tls_on":false,
+            "tls_always_on":true,
+            "max_clients":500,
+            "log_file" : "../../tests/testlog"
+        }
+    ]
+}
+`
+
+// adds 127.0.0.1:4655, a secure server
+var configJsonE = `
+{
+    "log_file" : "../../tests/testlog",
+    "log_level" : "debug",
+    "pid_file" : "./pidfile2.pid",
+    "allowed_hosts": [
+      "guerrillamail.com",
+      "guerrillamailblock.com",
+      "sharklasers.com",
+      "guerrillamail.net",
+      "guerrillamail.org"
+    ],
+    "backend_config" :
+        {
+            "save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
+            "save_process": "GuerrillaRedisDB",
+            "log_received_mails" : true,
+            "sql_driver": "mysql",
+            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10&writeTimeout=10",
+            "mail_table":"new_mail",
+            "redis_interface" : "127.0.0.1:6379",
+            "redis_expire_seconds" : 7200,
+            "save_workers_size" : 3,
+            "primary_mail_host":"sharklasers.com"
+        },
     "servers" : [
         {
             "is_enabled" : true,
@@ -243,57 +304,64 @@ func sigKill() {
 // make sure that we get all the config change events
 func TestCmdConfigChangeEvents(t *testing.T) {
 
-	oldconf := &CmdConfig{}
-	oldconf.load([]byte(configJsonA))
-
-	newconf := &CmdConfig{}
-	newconf.load([]byte(configJsonB))
-
-	newerconf := &CmdConfig{}
-	newerconf.load([]byte(configJsonC))
-
-	expectedEvents := map[string]bool{
-		"config_change:backend_config": false,
-		"config_change:backend_name":   false,
-		"server_change:new_server":     false,
+	oldconf := &guerrilla.AppConfig{}
+	if err := oldconf.Load([]byte(configJsonA)); err != nil {
+		t.Error("configJsonA is invalid", err)
 	}
-	mainlog, _ = log.GetLogger("off")
+
+	newconf := &guerrilla.AppConfig{}
+	if err := newconf.Load([]byte(configJsonB)); err != nil {
+		t.Error("configJsonB is invalid", err)
+	}
+
+	newerconf := &guerrilla.AppConfig{}
+	if err := newerconf.Load([]byte(configJsonC)); err != nil {
+		t.Error("configJsonC is invalid", err)
+	}
+
+	expectedEvents := map[guerrilla.Event]bool{
+		guerrilla.EventConfigBackendConfig: false,
+		guerrilla.EventConfigServerNew:     false,
+	}
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, err := backends.New("dummy", bcfg, mainlog)
-	app, err := guerrilla.New(&oldconf.AppConfig, backend, mainlog)
+	backend, err := backends.New(bcfg, mainlog)
+	app, err := guerrilla.New(oldconf, backend, mainlog)
 	if err != nil {
-		//log.Info("Failed to create new app", err)
+		t.Error("Failed to create new app", err)
 	}
-	toUnsubscribe := map[string]func(c *CmdConfig){}
-	toUnsubscribeS := map[string]func(c *guerrilla.ServerConfig){}
+	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
+	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
 
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
-		func(e string) {
-
-			if strings.Index(e, "server_change") == 0 {
+		func(e guerrilla.Event) {
+			if strings.Index(e.String(), "server_change") == 0 {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
-				toUnsubscribeS[event] = f
+				app.Subscribe(e, f)
+				toUnsubscribeS[e] = f
 			} else {
-				f := func(c *CmdConfig) {
+				f := func(c *guerrilla.AppConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
-				toUnsubscribe[event] = f
+				app.Subscribe(e, f)
+				toUnsubscribe[e] = f
 			}
 
 		}(event)
 	}
 
 	// emit events
-	newconf.emitChangeEvents(oldconf, app)
-	newerconf.emitChangeEvents(newconf, app)
+	newconf.EmitChangeEvents(oldconf, app)
+	newerconf.EmitChangeEvents(newconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
+		app.Unsubscribe(unevent, unfun)
+	}
+	for unevent, unfun := range toUnsubscribeS {
 		app.Unsubscribe(unevent, unfun)
 	}
 
@@ -311,9 +379,10 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
+
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -344,12 +413,7 @@ func TestServe(t *testing.T) {
 	// Would not work on windows as kill is not available.
 	// TODO: Implement an alternative test for windows.
 	if runtime.GOOS != "windows" {
-		ecmd := exec.Command("kill", "-HUP", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			t.Error("could not SIGHUP", err)
-			t.FailNow()
-		}
+		sigHup()
 		time.Sleep(testPauseDuration) // allow sighup to do its job
 		// did the pidfile change as expected?
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
@@ -358,6 +422,7 @@ func TestServe(t *testing.T) {
 	}
 	// send kill signal and wait for exit
 	sigKill()
+	// wait for exit
 	serveWG.Wait()
 
 	// did backend started as expected?
@@ -367,7 +432,7 @@ func TestServe(t *testing.T) {
 	}
 	if read, err := ioutil.ReadAll(fd); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "Backend started:dummy"); i < 0 {
+		if i := strings.Index(logOutput, "new backend started"); i < 0 {
 			t.Error("Dummy backend not restared")
 		}
 	}
@@ -386,7 +451,7 @@ func TestServe(t *testing.T) {
 // then connect to it & HELO.
 func TestServerAddEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -399,8 +464,8 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration) // allow the server to start
 	// now change the config by adding a server
-	conf := &CmdConfig{}                                 // blank one
-	conf.load([]byte(configJsonA))                       // load configJsonA
+	conf := &guerrilla.AppConfig{}                       // blank one
+	conf.Load([]byte(configJsonA))                       // load configJsonA
 	newServer := conf.Servers[0]                         // copy the first server config
 	newServer.ListenInterface = "127.0.0.1:2526"         // change it
 	newConf := conf                                      // copy the cmdConfg
@@ -453,7 +518,7 @@ func TestServerAddEvent(t *testing.T) {
 // then connect to 127.0.0.1:2228 & HELO.
 func TestServerStartEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -466,8 +531,8 @@ func TestServerStartEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 	// now change the config by adding a server
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonA)) // load configJsonA
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonA)) // load configJsonA
 
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[1].IsEnabled = true
@@ -523,7 +588,7 @@ func TestServerStartEvent(t *testing.T) {
 
 func TestServerStopEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
 	cmd := &cobra.Command{}
@@ -536,8 +601,8 @@ func TestServerStopEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 	// now change the config by enabling a server
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonA)) // load configJsonA
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonA)) // load configJsonA
 
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[1].IsEnabled = true
@@ -611,11 +676,11 @@ func TestServerStopEvent(t *testing.T) {
 
 func TestAllowedHostsEvent(t *testing.T) {
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -628,8 +693,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 	time.Sleep(testPauseDuration)
 
 	// now connect and try RCPT TO with an invalid host
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
-		t.Error("Could not connect to new server", conf.AppConfig.Servers[1].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
+		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 secure.test.com Hello"
@@ -649,7 +714,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 
 	// now change the config by adding a host to allowed hosts
 
-	newConf := conf // copy the cmdConfg
+	newConf := conf
 	newConf.AllowedHosts = append(newConf.AllowedHosts, "grr.la")
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
@@ -661,8 +726,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 	time.Sleep(testPauseDuration) // pause for config to reload
 
 	// now repeat the same conversion, RCPT TO should be accepted
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[1], 20); err != nil {
-		t.Error("Could not connect to new server", conf.AppConfig.Servers[1].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
+		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 secure.test.com Hello"
@@ -689,7 +754,8 @@ func TestAllowedHostsEvent(t *testing.T) {
 		logOutput := string(read)
 		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "allowed_hosts config changed, a new list was set"); i < 0 {
-			t.Error("did not change allowed_hosts, most likely because Bus.Subscribe(\"config_change:allowed_hosts\" didnt fire")
+			t.Errorf("did not change allowed_hosts, most likely because Bus.Subscribe(\"%s\" didnt fire",
+				guerrilla.EventConfigAllowedHosts)
 		}
 	}
 	// cleanup
@@ -713,11 +779,11 @@ func TestTLSConfigEvent(t *testing.T) {
 	if _, err := os.Stat("../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
 		t.Error("Did not create cert ", err)
 	}
-	mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -730,8 +796,8 @@ func TestTLSConfigEvent(t *testing.T) {
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
-		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+		if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+			t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 		} else {
 			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 				expect := "250 mail.test.com Hello"
@@ -748,7 +814,7 @@ func TestTLSConfigEvent(t *testing.T) {
 								ServerName:         "127.0.0.1",
 							})
 							if err := tlsConn.Handshake(); err != nil {
-								t.Error("Failed to handshake", conf.AppConfig.Servers[0].ListenInterface)
+								t.Error("Failed to handshake", conf.Servers[0].ListenInterface)
 							} else {
 								conn = tlsConn
 								mainlog.Info("TLS Handshake succeeded")
@@ -805,109 +871,63 @@ func TestTLSConfigEvent(t *testing.T) {
 
 }
 
-// Test for missing TLS certificate, when starting or config reload
-
-func TestBadTLS(t *testing.T) {
-	mainlog, _ = log.GetLogger("../../tests/testlog")
-	if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
-		mainlog.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
-	} else {
-		mainlog.Info("removed ./../../tests/mail2.guerrillamail.com.cert.pem")
-	}
-	// start the server by emulating the serve command
-	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
-	conf.Servers[0].Timeout = 1
-	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
-	var serveWG sync.WaitGroup
-
-	serveWG.Add(1)
-	go func() {
-		serve(cmd, []string{})
-		serveWG.Done()
-	}()
-	time.Sleep(testPauseDuration)
-
-	// Test STARTTLS handshake
-	testTlsHandshake := func() {
-		if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-			t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+// Testing starting a server with a bad TLS config
+// It should not start, return exit code 1
+func TestBadTLSStart(t *testing.T) {
+	// Need to run the test in a different process by executing a command
+	// because the serve() does os.Exit when starting with a bad TLS config
+	if os.Getenv("BE_CRASHER") == "1" {
+		// do the test
+		// first, remove the good certs, if any
+		if err := os.Remove("./../../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+			mainlog.WithError(err).Error("could not remove ./../../tests/mail2.guerrillamail.com.cert.pem")
 		} else {
-			conn.SetDeadline(time.Now().Add(time.Second))
-			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
-				expect := "250 mail.test.com Hello"
-				if strings.Index(result, expect) != 0 {
-					t.Error("Expected", expect, "but got", result)
-				} else {
-					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 2.0.0 Ready to start TLS"
-						if strings.Index(result, expect) != 0 {
-							t.Error("Expected:", expect, "but got:", result)
-						} else {
-							tlsConn := tls.Client(conn, &tls.Config{
-								InsecureSkipVerify: true,
-								ServerName:         "127.0.0.1",
-							})
-							if err := tlsConn.Handshake(); err != nil {
-								mainlog.Info("TLS Handshake failed")
-							} else {
-								t.Error("Handshake succeeded, expected it to fail", conf.AppConfig.Servers[0].ListenInterface)
-								conn = tlsConn
-
-							}
-
-						}
-					}
-				}
-			}
-			conn.Close()
+			mainlog.Info("removed ./../../tests/mail2.guerrillamail.com.cert.pem")
 		}
+		// next run the server
+		ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+		conf := &guerrilla.AppConfig{} // blank one
+		conf.Load([]byte(configJsonD)) // load configJsonD
+
+		cmd := &cobra.Command{}
+		configPath = "configJsonD.json"
+		var serveWG sync.WaitGroup
+
+		serveWG.Add(1)
+		go func() {
+			serve(cmd, []string{})
+			serveWG.Done()
+		}()
+		time.Sleep(testPauseDuration)
+
+		sigKill()
+		serveWG.Wait()
+
+		return
 	}
-	testTlsHandshake()
-
-	// write some trash data
-	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.cert.pem", []byte("trash data"), 0664)
-	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.key.pem", []byte("trash data"), 0664)
-
-	// generate a new cert
-	//testcert.GenerateCert("mail2.guerrillamail.com", "", 365 * 24 * time.Hour, false, 2048, "P256", "../../tests/")
-	sigHup()
-
-	time.Sleep(testPauseDuration) // pause for config to reload
-	testTlsHandshake()
-
-	time.Sleep(testPauseDuration)
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
-	// did backend started as expected?
-	fd, _ := os.Open("../../tests/testlog")
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "failed to load the new TLS configuration"); i < 0 {
-			t.Error("did not detect TLS load failure")
-		}
+	cmd := exec.Command(os.Args[0], "-test.run=TestBadTLSStart")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+		return
 	}
+	t.Error("Server started with a bad TLS config, was expecting exit status 1")
 	// cleanup
 	os.Truncate("../../tests/testlog", 0)
 	os.Remove("configJsonD.json")
 	os.Remove("./pidfile.pid")
-
 }
 
-// Test for when the server config Timeout value changes
-// Start with configJsonD.json
-
-func TestSetTimeoutEvent(t *testing.T) {
-	//mainlog, _ = log.GetLogger("../../tests/testlog")
+// Test config reload with a bad TLS config
+// It should ignore the config reload, keep running with old settings
+func TestBadTLSReload(t *testing.T) {
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
+	// start with a good cert
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
@@ -919,8 +939,8 @@ func TestSetTimeoutEvent(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -929,6 +949,73 @@ func TestSetTimeoutEvent(t *testing.T) {
 			}
 		}
 	}
+	// write some trash data
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.cert.pem", []byte("trash data"), 0664)
+	ioutil.WriteFile("./../../tests/mail2.guerrillamail.com.key.pem", []byte("trash data"), 0664)
+
+	newConf := conf // copy the cmdConfg
+
+	if jsonbytes, err := json.Marshal(newConf); err == nil {
+		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
+	} else {
+		t.Error(err)
+	}
+	// send a sighup signal to the server to reload config
+	sigHup()
+	time.Sleep(testPauseDuration) // pause for config to reload
+
+	// we should still be able to to talk to it
+
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mail.test.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			}
+		}
+	}
+
+	sigKill()
+	serveWG.Wait()
+
+	// did config reload fail as expected?
+	fd, _ := os.Open("../../tests/testlog")
+	if read, err := ioutil.ReadAll(fd); err == nil {
+		logOutput := string(read)
+		//fmt.Println(logOutput)
+		if i := strings.Index(logOutput, "cannot use TLS config for"); i < 0 {
+			t.Error("[127.0.0.1:2552] did not reject our tls config as expected")
+		}
+	}
+	// cleanup
+	os.Truncate("../../tests/testlog", 0)
+	os.Remove("configJsonD.json")
+	os.Remove("./pidfile.pid")
+}
+
+// Test for when the server config Timeout value changes
+// Start with configJsonD.json
+
+func TestSetTimeoutEvent(t *testing.T) {
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	// start the server by emulating the serve command
+	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
+	cmd := &cobra.Command{}
+	configPath = "configJsonD.json"
+	var serveWG sync.WaitGroup
+
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(testPauseDuration)
+
 	// set the timeout to 1 second
 
 	newConf := conf // copy the cmdConfg
@@ -938,9 +1025,32 @@ func TestSetTimeoutEvent(t *testing.T) {
 	} else {
 		t.Error(err)
 	}
+
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(time.Millisecond * 1200) // pause for connection to timeout
+	time.Sleep(testPauseDuration) // config reload
+
+	var waitTimeout sync.WaitGroup
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
+	} else {
+		waitTimeout.Add(1)
+		go func() {
+			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+				expect := "250 mail.test.com Hello"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected", expect, "but got", result)
+				} else {
+					b := make([]byte, 1024)
+					conn.Read(b)
+				}
+			}
+			waitTimeout.Done()
+		}()
+	}
+
+	// wait for timeout
+	waitTimeout.Wait()
 
 	// so the connection we have opened should timeout by now
 
@@ -967,12 +1077,12 @@ func TestSetTimeoutEvent(t *testing.T) {
 // Start in log_level = debug
 // Load config & start server
 func TestDebugLevelChange(t *testing.T) {
-	//mainlog, _ = log.GetLogger("../../tests/testlog")
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
 	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	// start the server by emulating the serve command
 	ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644)
-	conf := &CmdConfig{}           // blank one
-	conf.load([]byte(configJsonD)) // load configJsonD
+	conf := &guerrilla.AppConfig{} // blank one
+	conf.Load([]byte(configJsonD)) // load configJsonD
 	conf.LogLevel = "debug"
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
@@ -985,8 +1095,8 @@ func TestDebugLevelChange(t *testing.T) {
 	}()
 	time.Sleep(testPauseDuration)
 
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -999,7 +1109,7 @@ func TestDebugLevelChange(t *testing.T) {
 	// set the log_level to info
 
 	newConf := conf // copy the cmdConfg
-	newConf.LogLevel = "info"
+	newConf.LogLevel = log.InfoLevel.String()
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644)
 	} else {
@@ -1010,8 +1120,8 @@ func TestDebugLevelChange(t *testing.T) {
 	time.Sleep(testPauseDuration) // log to change
 
 	// connect again, this time we should see info
-	if conn, buffin, err := test.Connect(conf.AppConfig.Servers[0], 20); err != nil {
-		t.Error("Could not connect to server", conf.AppConfig.Servers[0].ListenInterface, err)
+	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
+		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "NOOP"); err == nil {
 			expect := "200 2.0.0 OK"
@@ -1042,5 +1152,61 @@ func TestDebugLevelChange(t *testing.T) {
 	os.Truncate("../../tests/testlog", 0)
 	os.Remove("configJsonD.json")
 	os.Remove("./pidfile.pid")
+
+}
+
+// When reloading with a bad backend config, it should revert to old backend config
+func TestBadBackendReload(t *testing.T) {
+	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+
+	mainlog, _ = log.GetLogger("../../tests/testlog", "debug")
+
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644)
+	cmd := &cobra.Command{}
+	configPath = "configJsonA.json"
+	var serveWG sync.WaitGroup
+	serveWG.Add(1)
+	go func() {
+		serve(cmd, []string{})
+		serveWG.Done()
+	}()
+	time.Sleep(testPauseDuration)
+
+	// change the config file to the one with a broken backend
+	ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644)
+
+	// test SIGHUP via the kill command
+	// Would not work on windows as kill is not available.
+	// TODO: Implement an alternative test for windows.
+	if runtime.GOOS != "windows" {
+		sigHup()
+		time.Sleep(testPauseDuration) // allow sighup to do its job
+		// did the pidfile change as expected?
+		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
+			t.Error("pidfile not changed after sighup SIGHUP", err)
+		}
+	}
+
+	// send kill signal and wait for exit
+	sigKill()
+	serveWG.Wait()
+
+	// did backend started as expected?
+	fd, err := os.Open("../../tests/testlog")
+	if err != nil {
+		t.Error(err)
+	}
+	if read, err := ioutil.ReadAll(fd); err == nil {
+		logOutput := string(read)
+		if i := strings.Index(logOutput, "reverted to old backend config"); i < 0 {
+			t.Error("did not revert to old backend config")
+		}
+	}
+
+	// cleanup
+	os.Truncate("../../tests/testlog", 0)
+	os.Remove("configJsonA.json")
+	os.Remove("./pidfile.pid")
+	os.Remove("./pidfile2.pid")
 
 }
