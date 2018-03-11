@@ -12,6 +12,8 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/log"
+	//_ "github.com/flashmob/go-guerrilla/mail/iconv"
+	_ "github.com/flashmob/go-guerrilla/mail/encoding"
 	"github.com/spf13/cobra"
 
 	_ "github.com/go-sql-driver/mysql"

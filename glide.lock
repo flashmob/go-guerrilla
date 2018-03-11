@@ -1,8 +1,8 @@
-hash: 6330c21df1693590f5b681e06578d476231b1c30b652b1068b3bef59a7ddb594
-updated: 2017-10-09T14:49:12.394397577+01:00
+hash: ab5586e1ee56f15336e425d99f774acd4f6bc0f042ab597248366592d8c0b1bf
+updated: 2018-03-11T11:39:28.566276841+11:00
 imports:
 - name: github.com/asaskevich/EventBus
-  version: 52a0dcfcbd8299da13aad44b96a6642dd79cbb08
+  version: 68a521d7cbbb7a859c2608b06342f384b3bd5f5a
 - name: github.com/garyburd/redigo
   version: 8873b2f1995f59d4bcdd2b0dc9858e2cb9bf0c13
   subpackages:
@@ -12,17 +12,50 @@ imports:
   version: a0583e0143b1624142adab07e0e97fe106d99561
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/rakyll/statik
+  version: 274df120e9065bdd08eb1120e0375e3dc1ae8465
+  subpackages:
+  - fs
 - name: github.com/sirupsen/logrus
-  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
-  vcs: git
+  version: d682213848ed68c0a260ca37d6dd5ace8423f5ba
 - name: github.com/spf13/cobra
-  version: 50204810fdb5010baae72e4f41b303689cbdcc9f
+  version: b62566898a99f2db9c68ed0026aa0a052e59678d
 - name: github.com/spf13/pflag
-  version: a9789e855c7696159b7db0db7f440b449edf2b31
+  version: 25f8b5b07aece3207895bf19f7ab517eb3b22a40
+- name: golang.org/x/crypto
+  version: c7dcf104e3a7a1417abc0230cb0d5240d764159d
+  subpackages:
+  - ssh/terminal
+- name: golang.org/x/net
+  version: d0aafc73d5cdc42264b0af071c261abac580695e
+  subpackages:
+  - html
+  - html/atom
+  - html/charset
 - name: golang.org/x/sys
-  version: ebfc5b4631820b793c9010c87fd8fef0f39eb082
+  version: 7dca6fe1f43775aa6d1334576870ff63f978f539
   subpackages:
   - unix
+  - windows
+- name: golang.org/x/text
+  version: b7ef84aaf62aa3e70962625c80a571ae7c17cb40
+  subpackages:
+  - encoding
+  - encoding/charmap
+  - encoding/htmlindex
+  - encoding/internal
+  - encoding/internal/identifier
+  - encoding/japanese
+  - encoding/korean
+  - encoding/simplifiedchinese
+  - encoding/traditionalchinese
+  - encoding/unicode
+  - internal/language
+  - internal/tag
+  - internal/utf8internal
+  - language
+  - runes
+  - transform
 - name: gopkg.in/iconv.v1
   version: 16a760eb7e186ae0e3aedda00d4a1daa4d0701d8
 testImports: []
