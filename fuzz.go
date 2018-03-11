@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
 	"io"
 	"sync"
@@ -15,12 +16,15 @@ import (
 
 var logOff log.Logger
 var fuzzServer *server
+var envelopePool *mail.Pool
 
 func init() {
 	sc := getFuzzServerConfig()
-	logOff, _ = log.GetLogger(sc.LogFile)
+	logOff, _ = log.GetLogger(sc.LogFile, log.ErrorLevel.String())
 	fuzzServer = getFuzzServer(sc)
 	isFuzzDebug = false
+
+	envelopePool = mail.NewPool(sc.MaxClients)
 
 }
 
@@ -46,11 +50,12 @@ func getFuzzServerConfig() *ServerConfig {
 func getFuzzServer(sc *ServerConfig) *server {
 	var logOpenError error
 	var mainlog log.Logger
-	mainlog, logOpenError = log.GetLogger(sc.LogFile)
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, log.ErrorLevel.String())
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
-	backend, err := backends.New("dummy", backends.BackendConfig{"log_received_mails": true}, mainlog)
+	backend, err := backends.New(backends.BackendConfig{
+		"log_received_mails": true, "save_process_": "HeadersParser|Header|Debugger"}, mainlog)
 	if err != nil {
 		//t.Error("new dummy backend failed because:", err)
 	}
@@ -79,7 +84,7 @@ func Fuzz(data []byte) int {
 	conn := mocks.NewConn()
 
 	// Get a client from the pool
-	poolable, err := fuzzServer.clientPool.Borrow(conn.Server, 1, logOff)
+	poolable, err := fuzzServer.clientPool.Borrow(conn.Server, 1, logOff, envelopePool)
 	if c, ok := poolable.(*client); !ok {
 		panic("cannot borrow from pool")
 	} else {
