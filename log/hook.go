@@ -2,7 +2,7 @@ package log
 
 import (
 	"bufio"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"os"
