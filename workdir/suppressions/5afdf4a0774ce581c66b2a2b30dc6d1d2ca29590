@@ -1,0 +1,7 @@
+panic: runtime error: invalid memory address or nil pointer dereference
+github.com/flashmob/go-guerrilla/mail.(*Pool).Borrow
+github.com/flashmob/go-guerrilla.NewClient
+github.com/flashmob/go-guerrilla.(*Pool).Borrow
+github.com/flashmob/go-guerrilla.Fuzz
+go-fuzz-dep.Main
+main.main

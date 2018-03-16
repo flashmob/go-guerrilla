@@ -45,7 +45,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("1", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:user@example.com\r\n" +
+		"MAIL FROM:=?ISO-2022-JP?B?GyRCJEEkUCRSJG0bKEIgbWFnMiAwMDAxMDIzMTIw?= <user@example.com>\r\n" +
 		"RCPT TO:<test@test.com>\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
 		"RCPT TO:<test3@test.com>\r\n" +
@@ -59,7 +59,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("2", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:user@example.com BODY=8BITMIME\r\n" +
+		"MAIL FROM:=?utf-8?B?2KfZhNit2YjYp9isINmE2YTYstmK2YjYqiDYp9mE2LfYqNmK2LnZitip?=<user@example.com> BODY=8BITMIME\r\n" +
 		"RCPT TO:<test@test.com>\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
 		"RCPT TO:<test3@test.com>\r\n" +
@@ -154,24 +154,39 @@ func TestGenerateCorpus(t *testing.T) {
 	str = "STARTTLS\r\n"
 	writeCorpos("22", []byte(str))
 
+	str = "HELO test.com\r\n" +
+		"MAIL FROM: =?ISO-2022-JP?B?GyRCJEEkUCRSJG0bKEIgbWFnMiAwMDAxMDIzMTIw?= <mailmag@mag2tegami.com>\r\n" +
+		"RCPT TO:<test@test.com>\r\n" +
+		"DATA\r\n" +
+		"Subject: =?ISO-2022-JP?B?GyRCIVokQSRQJFIkbSFbGyhCMy8xMhskQktcRnw9Kk47ISobKEI=?=\r\n" +
+		" =?ISO-2022-JP?B?UFBDLUUbJEIhViVeJTklPyE8JTMlcyVGJXMlRCFXGyhC?=\r\n" +
+		"\r\n" +
+		"..Now you're just somebody that i used to know\r\n" +
+		".\r\n"
+
+	writeCorpos("23", []byte(str))
+
 }
 
 // Tests the Fuzz function.
 
 func TestFuzz(t *testing.T) {
-	isFuzzDebug = true
-	result := Fuzz([]byte("MAIL from: <\r"))
-	if result != 0 {
-		t.Error("Fuzz test did not return 0")
-	}
-	result = Fuzz([]byte("MAIL from: <\r\nHELP\r\n"))
+	result := Fuzz([]byte("EHLO me\r\nMail From:test@grr.la\r\nRcpt to:test@test" +
+		".com\r\nDATA\r\ntest\r\n.\r\n"))
 	if result != 1 {
 		t.Error("Fuzz test did not return 1")
 	}
-	result = Fuzz([]byte("EHLO me\r\n"))
-	if result != 1 {
-		t.Error("Fuzz test did not return 1")
-	}
+	/*
+		isFuzzDebug = true
+		result = Fuzz([]byte("MAIL from: <\r"))
+		if result != 1 {
+			t.Error("Fuzz test did not return 1")
+		}
+		result = Fuzz([]byte("MAIL from: <\r\nHELP\r\n"))
+		if result != 1 {
+			t.Error("Fuzz test did not return 1")
+		}
+	*/
 
 }
 

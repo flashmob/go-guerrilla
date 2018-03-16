@@ -104,16 +104,17 @@ func Fuzz(data []byte) int {
 		fuzzServer.handleClient(mockClient)
 		wg.Done()
 	}()
-	b := make([]byte, 1024)
-	if n, err := conn.Client.Read(b); err != nil {
-		return 0
-	} else if isFuzzDebug {
-		fmt.Println("Read", n, string(b))
+	// read in the greeting
+	in := newSMTPBufferedReader(conn.Client)
+	s, _ := in.ReadString('\n')
+	if isFuzzDebug {
+		fmt.Println("Read", s)
 	}
 
 	// Feed the connection with fuzz data (we are the _client_ end of the connection)
 	if _, err = io.Copy(conn.Client, bytes.NewReader(data)); err != nil {
-		return 0
+		fmt.Println(err)
+		return 1
 	}
 
 	// allow handleClient to process
@@ -121,12 +122,17 @@ func Fuzz(data []byte) int {
 
 	if mockClient.bufout.Buffered() == 0 {
 		// nothing to read - no complete commands sent?
-		return 0
+		return 1
 	}
-	if n, err := conn.Client.Read(b); err != nil {
-		return 0
-	} else if isFuzzDebug {
-		fmt.Println("Read", n, string(b))
+
+	var e error
+	var z string
+	for ; e == nil; z, e = in.ReadString('\n') {
+		fmt.Println("Read", z, mockClient.bufout.Buffered())
+		if mockClient.bufout.Buffered() == 0 {
+			break
+		}
+
 	}
 
 	return 1
