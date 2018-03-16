@@ -92,6 +92,7 @@ $ make guerrillad
 ```
 
 This will create a executable file named `guerrillad` that's ready to run.
+See the [build notes](https://github.com/flashmob/go-guerrilla/wiki/Build-Notes) for more details.
 
 Next, copy the `goguerrilla.conf.sample` file to `goguerrilla.conf.json`. 
 You may need to customize the `pid_file` setting to somewhere local, 
