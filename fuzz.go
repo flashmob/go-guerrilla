@@ -59,6 +59,7 @@ func getFuzzServer(sc *ServerConfig) *server {
 	if err != nil {
 		//t.Error("new dummy backend failed because:", err)
 	}
+	backend.Start()
 	server, err := newServer(sc, backend, mainlog)
 	if err != nil {
 		//t.Error("new server failed because:", err)
