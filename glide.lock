@@ -3,7 +3,7 @@ updated: 2018-03-11T11:39:28.566276841+11:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: 68a521d7cbbb7a859c2608b06342f384b3bd5f5a
-- name: github.com/garyburd/redigo
+- name: github.com/gomodule/redigo
   version: 8873b2f1995f59d4bcdd2b0dc9858e2cb9bf0c13
   subpackages:
   - internal
