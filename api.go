@@ -93,7 +93,7 @@ func (d *Daemon) LoadConfig(path string) (AppConfig, error) {
 	var ac AppConfig
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return ac, fmt.Errorf("Could not read config file: %s", err.Error())
+		return ac, fmt.Errorf("could not read config file: %s", err.Error())
 	}
 	err = ac.Load(data)
 	if err != nil {

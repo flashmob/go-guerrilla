@@ -41,20 +41,13 @@ type ServerConfig struct {
 	// MaxSize is the maximum size of an email that will be accepted for delivery.
 	// Defaults to 10 Mebibytes
 	MaxSize int64 `json:"max_size"`
-	// PrivateKeyFile path to cert private key in PEM format. Will be ignored if blank
-	PrivateKeyFile string `json:"private_key_file"`
-	// PublicKeyFile path to cert (public key) chain in PEM format.
-	// Will be ignored if blank
-	PublicKeyFile string `json:"public_key_file"`
+	// TLS Configuration
+	TLS ServerTLSConfig `json:"tls,omitempty"`
 	// Timeout specifies the connection timeout in seconds. Defaults to 30
 	Timeout int `json:"timeout"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
-	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
-	// False by default
-	StartTLSOn bool `json:"start_tls_on,omitempty"`
-	// TLSAlwaysOn run this server as a pure TLS server, i.e. SMTPS
-	TLSAlwaysOn bool `json:"tls_always_on,omitempty"`
+
 	// MaxClients controls how many maxiumum clients we can handle at once.
 	// Defaults to 100
 	MaxClients int `json:"max_clients"`
@@ -68,6 +61,95 @@ type ServerConfig struct {
 	// The following used to watch certificate changes so that the TLS can be reloaded
 	_privateKeyFile_mtime int
 	_publicKeyFile_mtime  int
+}
+
+type ServerTLSConfig struct {
+
+	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
+	// False by default
+	StartTLSOn bool `json:"start_tls_on,omitempty"`
+	// AlwaysOn run this server as a pure TLS server, i.e. SMTPS
+	AlwaysOn bool `json:"tls_always_on,omitempty"`
+	// PrivateKeyFile path to cert private key in PEM format.
+	PrivateKeyFile string `json:"private_key_file"`
+	// PublicKeyFile path to cert (public key) chain in PEM format.
+	PublicKeyFile string `json:"public_key_file"`
+
+	// TLS Protocols to use. [0] = min, [1]max
+	// Use Go's default if empty
+	Protocols []string `json:"protocols,omitempty"`
+	// TLS Ciphers to use.
+	// Use Go's default if empty
+	Ciphers []string `json:"ciphers,omitempty"`
+	// TLS Curves to use.
+	// Use Go's default if empty
+	Curves []string `json:"curves,omitempty"`
+	// TLS Root cert authorities to use. "A PEM encoded CA's certificate file.
+	// Defaults to system's root CA file if empty
+	RootCAs string `json:"root_cas_file,omitempty"`
+	// declares the policy the server will follow for TLS Client Authentication.
+	// Use Go's default if empty
+	ClientAuthType string `json:"client_auth_type,omitempty"`
+}
+
+// https://golang.org/pkg/crypto/tls/#pkg-constants
+var TLSCiphers = map[string]uint16{
+
+	// // Note: Generally avoid using CBC unless for compatibility
+	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":           tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+	"TLS_RSA_WITH_AES_128_CBC_SHA":            tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+	"TLS_RSA_WITH_AES_256_CBC_SHA":            tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+	"TLS_RSA_WITH_AES_128_CBC_SHA256":         tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA":    tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA":    tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA":     tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":      tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":      tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256": tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256":   tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+
+	"TLS_RSA_WITH_RC4_128_SHA":        tls.TLS_RSA_WITH_RC4_128_SHA,
+	"TLS_RSA_WITH_AES_128_GCM_SHA256": tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	"TLS_RSA_WITH_AES_256_GCM_SHA384": tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+
+	"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA":        tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
+	"TLS_ECDHE_RSA_WITH_RC4_128_SHA":          tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256":   tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256": tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384":   tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384": tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+
+	// Go 1.8
+	"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305":   tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+	"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305": tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+
+	// Include to prevent downgrade attacks
+	"TLS_FALLBACK_SCSV": tls.TLS_FALLBACK_SCSV,
+}
+
+// https://golang.org/pkg/crypto/tls/#pkg-constants
+var TLSProtocols = map[string]uint16{
+	"ssl3.0": tls.VersionSSL30,
+	"tls1.0": tls.VersionTLS10,
+	"tls1.1": tls.VersionTLS11,
+	"tls1.2": tls.VersionTLS12,
+}
+
+// https://golang.org/pkg/crypto/tls/#CurveID
+var TLSCurves = map[string]tls.CurveID{
+	"P256":   tls.CurveP256,
+	"P384":   tls.CurveP384,
+	"P521":   tls.CurveP521,
+	"X25519": tls.X25519,
+}
+
+// https://golang.org/pkg/crypto/tls/#ClientAuthType
+var TLSClientAuthTypes = map[string]tls.ClientAuthType{
+	"NoClientCert":               tls.NoClientCert,
+	"RequestClientCert":          tls.RequestClientCert,
+	"RequireAnyClientCert":       tls.RequireAnyClientCert,
+	"VerifyClientCertIfGiven":    tls.VerifyClientCertIfGiven,
+	"RequireAndVerifyClientCert": tls.RequireAndVerifyClientCert,
 }
 
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
@@ -320,7 +402,22 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		if _, ok := changes["StartTLSOn"]; ok {
 			return true
 		}
-		if _, ok := changes["TLSAlwaysOn"]; ok {
+		if _, ok := changes["AlwaysOn"]; ok {
+			return true
+		}
+		if _, ok := changes["TLSProtocols"]; ok {
+			return true
+		}
+		if _, ok := changes["TLSCiphers"]; ok {
+			return true
+		}
+		if _, ok := changes["TLSCurves"]; ok {
+			return true
+		}
+		if _, ok := changes["TLSRootCAs"]; ok {
+			return true
+		}
+		if _, ok := changes["TLSClientAuthType"]; ok {
 			return true
 		}
 		return false
@@ -338,12 +435,12 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 				iface,
 				err.Error()))
 	}
-	if info, err := os.Stat(sc.PrivateKeyFile); err == nil {
+	if info, err := os.Stat(sc.TLS.PrivateKeyFile); err == nil {
 		sc._privateKeyFile_mtime = info.ModTime().Second()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
-	if info, err := os.Stat(sc.PublicKeyFile); err == nil {
+	if info, err := os.Stat(sc.TLS.PublicKeyFile); err == nil {
 		sc._publicKeyFile_mtime = info.ModTime().Second()
 	} else {
 		return statErr(sc.ListenInterface, err)
@@ -361,14 +458,14 @@ func (sc *ServerConfig) getTlsKeyTimestamps() (int, int) {
 func (sc *ServerConfig) Validate() error {
 	var errs Errors
 
-	if sc.StartTLSOn || sc.TLSAlwaysOn {
-		if sc.PublicKeyFile == "" {
+	if sc.TLS.StartTLSOn || sc.TLS.AlwaysOn {
+		if sc.TLS.PublicKeyFile == "" {
 			errs = append(errs, errors.New("PublicKeyFile is empty"))
 		}
-		if sc.PrivateKeyFile == "" {
+		if sc.TLS.PrivateKeyFile == "" {
 			errs = append(errs, errors.New("PrivateKeyFile is empty"))
 		}
-		if _, err := tls.LoadX509KeyPair(sc.PublicKeyFile, sc.PrivateKeyFile); err != nil {
+		if _, err := tls.LoadX509KeyPair(sc.TLS.PublicKeyFile, sc.TLS.PrivateKeyFile); err != nil {
 			errs = append(errs,
 				errors.New(fmt.Sprintf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)))
 		}
@@ -398,10 +495,10 @@ func getDiff(a interface{}, b interface{}) map[string]interface{} {
 		if newServer, ok := b.(ServerConfig); ok {
 			t3, t4 := newServer.getTlsKeyTimestamps()
 			if t1 != t3 {
-				ret["PrivateKeyFile"] = newServer.PrivateKeyFile
+				ret["PrivateKeyFile"] = newServer.TLS.PrivateKeyFile
 			}
 			if t2 != t4 {
-				ret["PublicKeyFile"] = newServer.PublicKeyFile
+				ret["PublicKeyFile"] = newServer.TLS.PublicKeyFile
 			}
 		}
 	}
