@@ -65,6 +65,7 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	return conn, server
 }
 
+// test the RootCAs tls config setting
 var rootCAPK = `-----BEGIN CERTIFICATE-----
 MIIDqjCCApKgAwIBAgIJALh2TrsBR5MiMA0GCSqGSIb3DQEBCwUAMGkxCzAJBgNV
 BAYTAlVTMQswCQYDVQQIDAJDQTEWMBQGA1UEBwwNTW91bnRhaW4gVmlldzEhMB8G
@@ -116,6 +117,7 @@ V4yGSu98apDuqEVqL0VFQEgqK+5KTvRdXXYi36XYRbbVUgV13xveq2YTvjNbPM60
 QWG9YmgH7hVYGusuh5nQeS0qiIpwyws2H5mBVrGXrQ1Xb0MLWj8/
 -----END RSA PRIVATE KEY-----`
 
+// signed using the Root (rootCAPK)
 var clientPubKey = `-----BEGIN CERTIFICATE-----
 MIIDWDCCAkACCQCHoh4OvUySOzANBgkqhkiG9w0BAQsFADBpMQswCQYDVQQGEwJV
 UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDU1vdW50YWluIFZpZXcxITAfBgNVBAoM
@@ -161,7 +163,7 @@ func TestTLSConfig(t *testing.T) {
 			RootCAs:        "rootca.test.pem",
 			ClientAuthType: "NoClientCert",
 			Curves:         []string{"X25519", "P384"},
-			Ciphers:        []string{"TLS_RSA_WITH_AES_128_CBC_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"},
+			Ciphers:        []string{"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"},
 			Protocols:      []string{"tls1.0", "tls1.2"},
 		},
 	})
@@ -185,7 +187,7 @@ func TestTLSConfig(t *testing.T) {
 		t.Error("c.CipherSuites length should be 2")
 	}
 
-	if c.CipherSuites[0] != tls.TLS_RSA_WITH_AES_128_CBC_SHA256 && c.CipherSuites[1] != tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA {
+	if c.CipherSuites[0] != tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 && c.CipherSuites[1] != tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA {
 		t.Error("c.CipherSuites not correctly set ")
 	}
 
