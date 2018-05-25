@@ -40,7 +40,6 @@ import (
 
 type TestConfig struct {
 	guerrilla.AppConfig
-	BackendName   string                 `json:"backend_name"`
 	BackendConfig map[string]interface{} `json:"backend_config"`
 }
 

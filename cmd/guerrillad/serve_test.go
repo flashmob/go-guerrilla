@@ -111,7 +111,7 @@ var configJsonB = `
 }
 `
 
-// backend_name changed, is guerrilla-redis-db + added a server
+// added a server
 var configJsonC = `
 {
     "log_file" : "../../tests/testlog",
@@ -124,7 +124,6 @@ var configJsonC = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "guerrilla-redis-db",
     "backend_config" :
         {
             "sql_driver": "mysql",

@@ -1,6 +1,8 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
+Breaking change: The structure of the config has recently changed to accommodate more advanced TLS settings.
+
 Go-Guerrilla SMTP Daemon
 ====================
 
