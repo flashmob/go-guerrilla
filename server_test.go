@@ -162,7 +162,7 @@ func TestTLSConfig(t *testing.T) {
 			PublicKeyFile:  "client.test.pem",
 			RootCAs:        "rootca.test.pem",
 			ClientAuthType: "NoClientCert",
-			Curves:         []string{"X25519", "P384"},
+			Curves:         []string{"P521", "P384"},
 			Ciphers:        []string{"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"},
 			Protocols:      []string{"tls1.0", "tls1.2"},
 		},
@@ -173,7 +173,7 @@ func TestTLSConfig(t *testing.T) {
 
 	if len(c.CurvePreferences) != 2 {
 		t.Error("c.CurvePreferences should have two elements")
-	} else if c.CurvePreferences[0] != tls.X25519 && c.CurvePreferences[1] != tls.CurveP384 {
+	} else if c.CurvePreferences[0] != tls.CurveP521 && c.CurvePreferences[1] != tls.CurveP384 {
 		t.Error("c.CurvePreferences curves not setup")
 	}
 	if strings.Index(string(c.RootCAs.Subjects()[0]), "Mountain View") == -1 {
