@@ -57,10 +57,6 @@ type ServerConfig struct {
 	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
-
-	// The following used to watch certificate changes so that the TLS can be reloaded
-	_privateKeyFile_mtime int64
-	_publicKeyFile_mtime  int64
 }
 
 type ServerTLSConfig struct {
@@ -93,6 +89,10 @@ type ServerTLSConfig struct {
 	// controls whether the server selects the
 	// client's most preferred ciphersuite
 	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
+
+	// The following used to watch certificate changes so that the TLS can be reloaded
+	_privateKeyFile_mtime int64
+	_publicKeyFile_mtime  int64
 }
 
 // https://golang.org/pkg/crypto/tls/#pkg-constants
@@ -407,22 +407,16 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 				err.Error()))
 	}
 	if info, err := os.Stat(sc.TLS.PrivateKeyFile); err == nil {
-		sc._privateKeyFile_mtime = info.ModTime().Unix()
+		sc.TLS._privateKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
 	if info, err := os.Stat(sc.TLS.PublicKeyFile); err == nil {
-		sc._publicKeyFile_mtime = info.ModTime().Unix()
+		sc.TLS._publicKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
 	return nil
-}
-
-// Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
-// when the config was read. We use this info to determine if TLS needs to be re-loaded.
-func (sc *ServerConfig) getTlsKeyTimestamps() (int64, int64) {
-	return sc._privateKeyFile_mtime, sc._publicKeyFile_mtime
 }
 
 // Validate validates the server's configuration.
@@ -448,6 +442,12 @@ func (sc *ServerConfig) Validate() error {
 	return nil
 }
 
+// Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
+// when the config was read. We use this info to determine if TLS needs to be re-loaded.
+func (stc *ServerTLSConfig) getTlsKeyTimestamps() (int64, int64) {
+	return stc._privateKeyFile_mtime, stc._publicKeyFile_mtime
+}
+
 // Returns value changes between struct a & struct b.
 // Results are returned in a map, where each key is the name of the field that was different.
 // a and b are struct values, must not be pointer
@@ -469,15 +469,15 @@ func getChanges(a interface{}, b interface{}) map[string]interface{} {
 		}
 	}
 	// detect changes to TLS keys (have the key files been modified?)
-	if oldServer, ok := a.(ServerConfig); ok {
-		t1, t2 := oldServer.getTlsKeyTimestamps()
-		if newServer, ok := b.(ServerConfig); ok {
-			t3, t4 := newServer.getTlsKeyTimestamps()
+	if oldTLS, ok := a.(ServerTLSConfig); ok {
+		t1, t2 := oldTLS.getTlsKeyTimestamps()
+		if newTLS, ok := b.(ServerTLSConfig); ok {
+			t3, t4 := newTLS.getTlsKeyTimestamps()
 			if t1 != t3 {
-				ret["PrivateKeyFile"] = newServer.TLS.PrivateKeyFile
+				ret["PrivateKeyFile"] = newTLS.PrivateKeyFile
 			}
 			if t2 != t4 {
-				ret["PublicKeyFile"] = newServer.TLS.PublicKeyFile
+				ret["PublicKeyFile"] = newTLS.PublicKeyFile
 			}
 		}
 	}
@@ -497,6 +497,7 @@ func structtomap(obj interface{}) map[string]interface{} {
 		k := vField.Kind()
 		switch k {
 		case reflect.Int:
+			fallthrough
 		case reflect.Int64:
 			value := vField.Int()
 			ret[fName] = value
@@ -508,12 +509,6 @@ func structtomap(obj interface{}) map[string]interface{} {
 			ret[fName] = value
 		case reflect.Slice:
 			ret[fName] = vField.Interface().([]string)
-			break
-			// assuming configs can only have arrays of strings
-			value := vField.Interface().([]string)
-			if b, err := json.Marshal(value); err == nil {
-				ret[fName] = string(b)
-			}
 		}
 	}
 	return ret
