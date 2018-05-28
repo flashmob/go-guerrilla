@@ -14,7 +14,7 @@ func Connect(serverConfig guerrilla.ServerConfig, deadline time.Duration) (net.C
 	var bufin *bufio.Reader
 	var conn net.Conn
 	var err error
-	if serverConfig.TLSAlwaysOn {
+	if serverConfig.TLS.AlwaysOn {
 		// start tls automatically
 		conn, err = tls.Dial("tcp", serverConfig.ListenInterface, &tls.Config{
 			InsecureSkipVerify: true,

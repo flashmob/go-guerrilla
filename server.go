@@ -11,10 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"crypto/x509"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
+	"io/ioutil"
 )
 
 const (
@@ -100,8 +102,8 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 
 func (s *server) configureSSL() error {
 	sConfig := s.configStore.Load().(ServerConfig)
-	if sConfig.TLSAlwaysOn || sConfig.StartTLSOn {
-		cert, err := tls.LoadX509KeyPair(sConfig.PublicKeyFile, sConfig.PrivateKeyFile)
+	if sConfig.TLS.AlwaysOn || sConfig.TLS.StartTLSOn {
+		cert, err := tls.LoadX509KeyPair(sConfig.TLS.PublicKeyFile, sConfig.TLS.PrivateKeyFile)
 		if err != nil {
 			return fmt.Errorf("error while loading the certificate: %s", err)
 		}
@@ -110,6 +112,47 @@ func (s *server) configureSSL() error {
 			ClientAuth:   tls.VerifyClientCertIfGiven,
 			ServerName:   sConfig.Hostname,
 		}
+		if len(sConfig.TLS.Protocols) > 0 {
+			if min, ok := TLSProtocols[sConfig.TLS.Protocols[0]]; ok {
+				tlsConfig.MinVersion = min
+			}
+		}
+		if len(sConfig.TLS.Protocols) > 1 {
+			if max, ok := TLSProtocols[sConfig.TLS.Protocols[1]]; ok {
+				tlsConfig.MaxVersion = max
+			}
+		}
+		if len(sConfig.TLS.Ciphers) > 0 {
+			for _, val := range sConfig.TLS.Ciphers {
+				if c, ok := TLSCiphers[val]; ok {
+					tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, c)
+				}
+			}
+		}
+		if len(sConfig.TLS.Curves) > 0 {
+			for _, val := range sConfig.TLS.Curves {
+				if c, ok := TLSCurves[val]; ok {
+					tlsConfig.CurvePreferences = append(tlsConfig.CurvePreferences, c)
+				}
+			}
+		}
+		if len(sConfig.TLS.RootCAs) > 0 {
+			caCert, err := ioutil.ReadFile(sConfig.TLS.RootCAs)
+			if err != nil {
+				s.log().WithError(err).Errorf("failed opening TLSRootCAs file [%s]", sConfig.TLS.RootCAs)
+			} else {
+				caCertPool := x509.NewCertPool()
+				caCertPool.AppendCertsFromPEM(caCert)
+				tlsConfig.RootCAs = caCertPool
+			}
+
+		}
+		if len(sConfig.TLS.ClientAuthType) > 0 {
+			if ca, ok := TLSClientAuthTypes[sConfig.TLS.ClientAuthType]; ok {
+				tlsConfig.ClientAuth = ca
+			}
+		}
+		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites
 		tlsConfig.Rand = rand.Reader
 		s.tlsConfigStore.Store(tlsConfig)
 	}
@@ -303,7 +346,7 @@ func (server *server) handleClient(client *client) {
 	// Also, Last line has no dash -
 	help := "250 HELP"
 
-	if sc.TLSAlwaysOn {
+	if sc.TLS.AlwaysOn {
 		tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 		if !ok {
 			server.mainlog().Error("Failed to load *tls.Config")
@@ -315,7 +358,7 @@ func (server *server) handleClient(client *client) {
 			client.kill()
 		}
 	}
-	if !sc.StartTLSOn {
+	if !sc.TLS.StartTLSOn {
 		// STARTTLS turned off, don't advertise it
 		advertiseTLS = ""
 	}
@@ -460,7 +503,7 @@ func (server *server) handleClient(client *client) {
 				client.sendResponse(response.Canned.SuccessDataCmd)
 				client.state = ClientData
 
-			case sc.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
+			case sc.TLS.StartTLSOn && strings.Index(cmd, "STARTTLS") == 0:
 
 				client.sendResponse(response.Canned.SuccessStartTLSCmd)
 				client.state = ClientStartTLS
@@ -512,7 +555,7 @@ func (server *server) handleClient(client *client) {
 			client.resetTransaction()
 
 		case ClientStartTLS:
-			if !client.TLS && sc.StartTLSOn {
+			if !client.TLS && sc.TLS.StartTLSOn {
 				tlsConfig, ok := server.tlsConfigStore.Load().(*tls.Config)
 				if !ok {
 					server.mainlog().Error("Failed to load *tls.Config")

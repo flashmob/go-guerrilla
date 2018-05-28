@@ -133,13 +133,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -161,13 +163,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+ 				"private_key_file":"config_test.go",
+				"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -310,9 +314,9 @@ func TestSetConfigError(t *testing.T) {
 
 	// lets add a new server with bad TLS
 	sc.ListenInterface = "127.0.0.1:2527"
-	sc.StartTLSOn = true
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
+	sc.TLS.StartTLSOn = true
+	sc.TLS.PublicKeyFile = "tests/testlog"  // totally wrong :->
+	sc.TLS.PrivateKeyFile = "tests/testlog" // totally wrong :->
 
 	cfg.Servers = append(cfg.Servers, sc)
 

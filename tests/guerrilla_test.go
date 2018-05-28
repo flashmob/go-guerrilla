@@ -40,7 +40,6 @@ import (
 
 type TestConfig struct {
 	guerrilla.AppConfig
-	BackendName   string                 `json:"backend_name"`
 	BackendConfig map[string]interface{} `json:"backend_config"`
 }
 
@@ -86,28 +85,32 @@ var configJson = `
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
             "timeout":160,
-            "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":true,
-            "tls_always_on":false,
+            "listen_interface":"127.0.0.1:2526", 
             "max_clients": 2,
-            "log_file" : ""
+            "log_file" : "",
+			"tls" : {
+				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
 
         {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size":1000001,
-            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":1,
-            "log_file" : ""
+            "log_file" : "",
+			"tls" : {
+				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         }
     ]
 }
@@ -125,8 +128,8 @@ func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Ba
 func setupCerts(c *TestConfig) {
 	for i := range c.Servers {
 		testcert.GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
-		c.Servers[i].PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
-		c.Servers[i].PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
+		c.Servers[i].TLS.PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
+		c.Servers[i].TLS.PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
 	}
 }
 
