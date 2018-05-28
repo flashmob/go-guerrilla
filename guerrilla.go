@@ -247,6 +247,7 @@ func (g *guerrilla) subscribeEvents() {
 	// server config was updated
 	g.Subscribe(EventConfigServerConfig, func(sc *ServerConfig) {
 		g.setServerConfig(sc)
+		g.mainlog().Infof("server %s config change event, a new config has been saved", sc.ListenInterface)
 	})
 
 	// add a new server to the config & start

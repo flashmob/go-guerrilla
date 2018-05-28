@@ -319,7 +319,7 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 		// do we have access?
 		_, err = db.Query("SELECT mail_id FROM " + g.config.Table + " LIMIT 1")
 		if err != nil {
-			Log().Error("cannot select table", err)
+			Log().Error("cannot select table:", err)
 			return nil, err
 		}
 		return db, nil

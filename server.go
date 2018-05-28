@@ -152,6 +152,7 @@ func (s *server) configureSSL() error {
 				tlsConfig.ClientAuth = ca
 			}
 		}
+		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites
 		tlsConfig.Rand = rand.Reader
 		s.tlsConfigStore.Store(tlsConfig)
 	}

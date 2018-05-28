@@ -127,7 +127,7 @@ var configJsonC = `
     "backend_config" :
         {
             "sql_driver": "mysql",
-            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10&writeTimeout=10",
+            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,
@@ -244,7 +244,7 @@ var configJsonE = `
             "save_process": "GuerrillaRedisDB",
             "log_received_mails" : true,
             "sql_driver": "mysql",
-            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10&writeTimeout=10",
+            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,
@@ -682,6 +682,32 @@ func TestServerStopEvent(t *testing.T) {
 	os.Remove("configJsonA.json")
 	os.Remove("./pidfile.pid")
 
+}
+
+// just a utility for debugging when using the debugger, skipped by default
+func TestDebug(t *testing.T) {
+
+	t.SkipNow()
+	conf := guerrilla.ServerConfig{ListenInterface: "127.0.0.1:2526"}
+	if conn, buffin, err := test.Connect(conf, 20); err != nil {
+		t.Error("Could not connect to new server", conf.ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mai1.guerrillamail.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			} else {
+				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
+					expect := "250 2.1.5 OK"
+					if strings.Index(result, expect) != 0 {
+						t.Error("Expected:", expect, "but got:", result)
+					}
+				}
+			}
+		}
+		conn.Close()
+
+	}
 }
 
 // Start with configJsonD.json,

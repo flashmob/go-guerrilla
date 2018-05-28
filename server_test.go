@@ -199,6 +199,10 @@ func TestTLSConfig(t *testing.T) {
 		t.Error("c.MinVersion should be tls.VersionTLS10")
 	}
 
+	if c.PreferServerCipherSuites != false {
+		t.Error("PreferServerCipherSuites should be false")
+	}
+
 	os.Remove("rootca.test.pem")
 	os.Remove("client.test.key")
 	os.Remove("client.test.pem")

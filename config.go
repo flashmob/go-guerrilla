@@ -59,8 +59,8 @@ type ServerConfig struct {
 	XClientOn bool `json:"xclient_on,omitempty"`
 
 	// The following used to watch certificate changes so that the TLS can be reloaded
-	_privateKeyFile_mtime int
-	_publicKeyFile_mtime  int
+	_privateKeyFile_mtime int64
+	_publicKeyFile_mtime  int64
 }
 
 type ServerTLSConfig struct {
@@ -90,6 +90,9 @@ type ServerTLSConfig struct {
 	// declares the policy the server will follow for TLS Client Authentication.
 	// Use Go's default if empty
 	ClientAuthType string `json:"client_auth_type,omitempty"`
+	// controls whether the server selects the
+	// client's most preferred ciphersuite
+	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
 }
 
 // https://golang.org/pkg/crypto/tls/#pkg-constants
@@ -349,11 +352,16 @@ func (c *AppConfig) setBackendDefaults() error {
 // All events are fired and run synchronously
 func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla) {
 	// get a list of changes
-	changes := getDiff(
+	changes := getChanges(
 		*oldServer,
 		*sc,
 	)
-	if len(changes) > 0 {
+	tlsChanges := getChanges(
+		(*oldServer).TLS,
+		(*sc).TLS,
+	)
+
+	if len(changes) > 0 || len(tlsChanges) > 0 {
 		// something changed in the server config
 		app.Publish(EventConfigServerConfig, sc)
 	}
@@ -384,37 +392,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		app.Publish(EventConfigServerMaxClients, sc)
 	}
 
-	// tls changed
-	if ok := func() bool {
-		if _, ok := changes["PrivateKeyFile"]; ok {
-			return true
-		}
-		if _, ok := changes["PublicKeyFile"]; ok {
-			return true
-		}
-		if _, ok := changes["StartTLSOn"]; ok {
-			return true
-		}
-		if _, ok := changes["AlwaysOn"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSProtocols"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSCiphers"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSCurves"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSRootCAs"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSClientAuthType"]; ok {
-			return true
-		}
-		return false
-	}(); ok {
+	if len(tlsChanges) > 0 {
 		app.Publish(EventConfigServerTLSConfig, sc)
 	}
 }
@@ -429,12 +407,12 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 				err.Error()))
 	}
 	if info, err := os.Stat(sc.TLS.PrivateKeyFile); err == nil {
-		sc._privateKeyFile_mtime = info.ModTime().Second()
+		sc._privateKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
 	if info, err := os.Stat(sc.TLS.PublicKeyFile); err == nil {
-		sc._publicKeyFile_mtime = info.ModTime().Second()
+		sc._publicKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
@@ -443,7 +421,7 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 
 // Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
 // when the config was read. We use this info to determine if TLS needs to be re-loaded.
-func (sc *ServerConfig) getTlsKeyTimestamps() (int, int) {
+func (sc *ServerConfig) getTlsKeyTimestamps() (int64, int64) {
 	return sc._privateKeyFile_mtime, sc._publicKeyFile_mtime
 }
 
@@ -470,19 +448,27 @@ func (sc *ServerConfig) Validate() error {
 	return nil
 }
 
-// Returns a diff between struct a & struct b.
+// Returns value changes between struct a & struct b.
 // Results are returned in a map, where each key is the name of the field that was different.
 // a and b are struct values, must not be pointer
 // and of the same struct type
-func getDiff(a interface{}, b interface{}) map[string]interface{} {
+func getChanges(a interface{}, b interface{}) map[string]interface{} {
 	ret := make(map[string]interface{}, 5)
 	compareWith := structtomap(b)
 	for key, val := range structtomap(a) {
+		if sliceOfStr, ok := val.([]string); ok {
+			val, _ = json.Marshal(sliceOfStr)
+			val = string(val.([]uint8))
+		}
+		if sliceOfStr, ok := compareWith[key].([]string); ok {
+			compareWith[key], _ = json.Marshal(sliceOfStr)
+			compareWith[key] = string(compareWith[key].([]uint8))
+		}
 		if val != compareWith[key] {
 			ret[key] = compareWith[key]
 		}
 	}
-	// detect tls changes (have the key files been modified?)
+	// detect changes to TLS keys (have the key files been modified?)
 	if oldServer, ok := a.(ServerConfig); ok {
 		t1, t2 := oldServer.getTlsKeyTimestamps()
 		if newServer, ok := b.(ServerConfig); ok {
@@ -499,7 +485,8 @@ func getDiff(a interface{}, b interface{}) map[string]interface{} {
 }
 
 // Convert fields of a struct to a map
-// only able to convert int, bool and string; not recursive
+// only able to convert int, bool, slice-of-strings and string; not recursive
+// slices are marshal'd to json for convenient comparison later
 func structtomap(obj interface{}) map[string]interface{} {
 	ret := make(map[string]interface{}, 0)
 	v := reflect.ValueOf(obj)
@@ -507,9 +494,10 @@ func structtomap(obj interface{}) map[string]interface{} {
 	for index := 0; index < v.NumField(); index++ {
 		vField := v.Field(index)
 		fName := t.Field(index).Name
-
-		switch vField.Kind() {
+		k := vField.Kind()
+		switch k {
 		case reflect.Int:
+		case reflect.Int64:
 			value := vField.Int()
 			ret[fName] = value
 		case reflect.String:
@@ -518,6 +506,14 @@ func structtomap(obj interface{}) map[string]interface{} {
 		case reflect.Bool:
 			value := vField.Bool()
 			ret[fName] = value
+		case reflect.Slice:
+			ret[fName] = vField.Interface().([]string)
+			break
+			// assuming configs can only have arrays of strings
+			value := vField.Interface().([]string)
+			if b, err := json.Marshal(value); err == nil {
+				ret[fName] = string(b)
+			}
 		}
 	}
 	return ret
