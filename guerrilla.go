@@ -131,7 +131,7 @@ func (g *guerrilla) makeServers() error {
 			}
 			if server != nil {
 				g.servers[sc.ListenInterface] = server
-				server.setAllowedHosts(g.Config.AllowedHosts)
+				server.setAllowedHosts(g.Config.AllowedHosts, g.Config.AllowedHostsSubdomains)
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func (g *guerrilla) subscribeEvents() {
 	// allowed_hosts changed, set for all servers
 	g.Subscribe(EventConfigAllowedHosts, func(c *AppConfig) {
 		g.mapServers(func(server *server) {
-			server.setAllowedHosts(c.AllowedHosts)
+			server.setAllowedHosts(c.AllowedHosts, c.AllowedHostsSubdomains)
 		})
 		g.mainlog().Infof("allowed_hosts config changed, a new list was set")
 	})

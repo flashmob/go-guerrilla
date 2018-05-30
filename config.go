@@ -19,6 +19,8 @@ type AppConfig struct {
 	Servers []ServerConfig `json:"servers"`
 	// AllowedHosts lists which hosts to accept email for. Defaults to os.Hostname
 	AllowedHosts []string `json:"allowed_hosts"`
+	// AllowedHostsSubdomains lists which hosts we accept subdomains
+	AllowedHostsSubdomains []string `json:"allowed_hosts_subdomains"`
 	// PidFile is the path for writing out the process id. No output if empty
 	PidFile string `json:"pid_file"`
 	// LogFile is where the logs go. Use path to file, or "stderr", "stdout"

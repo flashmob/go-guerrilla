@@ -59,7 +59,7 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	if err != nil {
 		//t.Error("new server failed because:", err)
 	} else {
-		server.setAllowedHosts([]string{"test.com"})
+		server.setAllowedHosts([]string{"test.com"}, []string{})
 	}
 	conn := mocks.NewConn()
 	return conn, server
