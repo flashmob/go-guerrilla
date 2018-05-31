@@ -147,6 +147,13 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
 	case <-time.After(gw.saveTimeout()):
 		Log().Error("Backend has timed out while saving email")
+		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
+		go func() {
+			// keep waiting for the backend to finish processing
+			<-workerMsg.notifyMe
+			e.Unlock()
+			workerMsgPool.Put(workerMsg)
+		}()
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
 }
