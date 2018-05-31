@@ -17,6 +17,7 @@ import (
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
 	"io/ioutil"
+	"path/filepath"
 )
 
 const (
@@ -66,6 +67,7 @@ type server struct {
 
 type allowedHosts struct {
 	table      map[string]bool // host lookup table
+	wildcards  []string        // host wildcard list (* is used as a wildcard)
 	sync.Mutex                 // guard access to the map
 }
 
@@ -195,8 +197,13 @@ func (server *server) setAllowedHosts(allowedHosts []string) {
 	server.hosts.Lock()
 	defer server.hosts.Unlock()
 	server.hosts.table = make(map[string]bool, len(allowedHosts))
+	server.hosts.wildcards = nil
 	for _, h := range allowedHosts {
-		server.hosts.table[strings.ToLower(h)] = true
+		if strings.Index(h, "*") != -1 {
+			server.hosts.wildcards = append(server.hosts.wildcards, strings.ToLower(h))
+		} else {
+			server.hosts.table[strings.ToLower(h)] = true
+		}
 	}
 }
 
@@ -278,6 +285,7 @@ func (server *server) GetActiveClientsCount() int {
 func (server *server) allowsHost(host string) bool {
 	server.hosts.Lock()
 	defer server.hosts.Unlock()
+	// if hosts contains a single dot, further processing is skipped
 	if len(server.hosts.table) == 1 {
 		if _, ok := server.hosts.table["."]; ok {
 			return true
@@ -285,6 +293,12 @@ func (server *server) allowsHost(host string) bool {
 	}
 	if _, ok := server.hosts.table[strings.ToLower(host)]; ok {
 		return true
+	}
+	// check the willdcards
+	for _, w := range server.hosts.wildcards {
+		if matched, err := filepath.Match(w, strings.ToLower(host)); matched && err == nil {
+			return true
+		}
 	}
 	return false
 }
