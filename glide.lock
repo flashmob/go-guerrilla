@@ -1,5 +1,5 @@
 hash: d845af9d7a26647c61c850a305d94006a0528611a1ae81eccea766c432e7aac0
-updated: 2018-05-31T13:04:27.585656465+10:00
+updated: 2018-05-31T15:05:08.573435967+10:00
 imports:
 - name: github.com/asaskevich/EventBus
   version: 68a521d7cbbb7a859c2608b06342f384b3bd5f5a
@@ -28,8 +28,6 @@ imports:
   - fs
 - name: github.com/sirupsen/logrus
   version: c155da19408a8799da419ed3eeb0cb5db0ad5dbc
-- name: github.com/Sirupsen/logrus
-  version: d682213848ed68c0a260ca37d6dd5ace8423f5ba
 - name: github.com/spf13/cobra
   version: b62566898a99f2db9c68ed0026aa0a052e59678d
 - name: github.com/spf13/pflag
