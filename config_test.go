@@ -33,55 +33,59 @@ var configJsonA = `
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"start_tls_on":false,
+            	"tls_always_on":false,
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go"
+			}
         },
-
         {
             "is_enabled" : true,
             "host_name":"mail2.guerrillamail.com",
             "max_size":1000001,
-            "private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"./tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:2527",
-            "start_tls_on":true,
-            "tls_always_on":false,
-            "max_clients":1
+			"max_clients":1,
+			"tls" : {
+ 				"private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"./tests/mail2.guerrillamail.com.cert.pem",
+				"tls_always_on":false,
+            	"start_tls_on":true
+			}
         },
 
         {
             "is_enabled" : true,
             "host_name":"mail.stopme.com",
-            "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
+            "max_size": 100017, 
             "timeout":160,
-            "listen_interface":"127.0.0.1:9999",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "listen_interface":"127.0.0.1:9999", 
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         },
-
         {
             "is_enabled" : true,
             "host_name":"mail.disableme.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:3333",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : { 
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":false,
+				"tls_always_on":false
+			}
         }
-
-
     ]
 }
 `
@@ -106,52 +110,60 @@ var configJsonB = `
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":161,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":true,
-            "max_clients": 3
+            "max_clients": 3,
+			"tls" : {
+ 				"private_key_file":"./config_test.go",
+            	"public_key_file":"./config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         },
         {
             "is_enabled" : true,
             "host_name":"mail2.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file": "./tests/mail2.guerrillamail.com.cert.pem",
             "timeout":160,
             "listen_interface":"127.0.0.1:2527",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "log_file" : "./tests/testlog",
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file": "./tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
 
         {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size":1000001,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients":1
+            "max_clients":1,
+			"tls" : {
+				"private_key_file":"config_test.go",
+				"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         },
 
         {
             "is_enabled" : false,
             "host_name":"mail.disbaleme.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:3333",
-            "start_tls_on":true,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -169,8 +181,8 @@ func TestConfigLoad(t *testing.T) {
 		t.SkipNow()
 	}
 	// did we got the timestamps?
-	if ac.Servers[0]._privateKeyFile_mtime <= 0 {
-		t.Error("failed to read timestamp for _privateKeyFile_mtime, got", ac.Servers[0]._privateKeyFile_mtime)
+	if ac.Servers[0].TLS._privateKeyFile_mtime <= 0 {
+		t.Error("failed to read timestamp for _privateKeyFile_mtime, got", ac.Servers[0].TLS._privateKeyFile_mtime)
 	}
 }
 
@@ -209,8 +221,8 @@ func TestConfigChangeEvents(t *testing.T) {
 	// simulate timestamp change
 
 	time.Sleep(time.Second + time.Millisecond*500)
-	os.Chtimes(oldconf.Servers[1].PrivateKeyFile, time.Now(), time.Now())
-	os.Chtimes(oldconf.Servers[1].PublicKeyFile, time.Now(), time.Now())
+	os.Chtimes(oldconf.Servers[1].TLS.PrivateKeyFile, time.Now(), time.Now())
+	os.Chtimes(oldconf.Servers[1].TLS.PublicKeyFile, time.Now(), time.Now())
 	newconf := &AppConfig{}
 	newconf.Load([]byte(configJsonB))
 	newconf.Servers[0].LogFile = log.OutputOff.String() // test for log file change

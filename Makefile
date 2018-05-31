@@ -31,6 +31,10 @@ dashboard: dashboard/*.go */*/*/*.js */*/*/*/*.js
 guerrillad: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
+guerrilladrace: *.go */*.go */*/*.go
+	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
+
+
 test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v .
 	$(GO_VARS) $(GO) test -v ./tests

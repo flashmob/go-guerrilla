@@ -179,7 +179,7 @@ func (c *client) getID() uint64 {
 // UpgradeToTLS upgrades a client connection to TLS
 func (client *client) upgradeToTLS(tlsConfig *tls.Config) error {
 	var tlsConn *tls.Conn
-	// load the config thread-safely
+	// wrap client.conn in a new TLS server side connection
 	tlsConn = tls.Server(client.conn, tlsConfig)
 	// Call handshake here to get any handshake error before reading starts
 	err := tlsConn.Handshake()

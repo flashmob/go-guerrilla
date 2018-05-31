@@ -20,34 +20,48 @@
         "log_received_mails": true,
         "save_workers_size": 1,
         "save_process" : "HeadersParser|Header|Debugger",
-        "primary_mail_host" : "mail.example.com"
+        "primary_mail_host" : "mail.example.com",
+        "gw_save_timeout" : "30s",
+        "gw_val_rcpt_timeout" : "3s"
     },
     "servers" : [
         {
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"/path/to/pem/file/test.com.key",
-            "public_key_file":"/path/to/pem/file/test.com.crt",
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "stderr"
+            "log_file" : "stderr",
+            "tls" : {
+                "start_tls_on":true,
+                "tls_always_on":false,
+                "private_key_file":"/path/to/pem/file/test.com.key",
+                "public_key_file":"/path/to/pem/file/test.com.crt",
+                "protocols" : ["ssl3.0", "tls1.2"],
+                "ciphers" : ["TLS_FALLBACK_SCSV", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305", "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305", "TLS_RSA_WITH_RC4_128_SHA", "TLS_RSA_WITH_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA", "TLS_ECDHE_RSA_WITH_RC4_128_SHA", "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"],
+                "curves" : ["P256", "P384", "P521", "X25519"],
+                "client_auth_type" : "NoClientCert"
+            }
         },
         {
             "is_enabled" : false,
             "host_name":"mail.test.com",
             "max_size":1000000,
-            "private_key_file":"/path/to/pem/file/test.com.key",
-            "public_key_file":"/path/to/pem/file/test.com.crt",
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":500,
-            "log_file" : "stderr"
+            "log_file" : "stderr",
+            "tls" : {
+                "private_key_file":"/path/to/pem/file/test.com.key",
+                "public_key_file":"/path/to/pem/file/test.com.crt",
+                 "start_tls_on":false,
+                 "tls_always_on":true,
+                 "protocols" : ["ssl3.0", "tls1.2"],
+                 "ciphers" : ["TLS_FALLBACK_SCSV", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305", "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305", "TLS_RSA_WITH_RC4_128_SHA", "TLS_RSA_WITH_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA", "TLS_ECDHE_RSA_WITH_RC4_128_SHA", "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"],
+                 "curves" : ["P256", "P384", "P521", "X25519"],
+                 "client_auth_type" : "NoClientCert"
+            }
         }
     ]
 }

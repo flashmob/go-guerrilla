@@ -3,12 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	test "github.com/flashmob/go-guerrilla/tests"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
-	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -18,6 +12,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	test "github.com/flashmob/go-guerrilla/tests"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
+	"github.com/spf13/cobra"
 )
 
 var configJsonA = `
@@ -42,27 +43,31 @@ var configJsonA = `
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
         {
             "is_enabled" : false,
             "host_name":"enable.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:2228",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -91,20 +96,22 @@ var configJsonB = `
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+            	"start_tls_on":true,
+            	"tls_always_on":false
+			}
         }
     ]
 }
 `
 
-// backend_name changed, is guerrilla-redis-db + added a server
+// added a server
 var configJsonC = `
 {
     "log_file" : "../../tests/testlog",
@@ -117,48 +124,49 @@ var configJsonC = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_name": "guerrilla-redis-db",
     "backend_config" :
         {
-            "mysql_db":"gmail_mail",
-            "mysql_host":"127.0.0.1:3306",
-            "mysql_pass":"ok",
-            "mysql_user":"root",
+            "sql_driver": "mysql",
+            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
             "redis_expire_seconds" : 7200,
             "save_workers_size" : 3,
             "primary_mail_host":"sharklasers.com",
             "save_workers_size" : 1,
-	    "save_process": "HeadersParser|Debugger",
-	    "log_received_mails": true
+	    	"save_process": "HeadersParser|Debugger",
+	    	"log_received_mails": true
         },
     "servers" : [
         {
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
         {
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size":1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":500,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         }
     ]
 }
@@ -187,27 +195,31 @@ var configJsonD = `
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
         {
             "is_enabled" : true,
             "host_name":"secure.test.com",
             "max_size":1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":500,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         }
     ]
 }
@@ -231,13 +243,11 @@ var configJsonE = `
             "save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
             "save_process": "GuerrillaRedisDB",
             "log_received_mails" : true,
-            "mysql_db":"gmail_mail",
-            "mysql_host":"127.0.0.1:3306",
-            "mysql_pass":"secret",
-            "mysql_user":"root",
+            "sql_driver": "mysql",
+            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             "mail_table":"new_mail",
             "redis_interface" : "127.0.0.1:6379",
-             "redis_expire_seconds" : 7200,
+            "redis_expire_seconds" : 7200,
             "save_workers_size" : 3,
             "primary_mail_host":"sharklasers.com"
         },
@@ -246,27 +256,31 @@ var configJsonE = `
             "is_enabled" : true,
             "host_name":"mail.test.com",
             "max_size": 1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
-            "start_tls_on":true,
-            "tls_always_on":false,
             "max_clients": 1000,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
         {
             "is_enabled" : true,
             "host_name":"secure.test.com",
             "max_size":1000000,
-            "private_key_file":"../..//tests/mail2.guerrillamail.com.key.pem",
-            "public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":500,
-            "log_file" : "../../tests/testlog"
+            "log_file" : "../../tests/testlog",
+			"tls" : {
+				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         }
     ]
 }
@@ -668,6 +682,32 @@ func TestServerStopEvent(t *testing.T) {
 	os.Remove("configJsonA.json")
 	os.Remove("./pidfile.pid")
 
+}
+
+// just a utility for debugging when using the debugger, skipped by default
+func TestDebug(t *testing.T) {
+
+	t.SkipNow()
+	conf := guerrilla.ServerConfig{ListenInterface: "127.0.0.1:2526"}
+	if conn, buffin, err := test.Connect(conf, 20); err != nil {
+		t.Error("Could not connect to new server", conf.ListenInterface, err)
+	} else {
+		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			expect := "250 mai1.guerrillamail.com Hello"
+			if strings.Index(result, expect) != 0 {
+				t.Error("Expected", expect, "but got", result)
+			} else {
+				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
+					expect := "250 2.1.5 OK"
+					if strings.Index(result, expect) != 0 {
+						t.Error("Expected:", expect, "but got:", result)
+					}
+				}
+			}
+		}
+		conn.Close()
+
+	}
 }
 
 // Start with configJsonD.json,

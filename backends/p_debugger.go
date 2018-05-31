@@ -3,6 +3,7 @@ package backends
 import (
 	"github.com/flashmob/go-guerrilla/mail"
 	"strings"
+	"time"
 )
 
 // ----------------------------------------------------------------------------------
@@ -24,6 +25,7 @@ func init() {
 
 type debuggerConfig struct {
 	LogReceivedMails bool `json:"log_received_mails"`
+	SleepSec         int  `json:"sleep_seconds,omitempty"`
 }
 
 func Debugger() Decorator {
@@ -45,6 +47,18 @@ func Debugger() Decorator {
 					Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
 					Log().Info("Headers are:", e.Header)
 				}
+
+				if config.SleepSec > 0 {
+					Log().Infof("sleeping for %d", config.SleepSec)
+					time.Sleep(time.Second * time.Duration(config.SleepSec))
+					Log().Infof("woke up")
+
+					if config.SleepSec == 1 {
+						panic("panic on purpose")
+					}
+
+				}
+
 				// continue to the next Processor in the decorator stack
 				return p.Process(e, task)
 			} else {

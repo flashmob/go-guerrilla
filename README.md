@@ -1,6 +1,8 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
+Breaking change: The structure of the config has recently changed to accommodate more advanced TLS settings.
+
 Go-Guerrilla SMTP Daemon
 ====================
 
@@ -92,6 +94,7 @@ $ make guerrillad
 ```
 
 This will create a executable file named `guerrillad` that's ready to run.
+See the [build notes](https://github.com/flashmob/go-guerrilla/wiki/Build-Notes) for more details.
 
 Next, copy the `goguerrilla.conf.sample` file to `goguerrilla.conf.json`. 
 You may need to customize the `pid_file` setting to somewhere local, 
@@ -132,7 +135,7 @@ Go-Guerrilla can be imported and used as a package in your Go project.
 #### 1. Import the guerrilla package
 ```go
 import (
-    "github.com/flashmob/go-guerrilla/guerrilla"
+    "github.com/flashmob/go-guerrilla"
 )
 
 
@@ -245,7 +248,8 @@ The following processors can be imported to your project, then use the
 | Processor | Description |
 |-----------|-------------|
 |[MailDir](https://github.com/flashmob/maildir-processor)|Save emails to a maildir. [MailDiranasaurus](https://github.com/flashmob/maildiranasaurus) is an example project|
-|[FastCGI](https://github.com/flashmob/fastcgi-processor)|Deliver email directly to PHP-FPM or a similar FastCGI backend.
+|[FastCGI](https://github.com/flashmob/fastcgi-processor)|Deliver email directly to PHP-FPM or a similar FastCGI backend.|
+|[WildcardProcessor](https://github.com/DevelHell/wildcard-processor)|Use wildcards for recipients host validation.|
 
 Have a processor that you would like to share? Submit a PR to add it to the list!
 

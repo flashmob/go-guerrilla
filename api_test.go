@@ -16,16 +16,14 @@ import (
 
 // Test Starting smtp without setting up logger / backend
 func TestSMTP(t *testing.T) {
+	done := make(chan bool)
 	go func() {
 		select {
 		case <-time.After(time.Second * 40):
-			//buf := make([]byte, 1<<16)
-			//stackSize := runtime.Stack(buf, true)
-			//fmt.Printf("%s\n", string(buf[0:stackSize]))
-			//panic("timeout")
 			t.Error("timeout")
 			return
-
+		case <-done:
+			return
 		}
 	}()
 
@@ -52,6 +50,7 @@ func TestSMTP(t *testing.T) {
 	}
 	time.Sleep(time.Second * 2)
 	d.Shutdown()
+	done <- true
 
 }
 
@@ -134,13 +133,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -162,13 +163,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+ 				"private_key_file":"config_test.go",
+				"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -311,9 +314,9 @@ func TestSetConfigError(t *testing.T) {
 
 	// lets add a new server with bad TLS
 	sc.ListenInterface = "127.0.0.1:2527"
-	sc.StartTLSOn = true
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
+	sc.TLS.StartTLSOn = true
+	sc.TLS.PublicKeyFile = "tests/testlog"  // totally wrong :->
+	sc.TLS.PrivateKeyFile = "tests/testlog" // totally wrong :->
 
 	cfg.Servers = append(cfg.Servers, sc)
 
@@ -414,25 +417,19 @@ func talkToServer(address string) {
 	}
 	in := bufio.NewReader(conn)
 	str, err := in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "DATA\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	fmt.Fprint(conn, "Subject: Test subject\r\n")
 	fmt.Fprint(conn, "\r\n")
 	fmt.Fprint(conn, "A an email body\r\n")
 	fmt.Fprint(conn, ".\r\n")
 	str, err = in.ReadString('\n')
-	//	fmt.Println(str)
 	_ = str
 }
 
@@ -443,7 +440,7 @@ func TestReloadConfig(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	d := Daemon{}
 	d.Start()
-
+	defer d.Shutdown()
 	cfg := AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -455,7 +452,6 @@ func TestReloadConfig(t *testing.T) {
 	// Look mom, reloading the config without shutting down!
 	d.ReloadConfig(cfg)
 
-	d.Shutdown()
 }
 
 func TestPubSubAPI(t *testing.T) {
@@ -464,7 +460,7 @@ func TestPubSubAPI(t *testing.T) {
 
 	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
 	d.Start()
-
+	defer d.Shutdown()
 	// new config
 	cfg := AppConfig{
 		PidFile:      "tests/pidfilex.pid",
@@ -533,4 +529,30 @@ func TestAPILog(t *testing.T) {
 	if strings.Index(string(b), "logtest1") < 0 {
 		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
+}
+
+// Test the allowed_hosts config option with a single entry of ".", which will allow all hosts.
+func TestSkipAllowsHost(t *testing.T) {
+
+	d := Daemon{}
+	defer d.Shutdown()
+	// setting the allowed hosts to a single entry with a dot will let any host through
+	d.Config = &AppConfig{AllowedHosts: []string{"."}, LogFile: "off"}
+	d.Start()
+
+	conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
+	if err != nil {
+		t.Error(t)
+		return
+	}
+	in := bufio.NewReader(conn)
+	fmt.Fprint(conn, "HELO test\r\n")
+	fmt.Fprint(conn, "RCPT TO: test@funkyhost.com\r\n")
+	in.ReadString('\n')
+	in.ReadString('\n')
+	str, _ := in.ReadString('\n')
+	if strings.Index(str, "250") != 0 {
+		t.Error("expected 250 reply, got:", str)
+	}
+
 }

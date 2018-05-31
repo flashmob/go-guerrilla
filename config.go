@@ -45,20 +45,13 @@ type ServerConfig struct {
 	// MaxSize is the maximum size of an email that will be accepted for delivery.
 	// Defaults to 10 Mebibytes
 	MaxSize int64 `json:"max_size"`
-	// PrivateKeyFile path to cert private key in PEM format. Will be ignored if blank
-	PrivateKeyFile string `json:"private_key_file"`
-	// PublicKeyFile path to cert (public key) chain in PEM format.
-	// Will be ignored if blank
-	PublicKeyFile string `json:"public_key_file"`
+	// TLS Configuration
+	TLS ServerTLSConfig `json:"tls,omitempty"`
 	// Timeout specifies the connection timeout in seconds. Defaults to 30
 	Timeout int `json:"timeout"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
-	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
-	// False by default
-	StartTLSOn bool `json:"start_tls_on,omitempty"`
-	// TLSAlwaysOn run this server as a pure TLS server, i.e. SMTPS
-	TLSAlwaysOn bool `json:"tls_always_on,omitempty"`
+
 	// MaxClients controls how many maxiumum clients we can handle at once.
 	// Defaults to 100
 	MaxClients int `json:"max_clients"`
@@ -68,10 +61,95 @@ type ServerConfig struct {
 	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
+}
+
+type ServerTLSConfig struct {
+
+	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
+	// False by default
+	StartTLSOn bool `json:"start_tls_on,omitempty"`
+	// AlwaysOn run this server as a pure TLS server, i.e. SMTPS
+	AlwaysOn bool `json:"tls_always_on,omitempty"`
+	// PrivateKeyFile path to cert private key in PEM format.
+	PrivateKeyFile string `json:"private_key_file"`
+	// PublicKeyFile path to cert (public key) chain in PEM format.
+	PublicKeyFile string `json:"public_key_file"`
+
+	// TLS Protocols to use. [0] = min, [1]max
+	// Use Go's default if empty
+	Protocols []string `json:"protocols,omitempty"`
+	// TLS Ciphers to use.
+	// Use Go's default if empty
+	Ciphers []string `json:"ciphers,omitempty"`
+	// TLS Curves to use.
+	// Use Go's default if empty
+	Curves []string `json:"curves,omitempty"`
+	// TLS Root cert authorities to use. "A PEM encoded CA's certificate file.
+	// Defaults to system's root CA file if empty
+	RootCAs string `json:"root_cas_file,omitempty"`
+	// declares the policy the server will follow for TLS Client Authentication.
+	// Use Go's default if empty
+	ClientAuthType string `json:"client_auth_type,omitempty"`
+	// controls whether the server selects the
+	// client's most preferred ciphersuite
+	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
 
 	// The following used to watch certificate changes so that the TLS can be reloaded
-	_privateKeyFile_mtime int
-	_publicKeyFile_mtime  int
+	_privateKeyFile_mtime int64
+	_publicKeyFile_mtime  int64
+}
+
+// https://golang.org/pkg/crypto/tls/#pkg-constants
+// Ciphers introduced before Go 1.7 are listed here,
+// ciphers since Go 1.8, see tls_go1.8.go
+var TLSCiphers = map[string]uint16{
+
+	// // Note: Generally avoid using CBC unless for compatibility
+	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":        tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+	"TLS_RSA_WITH_AES_128_CBC_SHA":         tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+	"TLS_RSA_WITH_AES_256_CBC_SHA":         tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA": tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA": tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA":  tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":   tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":   tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+
+	"TLS_RSA_WITH_RC4_128_SHA":        tls.TLS_RSA_WITH_RC4_128_SHA,
+	"TLS_RSA_WITH_AES_128_GCM_SHA256": tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	"TLS_RSA_WITH_AES_256_GCM_SHA384": tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+
+	"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA":        tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
+	"TLS_ECDHE_RSA_WITH_RC4_128_SHA":          tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256": tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384":   tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384": tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+
+	// Include to prevent downgrade attacks
+	"TLS_FALLBACK_SCSV": tls.TLS_FALLBACK_SCSV,
+}
+
+// https://golang.org/pkg/crypto/tls/#pkg-constants
+var TLSProtocols = map[string]uint16{
+	"ssl3.0": tls.VersionSSL30,
+	"tls1.0": tls.VersionTLS10,
+	"tls1.1": tls.VersionTLS11,
+	"tls1.2": tls.VersionTLS12,
+}
+
+// https://golang.org/pkg/crypto/tls/#CurveID
+var TLSCurves = map[string]tls.CurveID{
+	"P256": tls.CurveP256,
+	"P384": tls.CurveP384,
+	"P521": tls.CurveP521,
+}
+
+// https://golang.org/pkg/crypto/tls/#ClientAuthType
+var TLSClientAuthTypes = map[string]tls.ClientAuthType{
+	"NoClientCert":               tls.NoClientCert,
+	"RequestClientCert":          tls.RequestClientCert,
+	"RequireAnyClientCert":       tls.RequireAnyClientCert,
+	"VerifyClientCertIfGiven":    tls.VerifyClientCertIfGiven,
+	"RequireAndVerifyClientCert": tls.RequireAndVerifyClientCert,
 }
 
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
@@ -278,11 +356,16 @@ func (c *AppConfig) setBackendDefaults() error {
 // All events are fired and run synchronously
 func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla) {
 	// get a list of changes
-	changes := getDiff(
+	changes := getChanges(
 		*oldServer,
 		*sc,
 	)
-	if len(changes) > 0 {
+	tlsChanges := getChanges(
+		(*oldServer).TLS,
+		(*sc).TLS,
+	)
+
+	if len(changes) > 0 || len(tlsChanges) > 0 {
 		// something changed in the server config
 		app.Publish(EventConfigServerConfig, sc)
 	}
@@ -313,22 +396,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		app.Publish(EventConfigServerMaxClients, sc)
 	}
 
-	// tls changed
-	if ok := func() bool {
-		if _, ok := changes["PrivateKeyFile"]; ok {
-			return true
-		}
-		if _, ok := changes["PublicKeyFile"]; ok {
-			return true
-		}
-		if _, ok := changes["StartTLSOn"]; ok {
-			return true
-		}
-		if _, ok := changes["TLSAlwaysOn"]; ok {
-			return true
-		}
-		return false
-	}(); ok {
+	if len(tlsChanges) > 0 {
 		app.Publish(EventConfigServerTLSConfig, sc)
 	}
 }
@@ -342,37 +410,31 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 				iface,
 				err.Error()))
 	}
-	if info, err := os.Stat(sc.PrivateKeyFile); err == nil {
-		sc._privateKeyFile_mtime = info.ModTime().Second()
+	if info, err := os.Stat(sc.TLS.PrivateKeyFile); err == nil {
+		sc.TLS._privateKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
-	if info, err := os.Stat(sc.PublicKeyFile); err == nil {
-		sc._publicKeyFile_mtime = info.ModTime().Second()
+	if info, err := os.Stat(sc.TLS.PublicKeyFile); err == nil {
+		sc.TLS._publicKeyFile_mtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
 	return nil
 }
 
-// Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
-// when the config was read. We use this info to determine if TLS needs to be re-loaded.
-func (sc *ServerConfig) getTlsKeyTimestamps() (int, int) {
-	return sc._privateKeyFile_mtime, sc._publicKeyFile_mtime
-}
-
 // Validate validates the server's configuration.
 func (sc *ServerConfig) Validate() error {
 	var errs Errors
 
-	if sc.StartTLSOn || sc.TLSAlwaysOn {
-		if sc.PublicKeyFile == "" {
+	if sc.TLS.StartTLSOn || sc.TLS.AlwaysOn {
+		if sc.TLS.PublicKeyFile == "" {
 			errs = append(errs, errors.New("PublicKeyFile is empty"))
 		}
-		if sc.PrivateKeyFile == "" {
+		if sc.TLS.PrivateKeyFile == "" {
 			errs = append(errs, errors.New("PrivateKeyFile is empty"))
 		}
-		if _, err := tls.LoadX509KeyPair(sc.PublicKeyFile, sc.PrivateKeyFile); err != nil {
+		if _, err := tls.LoadX509KeyPair(sc.TLS.PublicKeyFile, sc.TLS.PrivateKeyFile); err != nil {
 			errs = append(errs,
 				errors.New(fmt.Sprintf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)))
 		}
@@ -384,28 +446,42 @@ func (sc *ServerConfig) Validate() error {
 	return nil
 }
 
-// Returns a diff between struct a & struct b.
+// Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
+// when the config was read. We use this info to determine if TLS needs to be re-loaded.
+func (stc *ServerTLSConfig) getTlsKeyTimestamps() (int64, int64) {
+	return stc._privateKeyFile_mtime, stc._publicKeyFile_mtime
+}
+
+// Returns value changes between struct a & struct b.
 // Results are returned in a map, where each key is the name of the field that was different.
 // a and b are struct values, must not be pointer
 // and of the same struct type
-func getDiff(a interface{}, b interface{}) map[string]interface{} {
+func getChanges(a interface{}, b interface{}) map[string]interface{} {
 	ret := make(map[string]interface{}, 5)
 	compareWith := structtomap(b)
 	for key, val := range structtomap(a) {
+		if sliceOfStr, ok := val.([]string); ok {
+			val, _ = json.Marshal(sliceOfStr)
+			val = string(val.([]uint8))
+		}
+		if sliceOfStr, ok := compareWith[key].([]string); ok {
+			compareWith[key], _ = json.Marshal(sliceOfStr)
+			compareWith[key] = string(compareWith[key].([]uint8))
+		}
 		if val != compareWith[key] {
 			ret[key] = compareWith[key]
 		}
 	}
-	// detect tls changes (have the key files been modified?)
-	if oldServer, ok := a.(ServerConfig); ok {
-		t1, t2 := oldServer.getTlsKeyTimestamps()
-		if newServer, ok := b.(ServerConfig); ok {
-			t3, t4 := newServer.getTlsKeyTimestamps()
+	// detect changes to TLS keys (have the key files been modified?)
+	if oldTLS, ok := a.(ServerTLSConfig); ok {
+		t1, t2 := oldTLS.getTlsKeyTimestamps()
+		if newTLS, ok := b.(ServerTLSConfig); ok {
+			t3, t4 := newTLS.getTlsKeyTimestamps()
 			if t1 != t3 {
-				ret["PrivateKeyFile"] = newServer.PrivateKeyFile
+				ret["PrivateKeyFile"] = newTLS.PrivateKeyFile
 			}
 			if t2 != t4 {
-				ret["PublicKeyFile"] = newServer.PublicKeyFile
+				ret["PublicKeyFile"] = newTLS.PublicKeyFile
 			}
 		}
 	}
@@ -413,7 +489,8 @@ func getDiff(a interface{}, b interface{}) map[string]interface{} {
 }
 
 // Convert fields of a struct to a map
-// only able to convert int, bool and string; not recursive
+// only able to convert int, bool, slice-of-strings and string; not recursive
+// slices are marshal'd to json for convenient comparison later
 func structtomap(obj interface{}) map[string]interface{} {
 	ret := make(map[string]interface{}, 0)
 	v := reflect.ValueOf(obj)
@@ -421,9 +498,11 @@ func structtomap(obj interface{}) map[string]interface{} {
 	for index := 0; index < v.NumField(); index++ {
 		vField := v.Field(index)
 		fName := t.Field(index).Name
-
-		switch vField.Kind() {
+		k := vField.Kind()
+		switch k {
 		case reflect.Int:
+			fallthrough
+		case reflect.Int64:
 			value := vField.Int()
 			ret[fName] = value
 		case reflect.String:
@@ -432,6 +511,8 @@ func structtomap(obj interface{}) map[string]interface{} {
 		case reflect.Bool:
 			value := vField.Bool()
 			ret[fName] = value
+		case reflect.Slice:
+			ret[fName] = vField.Interface().([]string)
 		}
 	}
 	return ret
