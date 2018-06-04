@@ -38,8 +38,9 @@ type client struct {
 	errors       int
 	state        ClientState
 	messagesSent int
-	// Response to be written to the client
+	// Response to be written to the client (for debugging)
 	response   bytes.Buffer
+	bufErr     error
 	conn       net.Conn
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
@@ -69,39 +70,38 @@ func NewClient(conn net.Conn, clientID uint64, logger log.Logger, envelope *mail
 	return c
 }
 
-// setResponse adds a response to be written on the next turn
+// sendResponse adds a response to be written on the next turn
+// the response gets buffered
 func (c *client) sendResponse(r ...interface{}) {
 	c.bufout.Reset(c.conn)
 	if c.log.IsDebug() {
-		// us additional buffer so that we can log the response in debug mode only
+		// an additional buffer so that we can log the response in debug mode only
 		c.response.Reset()
+	}
+	var out string
+	if c.bufErr != nil {
+		c.bufErr = nil
 	}
 	for _, item := range r {
 		switch v := item.(type) {
-		case string:
-			if _, err := c.bufout.WriteString(v); err != nil {
-				c.log.WithError(err).Error("could not write to c.bufout")
-			}
-			if c.log.IsDebug() {
-				c.response.WriteString(v)
-			}
 		case error:
-			if _, err := c.bufout.WriteString(v.Error()); err != nil {
-				c.log.WithError(err).Error("could not write to c.bufout")
-			}
-			if c.log.IsDebug() {
-				c.response.WriteString(v.Error())
-			}
+			out = v.Error()
 		case fmt.Stringer:
-			if _, err := c.bufout.WriteString(v.String()); err != nil {
-				c.log.WithError(err).Error("could not write to c.bufout")
-			}
-			if c.log.IsDebug() {
-				c.response.WriteString(v.String())
-			}
+			out = v.String()
+		case string:
+			out = v
+		}
+		if _, c.bufErr = c.bufout.WriteString(out); c.bufErr != nil {
+			c.log.WithError(c.bufErr).Error("could not write to c.bufout")
+		}
+		if c.log.IsDebug() {
+			c.response.WriteString(out)
+		}
+		if c.bufErr != nil {
+			return
 		}
 	}
-	c.bufout.WriteString("\r\n")
+	_, c.bufErr = c.bufout.WriteString("\r\n")
 	if c.log.IsDebug() {
 		c.response.WriteString("\r\n")
 	}
@@ -176,20 +176,20 @@ func (c *client) getID() uint64 {
 }
 
 // UpgradeToTLS upgrades a client connection to TLS
-func (client *client) upgradeToTLS(tlsConfig *tls.Config) error {
+func (c *client) upgradeToTLS(tlsConfig *tls.Config) error {
 	var tlsConn *tls.Conn
-	// wrap client.conn in a new TLS server side connection
-	tlsConn = tls.Server(client.conn, tlsConfig)
+	// wrap c.conn in a new TLS server side connection
+	tlsConn = tls.Server(c.conn, tlsConfig)
 	// Call handshake here to get any handshake error before reading starts
 	err := tlsConn.Handshake()
 	if err != nil {
 		return err
 	}
 	// convert tlsConn to net.Conn
-	client.conn = net.Conn(tlsConn)
-	client.bufout.Reset(client.conn)
-	client.bufin.Reset(client.conn)
-	client.TLS = true
+	c.conn = net.Conn(tlsConn)
+	c.bufout.Reset(c.conn)
+	c.bufin.Reset(c.conn)
+	c.TLS = true
 	return err
 }
 
