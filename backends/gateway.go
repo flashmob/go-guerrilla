@@ -128,7 +128,7 @@ func (w *workerMsg) reset(e *mail.Envelope, task SelectTask) {
 // Process distributes an envelope to one of the backend workers with a TaskSaveMail task
 func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	if gw.State != BackendStateRunning {
-		return NewResult(response.Canned.FailBackendNotRunning, " ", gw.State)
+		return NewResult(response.Canned.FailBackendNotRunning, response.SP, gw.State)
 	}
 	// borrow a workerMsg from the pool
 	workerMsg := workerMsgPool.Get().(*workerMsg)
@@ -142,11 +142,11 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 		workerMsgPool.Put(workerMsg) // can be recycled since we used the notifyMe channel
 		if status.err != nil {
 			if _, err := strconv.Atoi(status.err.Error()[:3]); err != nil {
-				return NewResult(response.Canned.FailBackendTransaction, " ", status.err)
+				return NewResult(response.Canned.FailBackendTransaction, response.SP, status.err)
 			}
 			return NewResult(status.err)
 		}
-		return NewResult(response.Canned.SuccessMessageQueued, " ", status.queuedID)
+		return NewResult(response.Canned.SuccessMessageQueued, response.SP, status.queuedID)
 	case <-time.After(gw.saveTimeout()):
 		Log().Error("Backend has timed out while saving email")
 		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it

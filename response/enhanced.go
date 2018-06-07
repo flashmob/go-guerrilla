@@ -22,6 +22,9 @@ const (
 	ClassPermanentFailure = 5
 )
 
+// space char
+const SP = " "
+
 // class is a type for ClassSuccess, ClassTransientFailure and ClassPermanentFailure constants
 type class int
 
@@ -331,7 +334,7 @@ func init() {
 		EnhancedCode: OtherStatus,
 		BasicCode:    250,
 		Class:        ClassSuccess,
-		Comment:      "OK : queued as",
+		Comment:      "OK: queued as",
 	}
 
 	Canned.FailBackendTimeout = &Response{
