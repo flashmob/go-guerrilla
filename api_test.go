@@ -6,6 +6,7 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/response"
 	"io/ioutil"
 	"net"
 	"os"
@@ -349,7 +350,7 @@ var funkyLogger = func() backends.Decorator {
 		return backends.ProcessWith(
 			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 				if task == backends.TaskValidateRcpt {
-					// validate the last recipient appended to e.Rcpt
+					// log the last recipient appended to e.Rcpt
 					backends.Log().Infof(
 						"another funky recipient [%s]",
 						e.RcptTo[len(e.RcptTo)-1])
@@ -553,6 +554,90 @@ func TestSkipAllowsHost(t *testing.T) {
 	str, _ := in.ReadString('\n')
 	if strings.Index(str, "250") != 0 {
 		t.Error("expected 250 reply, got:", str)
+	}
+
+}
+
+var customBackend2 = func() backends.Decorator {
+
+	backends.Svc.AddInitializer(
+		backends.InitializeWith(
+			func(backendConfig backends.BackendConfig) error {
+				backends.Log().Info("Funky logger is up & down to funk!")
+				return nil
+			}),
+	)
+
+	backends.Svc.AddShutdowner(
+		backends.ShutdownWith(
+			func() error {
+				backends.Log().Info("The funk has been stopped!")
+				return nil
+			}),
+	)
+
+	return func(p backends.Processor) backends.Processor {
+		return backends.ProcessWith(
+			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
+				if task == backends.TaskValidateRcpt {
+					// log the last recipient appended to e.Rcpt
+					backends.Log().Infof(
+						"another funky recipient [%s]",
+						e.RcptTo[len(e.RcptTo)-1])
+					// if valid then forward call to the next processor in the chain
+					//return p.Process(e, task)
+					// if invalid, return a backend result
+					//return backends.NewResult(response.Canned.FailRcptCmd), nil
+				} else if task == backends.TaskSaveMail {
+					backends.Log().Info("Another funky email!")
+					return backends.NewResult(response.Canned.FailReadErrorDataCmd), nil
+				}
+				return p.Process(e, task)
+			})
+	}
+}
+
+// How about a custom processor?
+func TestSetAddProcessor2(t *testing.T) {
+	os.Truncate("tests/testlog", 0)
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":     "HeadersParser|Debugger|Funky",
+			"validate_process": "Funky",
+		},
+	}
+	d := Daemon{Config: cfg}
+	d.AddProcessor("Funky", customBackend2)
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+	// lets have a talk with the server
+	talkToServer("127.0.0.1:2525")
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets check for fingerprints
+	if strings.Index(string(b), "another funky recipient") < 0 {
+		t.Error("did not log: another funky recipient")
+	}
+
+	if strings.Index(string(b), "Another funky email!") < 0 {
+		t.Error("Did not log: Another funky email!")
+	}
+
+	if strings.Index(string(b), "Funky logger is up & down to funk") < 0 {
+		t.Error("Did not log: Funky logger is up & down to funk")
+	}
+	if strings.Index(string(b), "The funk has been stopped!") < 0 {
+		t.Error("Did not log:The funk has been stopped!")
 	}
 
 }
