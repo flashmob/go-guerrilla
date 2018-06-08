@@ -577,18 +577,18 @@ var customBackend2 = func() backends.Decorator {
 }
 
 // Test a custom backend response
-func TestSetAddProcessor2(t *testing.T) {
+func TestCustomBackendResult(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	cfg := &AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"save_process":     "HeadersParser|Debugger|Funky",
-			"validate_process": "Funky",
+			"save_process":     "HeadersParser|Debugger|Custom",
+			"validate_process": "Custom",
 		},
 	}
 	d := Daemon{Config: cfg}
-	d.AddProcessor("Funky", customBackend2)
+	d.AddProcessor("Custom", customBackend2)
 
 	if err := d.Start(); err != nil {
 		t.Error(err)
