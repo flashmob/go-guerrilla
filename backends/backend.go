@@ -55,6 +55,7 @@ type BaseConfig interface{}
 type notifyMsg struct {
 	err      error
 	queuedID string
+	result   Result
 }
 
 // Result represents a response to an SMTP client after receiving DATA.
