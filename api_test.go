@@ -2,6 +2,7 @@ package guerrilla
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -560,44 +561,22 @@ func TestSkipAllowsHost(t *testing.T) {
 
 var customBackend2 = func() backends.Decorator {
 
-	backends.Svc.AddInitializer(
-		backends.InitializeWith(
-			func(backendConfig backends.BackendConfig) error {
-				backends.Log().Info("Funky logger is up & down to funk!")
-				return nil
-			}),
-	)
-
-	backends.Svc.AddShutdowner(
-		backends.ShutdownWith(
-			func() error {
-				backends.Log().Info("The funk has been stopped!")
-				return nil
-			}),
-	)
-
 	return func(p backends.Processor) backends.Processor {
 		return backends.ProcessWith(
 			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 				if task == backends.TaskValidateRcpt {
-					// log the last recipient appended to e.Rcpt
-					backends.Log().Infof(
-						"another funky recipient [%s]",
-						e.RcptTo[len(e.RcptTo)-1])
-					// if valid then forward call to the next processor in the chain
-					//return p.Process(e, task)
-					// if invalid, return a backend result
-					//return backends.NewResult(response.Canned.FailRcptCmd), nil
+					return p.Process(e, task)
 				} else if task == backends.TaskSaveMail {
 					backends.Log().Info("Another funky email!")
-					return backends.NewResult(response.Canned.FailReadErrorDataCmd), nil
+					err := errors.New("system shock")
+					return backends.NewResult(response.Canned.FailReadErrorDataCmd, response.SP, err), err
 				}
 				return p.Process(e, task)
 			})
 	}
 }
 
-// How about a custom processor?
+// Test a custom backend response
 func TestSetAddProcessor2(t *testing.T) {
 	os.Truncate("tests/testlog", 0)
 	cfg := &AppConfig{
@@ -625,19 +604,12 @@ func TestSetAddProcessor2(t *testing.T) {
 		return
 	}
 	// lets check for fingerprints
-	if strings.Index(string(b), "another funky recipient") < 0 {
-		t.Error("did not log: another funky recipient")
+	if strings.Index(string(b), "451 4.3.0 Error") < 0 {
+		t.Error("did not log: 451 4.3.0 Error")
 	}
 
-	if strings.Index(string(b), "Another funky email!") < 0 {
-		t.Error("Did not log: Another funky email!")
-	}
-
-	if strings.Index(string(b), "Funky logger is up & down to funk") < 0 {
-		t.Error("Did not log: Funky logger is up & down to funk")
-	}
-	if strings.Index(string(b), "The funk has been stopped!") < 0 {
-		t.Error("Did not log:The funk has been stopped!")
+	if strings.Index(string(b), "system shock") < 0 {
+		t.Error("did not log: system shock")
 	}
 
 }
