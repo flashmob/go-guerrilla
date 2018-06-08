@@ -15,7 +15,7 @@ func extractEmail(str string) (mail.Address, error) {
 	email := mail.Address{}
 	var err error
 	if len(str) > RFC2821LimitPath {
-		return email, errors.New(response.Canned.FailPathTooLong)
+		return email, errors.New(response.Canned.FailPathTooLong.String())
 	}
 	if matched := extractEmailRegex.FindStringSubmatch(str); len(matched) > 2 {
 		email.User = matched[1]
@@ -26,11 +26,11 @@ func extractEmail(str string) (mail.Address, error) {
 	}
 	err = nil
 	if email.User == "" || email.Host == "" {
-		err = errors.New(response.Canned.FailInvalidAddress)
+		err = errors.New(response.Canned.FailInvalidAddress.String())
 	} else if len(email.User) > RFC2832LimitLocalPart {
-		err = errors.New(response.Canned.FailLocalPartTooLong)
+		err = errors.New(response.Canned.FailLocalPartTooLong.String())
 	} else if len(email.Host) > RFC2821LimitDomain {
-		err = errors.New(response.Canned.FailDomainTooLong)
+		err = errors.New(response.Canned.FailDomainTooLong.String())
 	}
 	return email, err
 }

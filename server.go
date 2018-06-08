@@ -430,7 +430,7 @@ func (server *server) handleClient(client *client) {
 
 			case strings.Index(cmd, "HELP") == 0:
 				quote := response.GetQuote()
-				client.sendResponse("214-OK\r\n" + quote)
+				client.sendResponse("214-OK\r\n", quote)
 
 			case sc.XClientOn && strings.Index(cmd, "XCLIENT ") == 0:
 				if toks := strings.Split(input[8:], " "); len(toks) > 0 {
@@ -482,13 +482,13 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(err.Error())
 				} else {
 					if !server.allowsHost(to.Host) {
-						client.sendResponse(response.Canned.ErrorRelayDenied, to.Host)
+						client.sendResponse(response.Canned.ErrorRelayDenied, " ", to.Host)
 					} else {
 						client.PushRcpt(to)
 						rcptError := server.backend().ValidateRcpt(client.Envelope)
 						if rcptError != nil {
 							client.PopRcpt()
-							client.sendResponse(response.Canned.FailRcptCmd + " " + rcptError.Error())
+							client.sendResponse(response.Canned.FailRcptCmd, " ", rcptError.Error())
 						} else {
 							client.sendResponse(response.Canned.SuccessRcptCmd)
 						}
@@ -543,13 +543,13 @@ func (server *server) handleClient(client *client) {
 			}
 			if err != nil {
 				if err == LineLimitExceeded {
-					client.sendResponse(response.Canned.FailReadLimitExceededDataCmd, LineLimitExceeded.Error())
+					client.sendResponse(response.Canned.FailReadLimitExceededDataCmd, " ", LineLimitExceeded.Error())
 					client.kill()
 				} else if err == MessageSizeExceeded {
-					client.sendResponse(response.Canned.FailMessageSizeExceeded, MessageSizeExceeded.Error())
+					client.sendResponse(response.Canned.FailMessageSizeExceeded, " ", MessageSizeExceeded.Error())
 					client.kill()
 				} else {
-					client.sendResponse(response.Canned.FailReadErrorDataCmd, err.Error())
+					client.sendResponse(response.Canned.FailReadErrorDataCmd, " ", err.Error())
 					client.kill()
 				}
 				server.log().WithError(err).Warn("Error reading data")
@@ -561,7 +561,7 @@ func (server *server) handleClient(client *client) {
 			if res.Code() < 300 {
 				client.messagesSent++
 			}
-			client.sendResponse(res.String())
+			client.sendResponse(res)
 			client.state = ClientCmd
 			if server.isShuttingDown() {
 				client.state = ClientShutdown
@@ -589,13 +589,18 @@ func (server *server) handleClient(client *client) {
 			client.kill()
 		}
 
+		if client.bufErr != nil {
+			server.log().WithError(client.bufErr).Debug("client could not buffer a response")
+			return
+		}
+		// flush the response buffer
 		if client.bufout.Buffered() > 0 {
 			if server.log().IsDebug() {
 				server.log().Debugf("Writing response to client: \n%s", client.response.String())
 			}
 			err := server.flushResponse(client)
 			if err != nil {
-				server.log().WithError(err).Debug("Error writing response")
+				server.log().WithError(err).Debug("error writing response")
 				return
 			}
 		}

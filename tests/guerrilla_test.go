@@ -1011,7 +1011,7 @@ func TestDataMaxLength(t *testing.T) {
 			//expected := "500 Line too long"
 			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
 		}
@@ -1105,7 +1105,7 @@ func TestDataCommand(t *testing.T) {
 				bufin,
 				email+"\r\n.\r\n")
 			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK : queued as "
+			expected := "250 2.0.0 OK: queued as "
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}

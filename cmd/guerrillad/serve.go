@@ -136,7 +136,7 @@ func readConfig(path string, pidFile string) (*guerrilla.AppConfig, error) {
 	// command line flags can override config values
 	appConfig, err := d.LoadConfig(path)
 	if err != nil {
-		return &appConfig, fmt.Errorf("Could not read config file: %s", err.Error())
+		return &appConfig, fmt.Errorf("could not read config file: %s", err.Error())
 	}
 	// override config pidFile with with flag from the command line
 	if len(pidFile) > 0 {
