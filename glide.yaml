@@ -1,7 +1,7 @@
 package: github.com/flashmob/go-guerrilla
 import:
 - package: github.com/sirupsen/logrus
-  version: ~1.0.4
+  version: ~1.0.5
 - package: github.com/gomodule/redigo
   version: ~1.0.0
   subpackages:
