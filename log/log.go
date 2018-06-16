@@ -51,7 +51,8 @@ func (level Level) String() string {
 	return "unknown"
 }
 
-type Logger interface {
+// LogrusLogger is our 'extended' logrus
+type LogrusLogger interface {
 	log.FieldLogger
 	WithConn(conn net.Conn) *log.Entry
 	Reopen() error
@@ -62,7 +63,7 @@ type Logger interface {
 	AddHook(h log.Hook)
 }
 
-// Implements the Logger interface
+// Implements the LogrusLogger interface
 // It's a logrus logger wrapper that contains an instance of our LoggerHook
 type HookedLogger struct {
 
@@ -90,6 +91,38 @@ var loggers struct {
 	sync.Mutex
 }
 
+type LoggerMaker func(dest string, level string) (Logger, error)
+
+var MakeLogger LoggerMaker
+
+func init() {
+	MakeLogger = func(dest string, level string) (Logger, error) {
+		o := parseOutputOption(dest)
+		logrus, err := newLogrus(o, level)
+		if err != nil {
+			return nil, err
+		}
+		l := &HookedLogger{dest: dest}
+		l.Logger = logrus
+
+		if o != OutputFile {
+			return &LogrusLoggerAdapter{l}, nil
+		}
+		// we'll use the hook to output instead
+		logrus.Out = ioutil.Discard
+		// setup the hook
+		if h, err := NewLogrusHook(dest); err != nil {
+			// revert back to stderr
+			logrus.Out = os.Stderr
+			return &LogrusLoggerAdapter{l}, err
+		} else {
+			logrus.Hooks.Add(h)
+			l.h = h
+		}
+		return &LogrusLoggerAdapter{l}, nil
+	}
+}
+
 // GetLogger returns a struct that implements Logger (i.e HookedLogger) with a custom hook.
 // It may be new or already created, (ie. singleton factory pattern)
 // The hook has been initialized with dest
@@ -113,34 +146,13 @@ func GetLogger(dest string, level string) (Logger, error) {
 			return l, nil
 		}
 	}
-	o := parseOutputOption(dest)
-	logrus, err := newLogrus(o, level)
+	l, err := MakeLogger(dest, level)
 	if err != nil {
-		return nil, err
+		return l, err
 	}
-	l := &HookedLogger{dest: dest}
-	l.Logger = logrus
-
 	// cache it
 	loggers.cache[key] = l
-
-	if o != OutputFile {
-		return l, nil
-	}
-	// we'll use the hook to output instead
-	logrus.Out = ioutil.Discard
-	// setup the hook
-	if h, err := NewLogrusHook(dest); err != nil {
-		// revert back to stderr
-		logrus.Out = os.Stderr
-		return l, err
-	} else {
-		logrus.Hooks.Add(h)
-		l.h = h
-	}
-
 	return l, nil
-
 }
 
 func newLogrus(o OutputOption, level string) (*log.Logger, error) {
@@ -212,8 +224,7 @@ func (l *HookedLogger) GetLogDest() string {
 
 // WithConn extends logrus to be able to log with a net.Conn
 func (l *HookedLogger) WithConn(conn net.Conn) *log.Entry {
-	var addr string = "unknown"
-
+	var addr = "unknown"
 	if conn != nil {
 		addr = conn.RemoteAddr().String()
 	}
