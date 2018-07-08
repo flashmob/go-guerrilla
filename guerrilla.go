@@ -86,10 +86,8 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	g.setMainlog(l)
 
 	if ac.LogLevel != "" {
-		if h, ok := l.(*log.HookedLogger); ok {
-			if h, err := log.GetLogger(h.GetLogDest(), ac.LogLevel); err == nil {
-				g.setMainlog(h)
-			}
+		if h, err := log.GetLogger(l.GetLogDest(), ac.LogLevel); err == nil {
+			g.setMainlog(h)
 		}
 	}
 
