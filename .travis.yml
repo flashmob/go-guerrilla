@@ -9,7 +9,9 @@ go:
 
 install:
   - export GO15VENDOREXPERIMENT=1
-  - godep ensure
+    # Add Godeps dependencies to GOPATH and PATH
+  - export GOPATH="${TRAVIS_BUILD_DIR}/Godeps/_workspace:$GOPATH"
+  - export PATH="${TRAVIS_BUILD_DIR}/Godeps/_workspace/bin:$PATH"
 
 script:
   - ./.travis.gofmt.sh
