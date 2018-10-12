@@ -14,6 +14,7 @@ install:
   - export PATH="${TRAVIS_BUILD_DIR}/Godeps/_workspace/bin:$PATH"
 
 script:
+  - ls ${TRAVIS_BUILD_DIR}/Godeps/_workspace/bin
   - ./.travis.gofmt.sh
   - make guerrillad
   - make test
