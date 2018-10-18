@@ -377,6 +377,7 @@ func (server *server) handleClient(client *client) {
 		advertiseTLS = ""
 	}
 
+	firstCmd := true
 	for client.isAlive() {
 		switch client.state {
 		case ClientGreeting:
@@ -413,6 +414,30 @@ func (server *server) handleClient(client *client) {
 			}
 			cmd := strings.ToUpper(input[:cmdLen])
 			switch {
+			case strings.Index(cmd, "PROXY ") == 0:
+				if firstCmd == false {
+					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommand, "PROXY must be the first command"))
+					break
+				}
+				proxyTokens := strings.Split(cmd, " ")
+				if len(proxyTokens) <= 1 {
+					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY arguments"))
+					break
+				}
+				proxyL4Proto := proxyTokens[1]
+				switch proxyL4Proto {
+				case "TCP4":
+					fallthrough
+				case "TCP6":
+					proxyL3Src := proxyTokens[2]
+					server.log().Debugf("Updating client IP from %s to %s", client.RemoteIP, proxyL3Src)
+					client.RemoteIP = proxyL3Src
+				case "UNKNOWN":
+				default:
+					client.sendResponse(fmt.Sprintf("%d%s Invalid PROXY protocol: %s", response.ClassPermanentFailure, response.InvalidCommandArguments, proxyL4Proto))
+				}
+				client.sendResponse("")
+
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
 				client.resetTransaction()
@@ -530,6 +555,7 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailUnrecognizedCmd)
 				}
 			}
+			firstCmd = false
 
 		case ClientData:
 

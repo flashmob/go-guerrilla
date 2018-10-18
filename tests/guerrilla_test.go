@@ -526,6 +526,78 @@ func TestRFC2821LimitDomain(t *testing.T) {
 	os.Truncate("./testlog", 0)
 }
 
+// Test support for Proxy Protocol
+func TestProxyProtocol(t *testing.T) {
+	if initErr != nil {
+		t.Error(initErr)
+		t.FailNow()
+	}
+	if startErrors := app.Start(); startErrors == nil {
+		conn, bufin, err := Connect(config.Servers[0], 20)
+		hostname := config.Servers[0].Hostname
+		if err != nil {
+			// handle error
+			t.Error(err.Error(), config.Servers[0].ListenInterface)
+			t.FailNow()
+		} else {
+			// Test PROXY header
+			response, err := Command(conn, bufin, "PROXY TCP4 1.1.1.1 2.2.2.2 12345 9876")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected := ""
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Reset
+			response, err = Command(conn, bufin, "RSET")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "250 2.1.0 OK"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Start a new transaction
+			response, err = Command(conn, bufin, "HELO localtester")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = fmt.Sprintf("250 %s Hello", hostname)
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+			// Send the PROXY header, but not as the first header
+			response, err = Command(conn, bufin, "PROXY TCP4 1.1.1.1 2.2.2.2 12345 9876")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "5.5.1 PROXY must be the first command"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+
+			// be kind, QUIT. And we are sure that bufin does not contain fragments from the EHLO command.
+			response, err = Command(conn, bufin, "QUIT")
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
+			expected = "221 2.0.0 Bye"
+			if strings.Index(response, expected) != 0 {
+				t.Error("Server did not respond with", expected, ", it said:"+response)
+			}
+		}
+		conn.Close()
+		app.Shutdown()
+	} else {
+		if startErrors := app.Start(); startErrors != nil {
+			t.Error(startErrors)
+			app.Shutdown()
+			t.FailNow()
+		}
+	}
+}
+
 // Test several different inputs to MAIL FROM command
 func TestMailFromCmd(t *testing.T) {
 	if initErr != nil {
