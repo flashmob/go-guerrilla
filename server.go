@@ -435,7 +435,8 @@ func (server *server) handleClient(client *client) {
 				case "UNKNOWN":
 				default:
 					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY protocol: %s", proxyL4Proto))
-					}
+				}
+				client.sendResponse("")
 
 			case strings.Index(cmd, "HELO") == 0:
 				client.Helo = strings.Trim(input[4:], " ")
@@ -554,6 +555,7 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailUnrecognizedCmd)
 				}
 			}
+			firstCmd = false
 
 		case ClientData:
 
