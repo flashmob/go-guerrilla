@@ -434,7 +434,7 @@ func (server *server) handleClient(client *client) {
 					client.RemoteIP = proxyL3Src
 				case "UNKNOWN":
 				default:
-					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY protocol: %s", proxyL4Proto))
+					client.sendResponse(fmt.Sprintf("%d%s Invalid PROXY protocol: %s", response.ClassPermanentFailure, response.InvalidCommandArguments, proxyL4Proto))
 				}
 				client.sendResponse("")
 
