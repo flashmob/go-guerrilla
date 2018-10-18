@@ -416,12 +416,12 @@ func (server *server) handleClient(client *client) {
 			switch {
 			case strings.Index(cmd, "PROXY ") == 0:
 				if firstCmd == false {
-					client.sendResponse("%d%s %s", response.ClassPermanentFailure, response.InvalidCommand, "PROXY must be the first command")
+					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommand, "PROXY must be the first command"))
 					break
 				}
 				proxyTokens := strings.Split(cmd, " ")
 				if len(proxyTokens) <= 1 {
-					client.sendResponse("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY arguments")
+					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY arguments"))
 					break
 				}
 				proxyL4Proto := proxyTokens[1]
@@ -434,7 +434,7 @@ func (server *server) handleClient(client *client) {
 					client.RemoteIP = proxyL3Src
 				case "UNKNOWN":
 				default:
-					client.sendResponse("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY protocol: %s", proxyL4Proto)
+					client.sendResponse(fmt.Sprintf("%d%s %s", response.ClassPermanentFailure, response.InvalidCommandArguments, "Invalid PROXY protocol: %s", proxyL4Proto))
 					}
 
 			case strings.Index(cmd, "HELO") == 0:
