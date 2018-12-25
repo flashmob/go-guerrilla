@@ -341,12 +341,12 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 
 			for i := 0; i < 101; i++ {
 				//fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
-				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
+				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<test%d@grr.la>", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break
 				}
 			}
-			response, err := Command(conn, bufin, "RCPT TO:last@grr.la")
+			response, err := Command(conn, bufin, "RCPT TO:<last@grr.la>")
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -390,7 +390,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 65)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 65)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -400,7 +400,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			}
 			// what about if it's exactly 64?
 			// repeat > 64 characters in local part
-			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 64)))
+			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 64)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -444,7 +444,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 256 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 257-7)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 257-7)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -454,7 +454,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 			}
 			// what about if it's exactly 256?
 			response, err = Command(conn, bufin,
-				fmt.Sprintf("RCPT TO:%s@%s.la", strings.Repeat("a", 64), strings.Repeat("b", 257-5-64)))
+				fmt.Sprintf("RCPT TO:<%s@%s.la>", strings.Repeat("a", 64), strings.Repeat("b", 186)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -494,7 +494,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:a@%s.l", strings.Repeat("a", 255-2)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<a@%s.l>", strings.Repeat("a", 255-2)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -504,7 +504,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			}
 			// what about if it's exactly 255?
 			response, err = Command(conn, bufin,
-				fmt.Sprintf("RCPT TO:a@%s.la", strings.Repeat("b", 255-4)))
+				fmt.Sprintf("RCPT TO:<a@%s.la>", strings.Repeat("b", 255-6)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -544,7 +544,7 @@ func TestMailFromCmd(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// Basic valid address
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -703,15 +703,17 @@ func TestMailFromCmd(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
-			// SMTPUTF8 not implemented for now, currently still accepted
-			response, err = Command(conn, bufin, "MAIL FROM:<anöthertest@grr.la>")
-			if err != nil {
-				t.Error("command failed", err.Error())
-			}
-			expected = "250 2.1.0 OK"
-			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not respond with", expected, ", it said:"+response)
-			}
+			/*
+				// todo SMTPUTF8 not implemented for now,
+				response, err = Command(conn, bufin, "MAIL FROM:<anöthertest@grr.la>")
+				if err != nil {
+					t.Error("command failed", err.Error())
+				}
+				expected = "250 2.1.0 OK"
+				if strings.Index(response, expected) != 0 {
+					t.Error("Server did not respond with", expected, ", it said:"+response)
+				}
+			*/
 
 			// Reset
 			response, err = Command(conn, bufin, "RSET")
@@ -868,11 +870,11 @@ func TestNestedMailCmd(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -884,7 +886,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -902,7 +904,7 @@ func TestNestedMailCmd(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -992,7 +994,7 @@ func TestDataMaxLength(t *testing.T) {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -1079,12 +1081,12 @@ func TestDataCommand(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}

@@ -455,21 +455,33 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
-				addr := input[10:]
-				if !(strings.Index(addr, "<>") == 0) &&
-					!(strings.Index(addr, " <>") == 0) {
-					// Not Bounce, extract mail.
-					if from, err := extractEmail(addr); err != nil {
-						client.sendResponse(err)
-						break
-					} else {
-						client.MailFrom = from
-					}
-
-				} else {
+				// to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
+				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
+				if err != nil {
+					client.sendResponse(err)
+					break
+				} else if client.parser.EmptyPath {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
 				}
+
+				/*
+					addr := input[10:]
+					if !(strings.Index(addr, "<>") == 0) &&
+						!(strings.Index(addr, " <>") == 0) {
+						// Not Bounce, extract mail.
+						if from, err := extractEmail(addr); err != nil {
+							client.sendResponse(err)
+							break
+						} else {
+							client.MailFrom = from
+						}
+
+					} else {
+						// bounce has empty from address
+						client.MailFrom = mail.Address{}
+					}
+				*/
 				client.sendResponse(response.Canned.SuccessMailCmd)
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
@@ -477,21 +489,21 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.ErrorTooManyRecipients)
 					break
 				}
-				to, err := extractEmail(input[8:])
+				to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
 				if err != nil {
 					client.sendResponse(err.Error())
+					break
+				}
+				if !server.allowsHost(to.Host) {
+					client.sendResponse(response.Canned.ErrorRelayDenied, " ", to.Host)
 				} else {
-					if !server.allowsHost(to.Host) {
-						client.sendResponse(response.Canned.ErrorRelayDenied, " ", to.Host)
+					client.PushRcpt(to)
+					rcptError := server.backend().ValidateRcpt(client.Envelope)
+					if rcptError != nil {
+						client.PopRcpt()
+						client.sendResponse(response.Canned.FailRcptCmd, " ", rcptError.Error())
 					} else {
-						client.PushRcpt(to)
-						rcptError := server.backend().ValidateRcpt(client.Envelope)
-						if rcptError != nil {
-							client.PopRcpt()
-							client.sendResponse(response.Canned.FailRcptCmd, " ", rcptError.Error())
-						} else {
-							client.sendResponse(response.Canned.SuccessRcptCmd)
-						}
+						client.sendResponse(response.Canned.SuccessRcptCmd)
 					}
 				}
 

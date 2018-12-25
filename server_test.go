@@ -337,7 +337,7 @@ func TestGatewayTimeout(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
+			fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
 			str, err = in.ReadString('\n')
 			fmt.Fprint(conn, "DATA\r\n")
 			str, err = in.ReadString('\n')
@@ -398,7 +398,7 @@ func TestGatewayPanic(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
+			fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
 			str, err = in.ReadString('\n')
 			fmt.Fprint(conn, "DATA\r\n")
 			str, err = in.ReadString('\n')

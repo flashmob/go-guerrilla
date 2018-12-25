@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
+	"github.com/flashmob/go-guerrilla/response"
 	"net"
 	"net/textproto"
 	"sync"
@@ -49,6 +52,7 @@ type client struct {
 	// guards access to conn
 	connGuard sync.Mutex
 	log       log.Logger
+	parser    rfc5321.Parser
 }
 
 // NewClient allocates a new client.
@@ -200,4 +204,34 @@ func getRemoteAddr(conn net.Conn) string {
 	} else {
 		return conn.RemoteAddr().Network()
 	}
+}
+
+type pathParser func([]byte) error
+
+func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
+	address := mail.Address{}
+	var err error
+	if len(in) > RFC2821LimitPath {
+		return address, errors.New(response.Canned.FailPathTooLong.String())
+	}
+	if err = p(in); err != nil {
+		return address, errors.New(response.Canned.FailInvalidAddress.String())
+	} else if c.parser.EmptyPath {
+		// bounce has empty from address
+		address = mail.Address{}
+	} else if len(c.parser.LocalPart) > RFC2832LimitLocalPart {
+		err = errors.New(response.Canned.FailLocalPartTooLong.String())
+	} else if len(c.parser.Domain) > RFC2821LimitDomain {
+		err = errors.New(response.Canned.FailDomainTooLong.String())
+	} else {
+		address = mail.Address{
+			User: c.parser.LocalPart,
+			Host: c.parser.Domain,
+		}
+	}
+	return address, err
+}
+
+func (s *server) rcptTo(in []byte) (address mail.Address, err error) {
+	return address, err
 }

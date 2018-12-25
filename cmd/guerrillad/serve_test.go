@@ -697,7 +697,7 @@ func TestDebug(t *testing.T) {
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
 			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
+				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
 					expect := "250 2.1.5 OK"
 					if strings.Index(result, expect) != 0 {
 						t.Error("Expected:", expect, "but got:", result)
@@ -744,7 +744,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
 			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
+				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
 					expect := "454 4.1.1 Error: Relay access denied: grr.la"
 					if strings.Index(result, expect) != 0 {
 						t.Error("Expected:", expect, "but got:", result)
@@ -777,7 +777,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
 			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:test@grr.la"); err == nil {
+				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
 					expect := "250 2.1.5 OK"
 					if strings.Index(result, expect) != 0 {
 						t.Error("Expected:", expect, "but got:", result)
