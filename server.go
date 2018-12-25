@@ -464,24 +464,6 @@ func (server *server) handleClient(client *client) {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
 				}
-
-				/*
-					addr := input[10:]
-					if !(strings.Index(addr, "<>") == 0) &&
-						!(strings.Index(addr, " <>") == 0) {
-						// Not Bounce, extract mail.
-						if from, err := extractEmail(addr); err != nil {
-							client.sendResponse(err)
-							break
-						} else {
-							client.MailFrom = from
-						}
-
-					} else {
-						// bounce has empty from address
-						client.MailFrom = mail.Address{}
-					}
-				*/
 				client.sendResponse(response.Canned.SuccessMailCmd)
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
