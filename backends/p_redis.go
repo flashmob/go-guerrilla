@@ -5,8 +5,6 @@ import (
 
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
-
-	"github.com/garyburd/redigo/redis"
 )
 
 // ----------------------------------------------------------------------------------
@@ -39,12 +37,12 @@ type RedisProcessorConfig struct {
 
 type RedisProcessor struct {
 	isConnected bool
-	conn        redis.Conn
+	conn        RedisConn
 }
 
 func (r *RedisProcessor) redisConnection(redisInterface string) (err error) {
 	if r.isConnected == false {
-		r.conn, err = redis.Dial("tcp", redisInterface)
+		r.conn, err = RedisDialer("tcp", redisInterface)
 		if err != nil {
 			// handle error
 			return err
@@ -113,7 +111,7 @@ func Redis() Decorator {
 					}
 					e.Values["redis"] = "redis" // the next processor will know to look in redis for the message data
 				} else {
-					Log().Error("Redis needs a Hash() process before it")
+					Log().Error("Redis needs a Hasher() process before it")
 					result := NewResult(response.Canned.FailBackendTransaction)
 					return result, StorageError
 				}
