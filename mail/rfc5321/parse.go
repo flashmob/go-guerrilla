@@ -9,14 +9,25 @@ import (
 	"strconv"
 )
 
+const (
+	// The maximum total length of a reverse-path or forward-path is 256
+	LimitPath = 256
+	// The maximum total length of a user name or other local-part is 64
+	LimitLocalPart = 64
+	// //The maximum total length of a domain name or number is 255
+	LimitDomain = 255
+	// The minimum total number of recipients that must be buffered is 100
+	LimitRecipients = 100
+)
+
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
-	EmptyPath bool
+	NullPath  bool
 	LocalPart string
 	Domain    string
 
 	ADL        []string
-	MailParams [][]string
+	PathParams [][]string
 
 	pos int
 	ch  byte
@@ -37,8 +48,8 @@ func (s *Parser) Reset() {
 	if s.pos != -1 {
 		s.pos = -1
 		s.ADL = nil
-		s.MailParams = nil
-		s.EmptyPath = false
+		s.PathParams = nil
+		s.NullPath = false
 		s.LocalPart = ""
 		s.Domain = ""
 		s.accept.Reset()
@@ -68,7 +79,7 @@ func (s *Parser) peek() byte {
 
 func (s *Parser) reversePath() (err error) {
 	if i := bytes.Index(s.buf, []byte{'<', '>'}); i == 0 {
-		s.EmptyPath = true
+		s.NullPath = true
 		return nil
 	}
 	if err = s.path(); err != nil {
@@ -98,7 +109,7 @@ func (s *Parser) MailFrom(input []byte) (err error) {
 		if tup, err := s.parameters(); err != nil {
 			return errors.New("param parse error")
 		} else if len(tup) > 0 {
-			s.MailParams = tup
+			s.PathParams = tup
 		}
 	}
 	return nil
@@ -124,7 +135,7 @@ func (s *Parser) RcptTo(input []byte) (err error) {
 		if tup, err := s.parameters(); err != nil {
 			return errors.New("param parse error")
 		} else if len(tup) > 0 {
-			s.MailParams = tup
+			s.PathParams = tup
 		}
 	}
 	return nil

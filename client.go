@@ -124,8 +124,7 @@ func (c *client) resetTransaction() {
 // A transaction starts after a MAIL command gets issued by the client.
 // Call resetTransaction to end the transaction
 func (c *client) isInTransaction() bool {
-	isMailFromEmpty := c.MailFrom == (mail.Address{})
-	if isMailFromEmpty {
+	if len(c.MailFrom.User) == 0 && !c.MailFrom.NullPath {
 		return false
 	}
 	return true
@@ -211,22 +210,25 @@ type pathParser func([]byte) error
 func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 	address := mail.Address{}
 	var err error
-	if len(in) > RFC2821LimitPath {
+	if len(in) > rfc5321.LimitPath {
 		return address, errors.New(response.Canned.FailPathTooLong.String())
 	}
 	if err = p(in); err != nil {
 		return address, errors.New(response.Canned.FailInvalidAddress.String())
-	} else if c.parser.EmptyPath {
+	} else if c.parser.NullPath {
 		// bounce has empty from address
 		address = mail.Address{}
-	} else if len(c.parser.LocalPart) > RFC2832LimitLocalPart {
+	} else if len(c.parser.LocalPart) > rfc5321.LimitLocalPart {
 		err = errors.New(response.Canned.FailLocalPartTooLong.String())
-	} else if len(c.parser.Domain) > RFC2821LimitDomain {
+	} else if len(c.parser.Domain) > rfc5321.LimitDomain {
 		err = errors.New(response.Canned.FailDomainTooLong.String())
 	} else {
 		address = mail.Address{
-			User: c.parser.LocalPart,
-			Host: c.parser.Domain,
+			User:       c.parser.LocalPart,
+			Host:       c.parser.Domain,
+			ADL:        c.parser.ADL,
+			PathParams: c.parser.PathParams,
+			NullPath:   c.parser.NullPath,
 		}
 	}
 	return address, err

@@ -488,25 +488,41 @@ func TestParseSubDomain(t *testing.T) {
 
 }
 func TestParse(t *testing.T) {
-	var err error
-	s := NewParser([]byte("<>"))
-	s.reversePath()
 
-	s = NewParser([]byte("<"))
-	err = s.reversePath()
+	s := NewParser([]byte("<"))
+	err := s.reversePath()
 	if err == nil {
-		t.Error("< expeted parse error")
+		t.Error("< expected parse error")
 	}
 
+	// the @ needs to be quoted
 	s = NewParser([]byte("<@m.conm@test.com>"))
-	s.reversePath()
+	err = s.reversePath()
+	if err == nil {
+		t.Error("expected parse error", err)
+	}
 
-	s = NewParser([]byte("<@m-m.conm@test.com>"))
-	s.reversePath()
+	s = NewParser([]byte("<\"@m.conm\"@test.com>"))
+	err = s.reversePath()
+	if err != nil {
+		t.Error("not expected parse error", err)
+	}
+
+	s = NewParser([]byte("<m-m.conm@test.com>"))
+	err = s.reversePath()
+	if err != nil {
+		t.Error("not expected parse error")
+	}
 
 	s = NewParser([]byte("<@test:user@test.com>"))
-	s.reversePath()
-
+	err = s.reversePath()
+	if err != nil {
+		t.Error("not expected parse error")
+	}
 	s = NewParser([]byte("<@test,@test2:user@test.com>"))
-	s.reversePath()
+	err = s.reversePath()
+	if err != nil {
+		t.Error("not expected parse error")
+	}
+
 }

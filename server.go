@@ -3,21 +3,22 @@ package guerrilla
 import (
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"io"
+	"io/ioutil"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"crypto/x509"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
-	"io/ioutil"
-	"path/filepath"
 )
 
 const (
@@ -25,14 +26,6 @@ const (
 	CommandLineMaxLength = 1024
 	// Number of allowed unrecognized commands before we terminate the connection
 	MaxUnrecognizedCommands = 5
-	// The maximum total length of a reverse-path or forward-path is 256
-	RFC2821LimitPath = 256
-	// The maximum total length of a user name or other local-part is 64
-	RFC2832LimitLocalPart = 64
-	//The maximum total length of a domain name or number is 255
-	RFC2821LimitDomain = 255
-	// The minimum total number of recipients that must be buffered is 100
-	RFC2821LimitRecipients = 100
 )
 
 const (
@@ -55,7 +48,7 @@ type server struct {
 	clientPool      *Pool
 	wg              sync.WaitGroup // for waiting to shutdown
 	listener        net.Listener
-	closedListener  chan (bool)
+	closedListener  chan bool
 	hosts           allowedHosts // stores map[string]bool for faster lookup
 	state           int
 	// If log changed after a config reload, newLogStore stores the value here until it's safe to change it
@@ -459,14 +452,14 @@ func (server *server) handleClient(client *client) {
 				if err != nil {
 					client.sendResponse(err)
 					break
-				} else if client.parser.EmptyPath {
+				} else if client.parser.NullPath {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
 				}
 				client.sendResponse(response.Canned.SuccessMailCmd)
 
 			case strings.Index(cmd, "RCPT TO:") == 0:
-				if len(client.RcptTo) > RFC2821LimitRecipients {
+				if len(client.RcptTo) > rfc5321.LimitRecipients {
 					client.sendResponse(response.Canned.ErrorTooManyRecipients)
 					break
 				}
