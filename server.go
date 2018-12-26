@@ -455,7 +455,6 @@ func (server *server) handleClient(client *client) {
 					client.sendResponse(response.Canned.FailNestedMailCmd)
 					break
 				}
-				// to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
 				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
 				if err != nil {
 					client.sendResponse(err)
