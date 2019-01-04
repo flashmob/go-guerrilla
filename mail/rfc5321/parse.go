@@ -3,7 +3,6 @@ package rfc5321
 // Parse RFC5321 productions, no regex
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"net"
@@ -30,78 +29,56 @@ type Parser struct {
 	ADL        []string
 	PathParams [][]string
 
-	// last byte read
-	ch byte
-	// last error read
-	err error
+	pos int
+	ch  byte
 
-	// used for accepting bytes
+	buf    []byte
 	accept bytes.Buffer
-
-	R *bufio.Reader
 }
 
-func NewParser(br *bufio.Reader) *Parser {
+func NewParser(buf []byte) *Parser {
 	s := new(Parser)
-	s.R = br
-	return s
-}
-
-func NewParserFromBytes(buf []byte) *Parser {
-	s := new(Parser)
-	s.R = bufio.NewReader(bytes.NewBuffer(buf))
+	s.buf = buf
+	s.pos = -1
 	return s
 }
 
 func (s *Parser) Reset() {
-	s.ADL = nil
-	s.PathParams = nil
-	s.NullPath = false
-	s.LocalPart = ""
-	s.Domain = ""
-	s.accept.Reset()
-	s.err = nil
+	s.buf = s.buf[:0]
+	if s.pos != -1 {
+		s.pos = -1
+		s.ADL = nil
+		s.PathParams = nil
+		s.NullPath = false
+		s.LocalPart = ""
+		s.Domain = ""
+		s.accept.Reset()
+	}
 }
 
 func (s *Parser) set(input []byte) {
 	s.Reset()
-	s.R = bufio.NewReader(bytes.NewBuffer(input))
+	s.buf = input
 }
 
 func (s *Parser) next() byte {
-	if s.err != nil {
-		return 0
-	}
-	if s.ch, s.err = s.R.ReadByte(); s.err == nil {
+	s.pos++
+	if s.pos < len(s.buf) {
+		s.ch = s.buf[s.pos]
 		return s.ch
 	}
 	return 0
 }
 
 func (s *Parser) peek() byte {
-	if s.err != nil {
-		return 0
-	}
-	var b []byte
-	if b, s.err = s.R.Peek(1); s.err == nil && len(b) > 0 {
-		return b[0]
+	if s.pos+1 < len(s.buf) {
+		return s.buf[s.pos+1]
 	}
 	return 0
 }
 
-// look is like peek, but can grab a slice
-func (s *Parser) look(n int) []byte {
-	var bs []byte
-	if s.err != nil {
-		return bs
-	}
-
-	bs, s.err = s.R.Peek(n)
-	return bs
-}
-
 func (s *Parser) reversePath() (err error) {
-	if i := bytes.Index(s.look(2), []byte{'<', '>'}); i == 0 {
+	if i := bytes.Index(s.buf, []byte{'<', '>'}); i == 0 {
 		s.NullPath = true
 		return nil
 	}
@@ -116,15 +93,6 @@ func (s *Parser) forwardPath() (err error) {
 		return err
 	}
 	return nil
-}
-
-// CheckReadErr checks if the parser encountered a read error
-// note that it may return an io.EOF - even though the command parsed correctly
-func (s *Parser) CheckReadErr() error {
-	if s.err != nil {
-		return nil
-	}
-	return s.err
 }
 
 //MailFrom accepts the following syntax: Reverse-path [SP Mail-parameters] CRLF
@@ -155,7 +123,7 @@ const postmasterLocalPart = "Postmaster"
 func (s *Parser) RcptTo(input []byte) (err error) {
 	s.set(input)
 	// case-insensitive match
-	if i := bytes.Index(bytes.ToLower(s.look(12)), []byte(postmasterPath)); i == 0 {
+	if i := bytes.Index(bytes.ToLower(s.buf[0:12]), []byte(postmasterPath)); i == 0 {
 		s.LocalPart = postmasterLocalPart
 		return nil
 	} else if err := s.forwardPath(); err != nil {
@@ -383,10 +351,11 @@ func (s *Parser) addressLiteral() error {
 		p := s.peek()
 		var err error
 		if p == 'I' || p == 'i' {
-			// advance 5 times: "IPv6:"
-			for i := 0; i < 5; i++ {
-				s.next()
-			}
+			s.next() // I
+			s.next() // P
+			s.next() // v
+			s.next() // 6
+			s.next() // :
 			err = s.ipv6AddressLiteral()
 		} else if p >= 48 && p <= 57 {
 			err = s.ipv4AddressLiteral()
