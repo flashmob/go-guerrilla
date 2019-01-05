@@ -1,7 +1,6 @@
 package rfc5321
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -68,7 +67,7 @@ func TestParseForwardPath(t *testing.T) {
 	s := NewParser([]byte("<@a,@b:user@[227.0.0.1>")) // missing ]
 	err := s.forwardPath()
 	if err == nil {
-		t.Error("error not expected ", err)
+		t.Error("error expected ", err)
 	}
 
 	s = NewParser([]byte("<@a,@b:user@[527.0.0.1>")) // ip out of range
@@ -81,7 +80,14 @@ func TestParseForwardPath(t *testing.T) {
 	s = NewParser([]byte("<ned@thor.innosoft.com> NOTIFY=FAILURE ORCPT=rfc822;Carol@Ivory.EDU"))
 	err = s.forwardPath()
 	if err != nil {
-		t.Error("error expected ", err)
+		t.Error("error not expected ", err)
+	}
+
+	// tolerate a space at the front
+	s = NewParser([]byte(" <ned@thor.innosoft.com>"))
+	err = s.forwardPath()
+	if err != nil {
+		t.Error("error not expected ", err)
 	}
 
 }
@@ -134,48 +140,62 @@ func TestParseReversePath(t *testing.T) {
 func TestParseIpv6Address(t *testing.T) {
 	s := NewParser([]byte("2001:0000:3238:DFE1:0063:0000:0000:FEFB"))
 	err := s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "2001:0000:3238:DFE1:0063:0000:0000:FEFB" {
+		t.Error("expected 2001:0000:3238:DFE1:0063:0000:0000:FEFB, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 	s = NewParser([]byte("2001:3238:DFE1:6323:FEFB:2536:1.2.3.2"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "2001:3238:DFE1:6323:FEFB:2536:1.2.3.2" {
+		t.Error("expected 2001:3238:DFE1:6323:FEFB:2536:1.2.3.2, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 
 	s = NewParser([]byte("2001:0000:3238:DFE1:63:0000:0000:FEFB"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "2001:0000:3238:DFE1:63:0000:0000:FEFB" {
+		t.Error("expected 2001:0000:3238:DFE1:63:0000:0000:FEFB, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 
 	s = NewParser([]byte("2001:0000:3238:DFE1:63::FEFB"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "2001:0000:3238:DFE1:63::FEFB" {
+		t.Error("expected 2001:0000:3238:DFE1:63::FEFB, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 
 	s = NewParser([]byte("2001:0:3238:DFE1:63::FEFB"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "2001:0:3238:DFE1:63::FEFB" {
+		t.Error("expected 2001:0:3238:DFE1:63::FEFB, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 
 	s = NewParser([]byte("g001:0:3238:DFE1:63::FEFB"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "" {
+		t.Error("expected \"\", got:", s.accept.String())
+	}
 	if err == nil {
 		t.Error("error expected ", err)
 	}
 
 	s = NewParser([]byte("g001:0:3238:DFE1::63::FEFB"))
 	err = s.ipv6AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "" {
+		t.Error("expected \"\", got:", s.accept.String())
+	}
 	if err == nil {
 		t.Error("error expected ", err)
 	}
@@ -184,14 +204,18 @@ func TestParseIpv6Address(t *testing.T) {
 func TestParseIpv4Address(t *testing.T) {
 	s := NewParser([]byte("0.0.0.255"))
 	err := s.ipv4AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "0.0.0.255" {
+		t.Error("expected 0.0.0.255, got:", s.accept.String())
+	}
 	if err != nil {
 		t.Error("error not expected ", err)
 	}
 
 	s = NewParser([]byte("0.0.0.256"))
 	err = s.ipv4AddressLiteral()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "0.0.0.256" {
+		t.Error("expected 0.0.0.256, got:", s.accept.String())
+	}
 	if err == nil {
 		t.Error("error expected ", err)
 	}
@@ -203,19 +227,17 @@ func TestParseMailBoxBad(t *testing.T) {
 	// must be quoted
 	s := NewParser([]byte("Abc\\@def@example.com"))
 	err := s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
+
 	if err == nil {
-		t.Error("error expected ")
+		t.Error("error expected")
 	}
 
 	// must be quoted
 	s = NewParser([]byte("Fred\\ Bloggs@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
+
 	if err == nil {
-		t.Error("error expected ")
+		t.Error("error expected")
 	}
 }
 
@@ -223,82 +245,63 @@ func TestParseMailbox(t *testing.T) {
 
 	s := NewParser([]byte("jsmith@[IPv6:2001:db8::1]"))
 	err := s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
+	if s.Domain != "2001:db8::1" {
+		t.Error("expected domain:2001:db8::1, got:", s.Domain)
+	}
 	if err != nil {
 		t.Error("error not expected ")
 	}
 
 	s = NewParser([]byte("\"qu\\{oted\"@test.com"))
 	err = s.mailbox()
-	fmt.Println(s.LocalPart)
-	fmt.Println(s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 
 	s = NewParser([]byte("\"qu\\{oted\"@[127.0.0.1]"))
 	err = s.mailbox()
-	fmt.Println(s.LocalPart)
-	fmt.Println(s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 
 	s = NewParser([]byte("jsmith@[IPv6:2001:db8::1]"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 
 	s = NewParser([]byte("Joe.\\Blow@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("\"Abc@def\"@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("\"Fred Bloggs\"@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("customer/department=shipping@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("$A12345@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("!def!xyz%abc@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("_somename@example.com"))
 	err = s.mailbox()
-	fmt.Println("lp:", s.LocalPart)
-	fmt.Println("d", s.Domain)
 	if err != nil {
 		t.Error("error not expected ")
 	}
@@ -308,25 +311,31 @@ func TestParseMailbox(t *testing.T) {
 func TestParseLocalPart(t *testing.T) {
 	s := NewParser([]byte("\"qu\\{oted\""))
 	err := s.localPart()
-	fmt.Println(s.LocalPart)
+	if s.LocalPart != "qu\\{oted" {
+		t.Error("expected qu\\{oted, got:", s.LocalPart)
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("dot.string"))
 	err = s.localPart()
-	fmt.Println(s.LocalPart)
+	if s.LocalPart != "dot.string" {
+		t.Error("expected dot.string, got:", s.LocalPart)
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("dot.st!ring"))
 	err = s.localPart()
-	fmt.Println(s.LocalPart)
+	if s.LocalPart != "dot.st!ring" {
+		t.Error("expected dot.st!ring, got:", s.LocalPart)
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 	s = NewParser([]byte("dot..st!ring")) // fail
 	err = s.localPart()
-	fmt.Println(s.LocalPart)
+
 	if err == nil {
 		t.Error("error expected ")
 	}
@@ -335,16 +344,20 @@ func TestParseLocalPart(t *testing.T) {
 func TestParseQuotedString(t *testing.T) {
 	s := NewParser([]byte("\"qu\\ oted\""))
 	err := s.quotedString()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "qu\\ oted" {
+		t.Error("Expected qu\\ oted, got:", s.accept.String())
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 
 	s = NewParser([]byte("\"@\""))
 	err = s.quotedString()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "@" {
+		t.Error("Expected @, got:", s.accept.String())
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 }
 
@@ -352,16 +365,17 @@ func TestParseDotString(t *testing.T) {
 
 	s := NewParser([]byte("Joe..\\\\Blow"))
 	err := s.dotString()
-	fmt.Println(s.accept.String())
 	if err == nil {
 		t.Error("error expected ")
 	}
 
 	s = NewParser([]byte("Joe.\\\\Blow"))
 	err = s.dotString()
-	fmt.Println(s.accept.String())
+	if s.accept.String() != "Joe.\\\\Blow" {
+		t.Error("Expected Joe.\\\\Blow, got:", s.accept.String())
+	}
 	if err != nil {
-		t.Error("error expected ")
+		t.Error("error not expected ")
 	}
 }
 
@@ -369,7 +383,7 @@ func TestParsePath(t *testing.T) {
 	s := NewParser([]byte("<foo>")) // requires @
 	err := s.path()
 	if err == nil {
-		t.Error("error not expected ")
+		t.Error("error expected ")
 	}
 	s = NewParser([]byte("<@example.com,@test.com:foo@example.com>"))
 	err = s.path()
@@ -432,14 +446,6 @@ func TestParseDomain(t *testing.T) {
 }
 
 func TestParseSubDomain(t *testing.T) {
-	/*
-		s := NewParser([]byte("mconm"))
-		err := s.subdomain()
-		if err != nil {
-			t.Error("error not expected ")
-		}
-
-	*/
 
 	s := NewParser([]byte("a"))
 	err := s.subdomain()

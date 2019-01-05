@@ -229,6 +229,9 @@ func (s *Parser) param() (result []string, err error) {
 
 // "<" [ A-d-l ":" ] Mailbox ">"
 func (s *Parser) path() (err error) {
+	if s.peek() == ' ' {
+		s.next() // tolerate a space at the front
+	}
 	if s.next() == '<' && s.peek() == '@' {
 		if err = s.adl(); err == nil {
 			s.next()
