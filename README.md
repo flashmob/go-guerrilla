@@ -1,6 +1,8 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
+Breaking change: The structure of the config has recently changed to accommodate more advanced TLS settings.
+
 Go-Guerrilla SMTP Daemon
 ====================
 
@@ -265,7 +267,7 @@ Using Nginx as a proxy
 ======================
 
 For such purposes as load balancing, terminating TLS early,
- or supporting SSL versions not supported by Go (highly not recommenced if you
+ or supporting SSL versions not supported by Go (highly not recommended if you
  want to use older SSL versions), 
  it is possible to [use NGINX as a proxy](https://github.com/flashmob/go-guerrilla/wiki/Using-Nginx-as-a-proxy).
 

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/garyburd/redigo/redis"
 )
 
 // ----------------------------------------------------------------------------------
@@ -85,7 +84,7 @@ func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
 
 type redisClient struct {
 	isConnected bool
-	conn        redis.Conn
+	conn        RedisConn
 	time        int
 }
 
@@ -319,7 +318,7 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 		// do we have access?
 		_, err = db.Query("SELECT mail_id FROM " + g.config.Table + " LIMIT 1")
 		if err != nil {
-			Log().Error("cannot select table", err)
+			Log().Error("cannot select table:", err)
 			return nil, err
 		}
 		return db, nil
@@ -328,7 +327,7 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
 	if c.isConnected == false {
-		c.conn, err = redis.Dial("tcp", redisInterface)
+		c.conn, err = RedisDialer("tcp", redisInterface)
 		if err != nil {
 			// handle error
 			return err
@@ -420,6 +419,7 @@ func GuerrillaDbRedis() Decorator {
 					e.MailFrom.String(),
 					e.Subject,
 					ts)
+				e.QueuedId = hash
 				// Add extra headers
 				var addHead string
 				addHead += "Delivered-To: " + to + "\r\n"

@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
@@ -54,6 +55,7 @@ type BaseConfig interface{}
 type notifyMsg struct {
 	err      error
 	queuedID string
+	result   Result
 }
 
 // Result represents a response to an SMTP client after receiving DATA.
@@ -66,16 +68,18 @@ type Result interface {
 }
 
 // Internal implementation of BackendResult for use by backend implementations.
-type result string
+type result struct {
+	bytes.Buffer
+}
 
-func (br result) String() string {
-	return string(br)
+func (r *result) String() string {
+	return r.Buffer.String()
 }
 
 // Parses the SMTP code from the first 3 characters of the SMTP message.
 // Returns 554 if code cannot be parsed.
-func (br result) Code() int {
-	trimmed := strings.TrimSpace(string(br))
+func (r *result) Code() int {
+	trimmed := strings.TrimSpace(r.String())
 	if len(trimmed) < 3 {
 		return 554
 	}
@@ -86,8 +90,19 @@ func (br result) Code() int {
 	return code
 }
 
-func NewResult(message string) Result {
-	return result(message)
+func NewResult(r ...interface{}) Result {
+	buf := new(result)
+	for _, item := range r {
+		switch v := item.(type) {
+		case error:
+			buf.WriteString(v.Error())
+		case fmt.Stringer:
+			buf.WriteString(v.String())
+		case string:
+			buf.WriteString(v)
+		}
+	}
+	return buf
 }
 
 type processorInitializer interface {

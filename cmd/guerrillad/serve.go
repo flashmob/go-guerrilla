@@ -12,8 +12,14 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/log"
+
+	// enable the Redis redigo driver
+	_ "github.com/flashmob/go-guerrilla/backends/storage/redigo"
+
+	// Choose iconv or mail/encoding package which uses golang.org/x/net/html/charset
 	//_ "github.com/flashmob/go-guerrilla/mail/iconv"
 	_ "github.com/flashmob/go-guerrilla/mail/encoding"
+
 	"github.com/spf13/cobra"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -136,7 +142,7 @@ func readConfig(path string, pidFile string) (*guerrilla.AppConfig, error) {
 	// command line flags can override config values
 	appConfig, err := d.LoadConfig(path)
 	if err != nil {
-		return &appConfig, fmt.Errorf("Could not read config file: %s", err.Error())
+		return &appConfig, fmt.Errorf("could not read config file: %s", err.Error())
 	}
 	// override config pidFile with with flag from the command line
 	if len(pidFile) > 0 {

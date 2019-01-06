@@ -31,8 +31,16 @@ const maxHeaderChunk = 1 + (3 << 10) // 3KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
+	// User is local part
 	User string
+	// Host is the domain
 	Host string
+	// ADL is at-domain list if matched
+	ADL []string
+	// PathParams contains any ESTMP parameters that were matched
+	PathParams [][]string
+	// NullPath is true if <> was received
+	NullPath bool
 }
 
 func (ep *Address) String() string {

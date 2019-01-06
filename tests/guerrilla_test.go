@@ -16,6 +16,7 @@ package test
 
 import (
 	"encoding/json"
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"testing"
 
 	"time"
@@ -40,7 +41,6 @@ import (
 
 type TestConfig struct {
 	guerrilla.AppConfig
-	BackendName   string                 `json:"backend_name"`
 	BackendConfig map[string]interface{} `json:"backend_config"`
 }
 
@@ -86,28 +86,32 @@ var configJson = `
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
             "timeout":160,
-            "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":true,
-            "tls_always_on":false,
+            "listen_interface":"127.0.0.1:2526", 
             "max_clients": 2,
-            "log_file" : ""
+            "log_file" : "",
+			"tls" : {
+				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"start_tls_on":true,
+            	"tls_always_on":false
+			}
         },
 
         {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size":1000001,
-            "private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            "public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
-            "start_tls_on":false,
-            "tls_always_on":true,
             "max_clients":1,
-            "log_file" : ""
+            "log_file" : "",
+			"tls" : {
+				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
+            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"start_tls_on":false,
+            	"tls_always_on":true
+			}
         }
     ]
 }
@@ -125,8 +129,8 @@ func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Ba
 func setupCerts(c *TestConfig) {
 	for i := range c.Servers {
 		testcert.GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
-		c.Servers[i].PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
-		c.Servers[i].PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
+		c.Servers[i].TLS.PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
+		c.Servers[i].TLS.PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
 	}
 }
 
@@ -338,12 +342,12 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 
 			for i := 0; i < 101; i++ {
 				//fmt.Println(fmt.Sprintf("RCPT TO:test%d@grr.la", i))
-				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:test%d@grr.la", i)); err != nil {
+				if _, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<test%d@grr.la>", i)); err != nil {
 					t.Error("RCPT TO", err.Error())
 					break
 				}
 			}
-			response, err := Command(conn, bufin, "RCPT TO:last@grr.la")
+			response, err := Command(conn, bufin, "RCPT TO:<last@grr.la>")
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -387,7 +391,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 65)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", rfc5321.LimitLocalPart+1)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -397,7 +401,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			}
 			// what about if it's exactly 64?
 			// repeat > 64 characters in local part
-			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 64)))
+			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", rfc5321.LimitLocalPart-1)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -441,7 +445,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 256 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:%s@grr.la", strings.Repeat("a", 257-7)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 257-7)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -451,7 +455,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 			}
 			// what about if it's exactly 256?
 			response, err = Command(conn, bufin,
-				fmt.Sprintf("RCPT TO:%s@%s.la", strings.Repeat("a", 64), strings.Repeat("b", 257-5-64)))
+				fmt.Sprintf("RCPT TO:<%s@%s.la>", strings.Repeat("a", 64), strings.Repeat("b", 186)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -491,7 +495,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:a@%s.l", strings.Repeat("a", 255-2)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<a@%s.l>", strings.Repeat("a", 255-2)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -501,7 +505,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			}
 			// what about if it's exactly 255?
 			response, err = Command(conn, bufin,
-				fmt.Sprintf("RCPT TO:a@%s.la", strings.Repeat("b", 255-4)))
+				fmt.Sprintf("RCPT TO:<a@%s.la>", strings.Repeat("b", 255-6)))
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -541,7 +545,7 @@ func TestMailFromCmd(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// Basic valid address
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -700,15 +704,17 @@ func TestMailFromCmd(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
-			// SMTPUTF8 not implemented for now, currently still accepted
-			response, err = Command(conn, bufin, "MAIL FROM:<anöthertest@grr.la>")
-			if err != nil {
-				t.Error("command failed", err.Error())
-			}
-			expected = "250 2.1.0 OK"
-			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not respond with", expected, ", it said:"+response)
-			}
+			/*
+				// todo SMTPUTF8 not implemented for now,
+				response, err = Command(conn, bufin, "MAIL FROM:<anöthertest@grr.la>")
+				if err != nil {
+					t.Error("command failed", err.Error())
+				}
+				expected = "250 2.1.0 OK"
+				if strings.Index(response, expected) != 0 {
+					t.Error("Server did not respond with", expected, ", it said:"+response)
+				}
+			*/
 
 			// Reset
 			response, err = Command(conn, bufin, "RSET")
@@ -865,11 +871,11 @@ func TestNestedMailCmd(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -881,7 +887,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
 				t.Error("Hello command failed", err.Error())
 			}
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -899,7 +905,7 @@ func TestNestedMailCmd(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
-			response, err = Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -989,7 +995,7 @@ func TestDataMaxLength(t *testing.T) {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -1008,7 +1014,7 @@ func TestDataMaxLength(t *testing.T) {
 			//expected := "500 Line too long"
 			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not respond with", expected, ", it said:"+response, err)
+				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
 		}
@@ -1076,12 +1082,12 @@ func TestDataCommand(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 
-			response, err := Command(conn, bufin, "MAIL FROM:test@grr.la")
+			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 			//fmt.Println(response)
-			response, err = Command(conn, bufin, "RCPT TO:test@grr.la")
+			response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
@@ -1102,7 +1108,7 @@ func TestDataCommand(t *testing.T) {
 				bufin,
 				email+"\r\n.\r\n")
 			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK : queued as "
+			expected := "250 2.0.0 OK: queued as "
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response, err)
 			}

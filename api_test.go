@@ -2,10 +2,12 @@ package guerrilla
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/response"
 	"io/ioutil"
 	"net"
 	"os"
@@ -133,13 +135,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+				"private_key_file":"config_test.go",
+            	"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -161,13 +165,15 @@ func TestSMTPLoadFile(t *testing.T) {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
             "max_size": 100017,
-            "private_key_file":"config_test.go",
-            "public_key_file":"config_test.go",
             "timeout":160,
             "listen_interface":"127.0.0.1:2526",
-            "start_tls_on":false,
-            "tls_always_on":false,
-            "max_clients": 2
+            "max_clients": 2,
+			"tls" : {
+ 				"private_key_file":"config_test.go",
+				"public_key_file":"config_test.go",
+				"start_tls_on":false,
+            	"tls_always_on":false
+			}
         }
     ]
 }
@@ -310,9 +316,9 @@ func TestSetConfigError(t *testing.T) {
 
 	// lets add a new server with bad TLS
 	sc.ListenInterface = "127.0.0.1:2527"
-	sc.StartTLSOn = true
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
-	sc.PublicKeyFile = "tests/testlog" // totally wrong :->
+	sc.TLS.StartTLSOn = true
+	sc.TLS.PublicKeyFile = "tests/testlog"  // totally wrong :->
+	sc.TLS.PrivateKeyFile = "tests/testlog" // totally wrong :->
 
 	cfg.Servers = append(cfg.Servers, sc)
 
@@ -345,7 +351,7 @@ var funkyLogger = func() backends.Decorator {
 		return backends.ProcessWith(
 			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 				if task == backends.TaskValidateRcpt {
-					// validate the last recipient appended to e.Rcpt
+					// log the last recipient appended to e.Rcpt
 					backends.Log().Infof(
 						"another funky recipient [%s]",
 						e.RcptTo[len(e.RcptTo)-1])
@@ -417,7 +423,7 @@ func talkToServer(address string) {
 	str, err = in.ReadString('\n')
 	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
+	fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
 	str, err = in.ReadString('\n')
 	fmt.Fprint(conn, "DATA\r\n")
 	str, err = in.ReadString('\n')
@@ -543,12 +549,67 @@ func TestSkipAllowsHost(t *testing.T) {
 	}
 	in := bufio.NewReader(conn)
 	fmt.Fprint(conn, "HELO test\r\n")
-	fmt.Fprint(conn, "RCPT TO: test@funkyhost.com\r\n")
+	fmt.Fprint(conn, "RCPT TO:<test@funkyhost.com>\r\n")
 	in.ReadString('\n')
 	in.ReadString('\n')
 	str, _ := in.ReadString('\n')
 	if strings.Index(str, "250") != 0 {
 		t.Error("expected 250 reply, got:", str)
+	}
+
+}
+
+var customBackend2 = func() backends.Decorator {
+
+	return func(p backends.Processor) backends.Processor {
+		return backends.ProcessWith(
+			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
+				if task == backends.TaskValidateRcpt {
+					return p.Process(e, task)
+				} else if task == backends.TaskSaveMail {
+					backends.Log().Info("Another funky email!")
+					err := errors.New("system shock")
+					return backends.NewResult(response.Canned.FailReadErrorDataCmd, response.SP, err), err
+				}
+				return p.Process(e, task)
+			})
+	}
+}
+
+// Test a custom backend response
+func TestCustomBackendResult(t *testing.T) {
+	os.Truncate("tests/testlog", 0)
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":     "HeadersParser|Debugger|Custom",
+			"validate_process": "Custom",
+		},
+	}
+	d := Daemon{Config: cfg}
+	d.AddProcessor("Custom", customBackend2)
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+	// lets have a talk with the server
+	talkToServer("127.0.0.1:2525")
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets check for fingerprints
+	if strings.Index(string(b), "451 4.3.0 Error") < 0 {
+		t.Error("did not log: 451 4.3.0 Error")
+	}
+
+	if strings.Index(string(b), "system shock") < 0 {
+		t.Error("did not log: system shock")
 	}
 
 }

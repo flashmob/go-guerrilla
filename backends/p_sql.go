@@ -181,7 +181,6 @@ func SQL() Decorator {
 
 				hash := ""
 				if len(e.Hashes) > 0 {
-					// if saved in redis, hash will be the redis key
 					hash = e.Hashes[0]
 					e.QueuedId = e.Hashes[0]
 				}
@@ -246,9 +245,12 @@ func SQL() Decorator {
 						recipient,
 						s.ip2bint(e.RemoteIP).Bytes(),         // ip_addr store as varbinary(16)
 						trimToLimit(e.MailFrom.String(), 255), // return_path
-						e.TLS,   // is_tls
-						mid,     // message_id
-						replyTo, // reply_to
+						// is_tls
+						e.TLS,
+						// message_id
+						mid,
+						// reply_to
+						replyTo,
 						sender,
 					)
 
