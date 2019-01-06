@@ -13,7 +13,8 @@ const (
 	// The maximum total length of a reverse-path or forward-path is 256
 	LimitPath = 256
 	// The maximum total length of a user name or other local-part is 64
-	LimitLocalPart = 64
+	// however, here we double it, since a few major services don't respect that and go over
+	LimitLocalPart = 64 * 2
 	// //The maximum total length of a domain name or number is 255
 	LimitDomain = 255
 	// The minimum total number of recipients that must be buffered is 100
@@ -78,7 +79,10 @@ func (s *Parser) peek() byte {
 }
 
 func (s *Parser) reversePath() (err error) {
-	if i := bytes.Index(s.buf, []byte{'<', '>'}); i == 0 {
+	if s.peek() == ' ' {
+		s.next() // tolerate a space at the front
+	}
+	if i := bytes.Index(s.buf[s.pos+1:], []byte{'<', '>'}); i == 0 {
 		s.NullPath = true
 		return nil
 	}
@@ -89,6 +93,13 @@ func (s *Parser) reversePath() (err error) {
 }
 
 func (s *Parser) forwardPath() (err error) {
+	if s.peek() == ' ' {
+		s.next() // tolerate a space at the front
+	}
+	if i := bytes.Index(bytes.ToLower(s.buf[s.pos+1:]), []byte(postmasterPath)); i == 0 {
+		s.LocalPart = postmasterLocalPart
+		return nil
+	}
 	if err = s.path(); err != nil {
 		return err
 	}
@@ -122,11 +133,7 @@ const postmasterLocalPart = "Postmaster"
 //                  Forward-path ) [SP Rcpt-parameters] CRLF
 func (s *Parser) RcptTo(input []byte) (err error) {
 	s.set(input)
-	// case-insensitive match
-	if i := bytes.Index(bytes.ToLower(s.buf[0:12]), []byte(postmasterPath)); i == 0 {
-		s.LocalPart = postmasterLocalPart
-		return nil
-	} else if err := s.forwardPath(); err != nil {
+	if err := s.forwardPath(); err != nil {
 		return err
 	}
 	s.next()
@@ -229,9 +236,6 @@ func (s *Parser) param() (result []string, err error) {
 
 // "<" [ A-d-l ":" ] Mailbox ">"
 func (s *Parser) path() (err error) {
-	if s.peek() == ' ' {
-		s.next() // tolerate a space at the front
-	}
 	if s.next() == '<' && s.peek() == '@' {
 		if err = s.adl(); err == nil {
 			s.next()
@@ -354,11 +358,9 @@ func (s *Parser) addressLiteral() error {
 		p := s.peek()
 		var err error
 		if p == 'I' || p == 'i' {
-			s.next() // I
-			s.next() // P
-			s.next() // v
-			s.next() // 6
-			s.next() // :
+			for i := 0; i < 5; i++ {
+				s.next() // IPv6:
+			}
 			err = s.ipv6AddressLiteral()
 		} else if p >= 48 && p <= 57 {
 			err = s.ipv4AddressLiteral()

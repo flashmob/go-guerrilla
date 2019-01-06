@@ -90,6 +90,27 @@ func TestParseForwardPath(t *testing.T) {
 		t.Error("error not expected ", err)
 	}
 
+	// tolerate a space at the front, invalid
+	s = NewParser([]byte(" <"))
+	err = s.forwardPath()
+	if err == nil {
+		t.Error("error expected ", err)
+	}
+
+	// tolerate a space at the front, invalid
+	s = NewParser([]byte(" "))
+	err = s.forwardPath()
+	if err == nil {
+		t.Error("error expected ", err)
+	}
+
+	// empty
+	s = NewParser([]byte(""))
+	err = s.forwardPath()
+	if err == nil {
+		t.Error("error expected ", err)
+	}
+
 }
 
 func TestParseReversePath(t *testing.T) {
@@ -127,13 +148,41 @@ func TestParseReversePath(t *testing.T) {
 	s = NewParser([]byte("test@rcample.com"))
 	err = s.reversePath()
 	if err == nil {
-		t.Error("error  expected ", err)
+		t.Error("error expected ", err)
 	}
 
 	s = NewParser([]byte("<@ghg;$7@65"))
 	err = s.reversePath()
 	if err == nil {
 		t.Error("error  expected ", err)
+	}
+
+	// tolerate a space at the front
+	s = NewParser([]byte(" <>"))
+	err = s.reversePath()
+	if err != nil {
+		t.Error("error not expected ", err)
+	}
+
+	// tolerate a space at the front, invalid
+	s = NewParser([]byte(" <"))
+	err = s.reversePath()
+	if err == nil {
+		t.Error("error expected ", err)
+	}
+
+	// tolerate a space at the front, invalid
+	s = NewParser([]byte(" "))
+	err = s.reversePath()
+	if err == nil {
+		t.Error("error expected ", err)
+	}
+
+	// empty
+	s = NewParser([]byte(" "))
+	err = s.reversePath()
+	if err == nil {
+		t.Error("error expected ", err)
 	}
 }
 

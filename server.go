@@ -466,6 +466,7 @@ func (server *server) handleClient(client *client) {
 				}
 				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
 				if err != nil {
+					server.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
 					client.sendResponse(err)
 					break
 				} else if client.parser.NullPath {
@@ -481,6 +482,7 @@ func (server *server) handleClient(client *client) {
 				}
 				to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
 				if err != nil {
+					server.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
 					client.sendResponse(err.Error())
 					break
 				}

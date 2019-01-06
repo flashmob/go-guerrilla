@@ -16,6 +16,7 @@ package test
 
 import (
 	"encoding/json"
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"testing"
 
 	"time"
@@ -390,7 +391,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 				t.Error("Hello command failed", err.Error())
 			}
 			// repeat > 64 characters in local part
-			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 65)))
+			response, err := Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", rfc5321.LimitLocalPart+1)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
@@ -400,7 +401,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			}
 			// what about if it's exactly 64?
 			// repeat > 64 characters in local part
-			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", 64)))
+			response, err = Command(conn, bufin, fmt.Sprintf("RCPT TO:<%s@grr.la>", strings.Repeat("a", rfc5321.LimitLocalPart-1)))
 			if err != nil {
 				t.Error("rcpt command failed", err.Error())
 			}
