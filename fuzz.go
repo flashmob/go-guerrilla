@@ -30,17 +30,20 @@ func init() {
 
 func getFuzzServerConfig() *ServerConfig {
 	sc := &ServerConfig{
-		IsEnabled:       true, //
-		Hostname:        "fuzzme.test.com",
-		MaxSize:         1024, // smtp message max size
-		PrivateKeyFile:  "./tests/mail.guerrillamail.com.key.pem",
-		PublicKeyFile:   "./tests/mail.guerrillamail.com.cert.pem",
+		IsEnabled: true, //
+		Hostname:  "fuzzme.test.com",
+		MaxSize:   1024, // smtp message max size
+		TLS: ServerTLSConfig{
+			PrivateKeyFile: "./tests/mail.guerrillamail.com.key.pem",
+			PublicKeyFile:  "./tests/mail.guerrillamail.com.cert.pem",
+			StartTLSOn:     true,
+			AlwaysOn:       false,
+		},
 		Timeout:         5,
 		ListenInterface: "127.0.0.1:2529",
-		StartTLSOn:      true,
-		TLSAlwaysOn:     false,
-		MaxClients:      3000,
-		LogFile:         "off",
+
+		MaxClients: 3000,
+		LogFile:    "off",
 	}
 	return sc
 }
