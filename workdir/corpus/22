@@ -1,1 +1,2 @@
+EHLO test.com
 STARTTLS

@@ -1,6 +1,6 @@
 EHLO test.com
 MAIL FROM:<user@example.com>
-RCPT TO:<test@test.com>DATA
+RCPT TO: <test@test.com>DATA
 Subject: Testing Subject
 
 ..Some body

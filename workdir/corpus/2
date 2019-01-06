@@ -1,5 +1,5 @@
 HELO test.com
-MAIL FROM:=?ISO-2022-JP?B?GyRCJEEkUCRSJG0bKEIgbWFnMiAwMDAxMDIzMTIw?= <user@example.com>
+MAIL FROM:<user@example.com>
 RCPT TO:<test@test.com>
 RCPT TO:<test2@test.com>
 RCPT TO:<test3@test.com>

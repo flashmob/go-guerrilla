@@ -1,5 +1,5 @@
 HELO test.com
-MAIL FROM:user@example.com BODY=8BITMIME
+MAIL FROM: <user@example.com> BODY=8BITMIME
 RSET
 NOOP
 RCPT TO:<test2@test.com>

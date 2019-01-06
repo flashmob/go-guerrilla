@@ -22,7 +22,7 @@ func TestGenerateCorpus(t *testing.T) {
 
 	str := "EHLO test.com\r\n" +
 		"MAIL FROM:<user@example.com>\r\n" +
-		"RCPT TO:<test@test.com>" +
+		"RCPT TO: <test@test.com>" +
 		"DATA\r\n" +
 		"Subject: Testing Subject\r\n" +
 		"\r\n" +
@@ -45,7 +45,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("1", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:=?ISO-2022-JP?B?GyRCJEEkUCRSJG0bKEIgbWFnMiAwMDAxMDIzMTIw?= <user@example.com>\r\n" +
+		"MAIL FROM:<user@example.com>\r\n" +
 		"RCPT TO:<test@test.com>\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
 		"RCPT TO:<test3@test.com>\r\n" +
@@ -59,7 +59,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("2", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:=?utf-8?B?2KfZhNit2YjYp9isINmE2YTYstmK2YjYqiDYp9mE2LfYqNmK2LnZitip?=<user@example.com> BODY=8BITMIME\r\n" +
+		"MAIL FROM:<user@example.com> BODY=8BITMIME\r\n" +
 		"RCPT TO:<test@test.com>\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
 		"RCPT TO:<test3@test.com>\r\n" +
@@ -73,7 +73,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("2", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:user@example.com BODY=8BITMIME\r\n" +
+		"MAIL FROM:<user@example.com> BODY=8BITMIME\r\n" +
 		"HELP\r\n" +
 		"NOOP\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
@@ -86,7 +86,7 @@ func TestGenerateCorpus(t *testing.T) {
 	writeCorpos("3", []byte(str))
 
 	str = "HELO test.com\r\n" +
-		"MAIL FROM:user@example.com BODY=8BITMIME\r\n" +
+		"MAIL FROM: <user@example.com> BODY=8BITMIME\r\n" +
 		"RSET\r\n" +
 		"NOOP\r\n" +
 		"RCPT TO:<test2@test.com>\r\n" +
@@ -98,60 +98,60 @@ func TestGenerateCorpus(t *testing.T) {
 
 	writeCorpos("4", []byte(str))
 
-	str = "MAIL FROM:<>\r\n"
+	str = "HELO test.com\r\n" + "MAIL FROM:<>\r\n"
 
 	writeCorpos("5", []byte(str))
 	str = "MAIL from: <\r\n"
 	writeCorpos("6", []byte(str))
 
-	str = "MAIL FrOm: <<>>\r\n"
+	str = "HELO test.com\r\n" + "MAIL FrOm: <<>>\r\n"
 	writeCorpos("8", []byte(str))
 
-	str = "MAIL FrOm:\r\n"
+	str = "HELO test.com\r\n" + "MAIL FrOm:\r\n"
 	writeCorpos("7", []byte(str))
 
-	str = "RCPT TO:\r\n"
+	str = "HELO test.com\r\n" + "RCPT TO:\r\n"
 	writeCorpos("9", []byte(str))
 
-	str = "RCPT TO:<>\r\n"
+	str = "HELO test.com\r\n" + "RCPT TO:<>\r\n"
 	writeCorpos("10", []byte(str))
 
-	str = "RCPT TO:<\r\n"
+	str = "HELO test.com\r\n" + "RCPT TO:<\r\n"
 	writeCorpos("11", []byte(str))
 
-	str = "RCPT TO:<test@test.com> somethingstrange\r\n"
+	str = "HELO test.com\r\n" + "RCPT TO:<test@test.com> somethingstrange\r\n"
 	writeCorpos("12", []byte(str))
 
-	str = "VRFY\r\n"
+	str = "HELO test.com\r\n" + "VRFY\r\n" + "QUIT\r\n"
 	writeCorpos("13", []byte(str))
 
-	str = "VRFY:\r\n"
+	str = "HELO test.com\r\n" + "VRFY:\r\n"
 	writeCorpos("14", []byte(str))
 
-	str = "VRFY all cows eat grass\r\n"
+	str = "HELO test.com\r\n" + "VRFY all cows eat grass\r\n"
 	writeCorpos("15", []byte(str))
 
-	str = "RSET\r\n"
+	str = "HELO test.com\r\n" + "RSET\r\n"
 	writeCorpos("16", []byte(str))
 
-	str = "RSET:\r\n"
+	str = "HELO test.com\r\n" + "RSET:\r\n"
 	writeCorpos("17", []byte(str))
 
-	str = "RSET all cows eat grass\r\n"
+	str = "HELO test.com\r\n" + "RSET all cows eat grass\r\n"
 	writeCorpos("18", []byte(str))
 
-	str = "MAIL FROM: <test@test.com\r\n" +
+	str = "HELO test.com\r\n" + "MAIL FROM: <test@test.com\r\n" +
 		"MAIL FROM: <test@test.com\r\n"
 	writeCorpos("19", []byte(str))
 
-	str = "MAIL FROM: <<test@test.com\r\n" +
+	str = "HELO test.com\r\n" + "MAIL FROM: <<test@test.com\r\n" +
 		"MAIL FROM: <test@test.com\r\n"
 	writeCorpos("20", []byte(str))
 
-	str = "DATA:\r\n"
+	str = "HELO test.com\r\n" + "DATA:\r\n"
 	writeCorpos("21", []byte(str))
 
-	str = "STARTTLS\r\n"
+	str = "EHLO test.com\r\n" + "STARTTLS\r\n"
 	writeCorpos("22", []byte(str))
 
 	str = "HELO test.com\r\n" +
@@ -165,6 +165,22 @@ func TestGenerateCorpus(t *testing.T) {
 		".\r\n"
 
 	writeCorpos("23", []byte(str))
+
+	str = "HELO test.com\r\n" +
+		"MAIL FROM:<> BODY=8BITMIME\r\n" +
+		"RCPT TO:<test2@test.com>\r\n" +
+		"RCPT TO:<test3@test.com>\r\n" +
+		"DATA\r\n" +
+		"No subject\r\n" +
+		"..Now you're just somebody that i used to know\r\n" +
+		".\r\n" +
+		"QUIT"
+
+	writeCorpos("24", []byte(str))
+
+	str = "HELO test.com\r\n" + "XCLIENT ADDR=127.0.0.1\r\n" + "MAIL FROM:<test@grr.la>\r\n"
+
+	writeCorpos("25", []byte(str))
 
 }
 
