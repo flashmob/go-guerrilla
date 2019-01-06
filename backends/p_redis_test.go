@@ -12,7 +12,7 @@ import (
 func TestRedisGeneric(t *testing.T) {
 
 	e := mail.NewEnvelope("127.0.0.1", 1)
-	e.RcptTo = append(e.RcptTo, mail.Address{"test", "grr.la"})
+	e.RcptTo = append(e.RcptTo, mail.Address{User: "test", Host: "grr.la"})
 
 	l, _ := log.GetLogger("./test_redis.log", "debug")
 	g, err := New(BackendConfig{

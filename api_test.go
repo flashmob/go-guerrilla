@@ -423,7 +423,7 @@ func talkToServer(address string) {
 	str, err = in.ReadString('\n')
 	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "RCPT TO:test@grr.la\r\n")
+	fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
 	str, err = in.ReadString('\n')
 	fmt.Fprint(conn, "DATA\r\n")
 	str, err = in.ReadString('\n')
@@ -549,7 +549,7 @@ func TestSkipAllowsHost(t *testing.T) {
 	}
 	in := bufio.NewReader(conn)
 	fmt.Fprint(conn, "HELO test\r\n")
-	fmt.Fprint(conn, "RCPT TO: test@funkyhost.com\r\n")
+	fmt.Fprint(conn, "RCPT TO:<test@funkyhost.com>\r\n")
 	in.ReadString('\n')
 	in.ReadString('\n')
 	str, _ := in.ReadString('\n')

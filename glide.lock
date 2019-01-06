@@ -1,33 +1,37 @@
-hash: f125882976090918727d8badc2f6dbbb8565a91081159ee65d39f667eabc81fe
-updated: 2018-06-11T02:31:42.387414528+10:00
+hash: 9d467015838b5163cc5f1ebb92fa68fd4721445b2dbf236a03d002c92b4ba52a
+updated: 2018-12-24T15:20:01.207901397Z
 imports:
 - name: github.com/asaskevich/EventBus
   version: 68a521d7cbbb7a859c2608b06342f384b3bd5f5a
-- name: github.com/go-sql-driver/mysql
-  version: d523deb1b23d913de5bdada721a6071e71283618
-- name: github.com/gomodule/redigo
-  version: 9c11da706d9b7902c6da69c592f75637793fe121
+- name: github.com/garyburd/redigo
+  version: 8873b2f1995f59d4bcdd2b0dc9858e2cb9bf0c13
   subpackages:
   - internal
+  - redis
+- name: github.com/go-sql-driver/mysql
+  version: 72cd26f257d44c1114970e19afddcd812016007e
+- name: github.com/gomodule/redigo
+  version: 8873b2f1995f59d4bcdd2b0dc9858e2cb9bf0c13
+  subpackages:
   - redis
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/rakyll/statik
-  version: fd36b3595eb2ec8da4b8153b107f7ea08504899d
+  version: 79258177a57a85a8ab2eca7ce0936aad80307f4e
   subpackages:
   - fs
 - name: github.com/sirupsen/logrus
-  version: c155da19408a8799da419ed3eeb0cb5db0ad5dbc
+  version: 3e01752db0189b9157070a0e1668a620f9a85da2
 - name: github.com/spf13/cobra
-  version: b62566898a99f2db9c68ed0026aa0a052e59678d
+  version: d2d81d9a96e23f0255397222bb0b4e3165e492dc
 - name: github.com/spf13/pflag
-  version: 25f8b5b07aece3207895bf19f7ab517eb3b22a40
+  version: 24fa6976df40757dce6aea913e7b81ade90530e1
 - name: golang.org/x/crypto
-  version: 8ac0e0d97ce45cd83d1d7243c060cb8461dda5e9
+  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
   subpackages:
   - ssh/terminal
 - name: golang.org/x/net
-  version: 1e491301e022f8f977054da4c2d852decd59571f
+  version: 927f97764cc334a6575f4b7a1584a147864d5723
   subpackages:
   - html
   - html/atom
@@ -38,7 +42,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 5c1cf69b5978e5a34c5f9ba09a83e56acc4b7877
+  version: 17bcc049122f272a32787ba38073ee47433023e9
   subpackages:
   - encoding
   - encoding/charmap
@@ -58,7 +62,7 @@ imports:
   - runes
   - transform
 - name: google.golang.org/appengine
-  version: b1f26356af11148e710935ed1ac8a7f5702c7612
+  version: e9657d882bb81064595ca3b56cbe2546bbabf7b1
   subpackages:
   - cloudsql
 - name: gopkg.in/iconv.v1
