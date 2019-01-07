@@ -90,7 +90,7 @@ func (c command) match(in []byte) bool {
 func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
 	server := &server{
 		clientPool:      NewPool(sc.MaxClients),
-		closedListener:  make(chan (bool), 1),
+		closedListener:  make(chan bool, 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
 		envelopePool:    mail.NewPool(sc.MaxClients),
@@ -257,16 +257,16 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 			s.mainlog().WithError(err).Info("Temporary error accepting client")
 			continue
 		}
-		go func(p Poolable, borrow_err error) {
+		go func(p Poolable, borrowErr error) {
 			c := p.(*client)
-			if borrow_err == nil {
+			if borrowErr == nil {
 				s.handleClient(c)
 				s.envelopePool.Return(c.Envelope)
 				s.clientPool.Return(c)
 			} else {
-				s.log().WithError(borrow_err).Info("couldn't borrow a new client")
+				s.log().WithError(borrowErr).Info("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
-				conn.Close()
+				_ = conn.Close()
 
 			}
 			// intentionally placed Borrow in args so that it's called in the
@@ -279,7 +279,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 func (s *server) Shutdown() {
 	if s.listener != nil {
 		// This will cause Start function to return, by causing an error on listener.Accept
-		s.listener.Close()
+		_ = s.listener.Close()
 		// wait for the listener to listener.Accept
 		<-s.closedListener
 		// At this point Start will exit and close down the pool
@@ -309,7 +309,7 @@ func (s *server) allowsHost(host string) bool {
 	if _, ok := s.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
-	// check the willdcards
+	// check the wildcards
 	for _, w := range s.hosts.wildcards {
 		if matched, err := filepath.Match(w, strings.ToLower(host)); matched && err == nil {
 			return true
@@ -543,7 +543,7 @@ func (s *server) handleClient(client *client) {
 
 			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
 			if n > sc.MaxSize {
-				err = fmt.Errorf("Maximum DATA size exceeded (%d)", sc.MaxSize)
+				err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
 			}
 			if err != nil {
 				if err == LineLimitExceeded {

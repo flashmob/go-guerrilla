@@ -1012,7 +1012,7 @@ func TestDataMaxLength(t *testing.T) {
 					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 
 			//expected := "500 Line too long"
-			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
+			expected := "451 4.3.0 Error: maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
