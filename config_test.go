@@ -181,8 +181,8 @@ func TestConfigLoad(t *testing.T) {
 		t.SkipNow()
 	}
 	// did we got the timestamps?
-	if ac.Servers[0].TLS._privateKeyFile_mtime <= 0 {
-		t.Error("failed to read timestamp for _privateKeyFile_mtime, got", ac.Servers[0].TLS._privateKeyFile_mtime)
+	if ac.Servers[0].TLS._privateKeyFileMtime <= 0 {
+		t.Error("failed to read timestamp for _privateKeyFileMtime, got", ac.Servers[0].TLS._privateKeyFileMtime)
 	}
 }
 

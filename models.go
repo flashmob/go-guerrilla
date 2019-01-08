@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	LineLimitExceeded   = errors.New("Maximum line length exceeded")
-	MessageSizeExceeded = errors.New("Maximum message size exceeded")
+	LineLimitExceeded   = errors.New("maximum line length exceeded")
+	MessageSizeExceeded = errors.New("maximum message size exceeded")
 )
 
 // we need to adjust the limit, so we embed io.LimitedReader

@@ -506,3 +506,25 @@ func (g *guerrilla) writePid() error {
 	}
 	return nil
 }
+
+// CheckFileLimit checks the number of files we can open (works on OS'es that support the ulimit command)
+func CheckFileLimit(c *AppConfig) (bool, int, uint64) {
+	fileLimit, err := getFileLimit()
+	maxClients := 0
+	if err != nil {
+		// since we can't get the limit, return true to indicate the check passed
+		return true, maxClients, fileLimit
+	}
+	if c.Servers == nil {
+		// no servers have been configured, assuming default
+		maxClients = defaultMaxClients
+	} else {
+		for _, s := range c.Servers {
+			maxClients += s.MaxClients
+		}
+	}
+	if uint64(maxClients) > fileLimit {
+		return false, maxClients, fileLimit
+	}
+	return true, maxClients, fileLimit
+}

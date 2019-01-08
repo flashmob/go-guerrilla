@@ -29,8 +29,6 @@ type deferredSub struct {
 	fn    interface{}
 }
 
-const defaultInterface = "127.0.0.1:2525"
-
 // AddProcessor adds a processor constructor to the backend.
 // name is the identifier to be used in the config. See backends docs for more info.
 func (d *Daemon) AddProcessor(name string, pc backends.ProcessorConstructor) {

@@ -45,7 +45,7 @@ var configJsonA = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -60,7 +60,7 @@ var configJsonA = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:2228",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -98,7 +98,7 @@ var configJsonB = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -144,7 +144,7 @@ var configJsonC = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -159,7 +159,7 @@ var configJsonC = `
             "max_size":1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
-            "max_clients":500,
+            "max_clients":200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -197,7 +197,7 @@ var configJsonD = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -212,7 +212,7 @@ var configJsonD = `
             "max_size":1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
-            "max_clients":500,
+            "max_clients":200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -258,7 +258,7 @@ var configJsonE = `
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
-            "max_clients": 1000,
+            "max_clients": 200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -273,7 +273,7 @@ var configJsonE = `
             "max_size":1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
-            "max_clients":500,
+            "max_clients":200,
             "log_file" : "../../tests/testlog",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
@@ -316,6 +316,22 @@ func sigKill() {
 		mainlog.WithError(err).Info("sigKill - Could not read pidfle")
 	}
 
+}
+
+// In all the tests, there will be a minimum of about 2000 available
+func TestFileLimit(t *testing.T) {
+	cfg := &guerrilla.AppConfig{LogFile: log.OutputOff.String()}
+	sc := guerrilla.ServerConfig{
+		ListenInterface: "127.0.0.1:2526",
+		IsEnabled:       true,
+		MaxClients:      1000,
+	}
+	cfg.Servers = append(cfg.Servers, sc)
+	d := guerrilla.Daemon{Config: cfg}
+	if ok, maxClients, fileLimit := guerrilla.CheckFileLimit(d.Config); !ok {
+		t.Errorf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			"Please increase your open file limit. Please check your OS docs for how to increase the limit.", maxClients, fileLimit)
+	}
 }
 
 // make sure that we get all the config change events

@@ -3,10 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -72,17 +69,20 @@ func sigHandler() {
 		syscall.SIGINT,
 		syscall.SIGKILL,
 		syscall.SIGUSR1,
+		os.Kill,
 	)
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
 			if ac, err := readConfig(configPath, pidFile); err == nil {
-				d.ReloadConfig(*ac)
+				_ = d.ReloadConfig(*ac)
 			} else {
 				mainlog.WithError(err).Error("Could not reload config")
 			}
 		} else if sig == syscall.SIGUSR1 {
-			d.ReopenLogs()
-		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
+			if err := d.ReopenLogs(); err != nil {
+				mainlog.WithError(err).Error("reopening logs failed")
+			}
+		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT || sig == os.Kill {
 			mainlog.Infof("Shutdown signal caught")
 			go func() {
 				select {
@@ -105,24 +105,16 @@ func sigHandler() {
 func serve(cmd *cobra.Command, args []string) {
 	logVersion()
 	d = guerrilla.Daemon{Logger: mainlog}
-	ac, err := readConfig(configPath, pidFile)
+	c, err := readConfig(configPath, pidFile)
 	if err != nil {
 		mainlog.WithError(err).Fatal("Error while reading config")
 	}
-	d.SetConfig(*ac)
+	_ = d.SetConfig(*c)
 
 	// Check that max clients is not greater than system open file limit.
-	fileLimit := getFileLimit()
-
-	if fileLimit > 0 {
-		maxClients := 0
-		for _, s := range ac.Servers {
-			maxClients += s.MaxClients
-		}
-		if maxClients > fileLimit {
-			mainlog.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
-				"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
-		}
+	if ok, maxClients, fileLimit := guerrilla.CheckFileLimit(c); !ok {
+		mainlog.Fatalf("Combined max clients for all servers (%d) is greater than open file limit (%d). "+
+			"Please increase your open file limit or decrease max clients.", maxClients, fileLimit)
 	}
 
 	err = d.Start()
@@ -154,17 +146,4 @@ func readConfig(path string, pidFile string) (*guerrilla.AppConfig, error) {
 		appConfig.LogLevel = "debug"
 	}
 	return &appConfig, nil
-}
-
-func getFileLimit() int {
-	cmd := exec.Command("ulimit", "-n")
-	out, err := cmd.Output()
-	if err != nil {
-		return -1
-	}
-	limit, err := strconv.Atoi(strings.TrimSpace(string(out)))
-	if err != nil {
-		return -1
-	}
-	return limit
 }
