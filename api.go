@@ -62,7 +62,7 @@ func (d *Daemon) Start() (err error) {
 			return err
 		}
 		for i := range d.subs {
-			d.Subscribe(d.subs[i].topic, d.subs[i].fn)
+			_ = d.Subscribe(d.subs[i].topic, d.subs[i].fn)
 
 		}
 		d.subs = make([]deferredSub, 0)
@@ -162,10 +162,10 @@ func (d *Daemon) ReopenLogs() error {
 // Subscribe for subscribing to config change events
 func (d *Daemon) Subscribe(topic Event, fn interface{}) error {
 	if d.g == nil {
+		// defer the subscription until the daemon is started
 		d.subs = append(d.subs, deferredSub{topic, fn})
 		return nil
 	}
-
 	return d.g.Subscribe(topic, fn)
 }
 
