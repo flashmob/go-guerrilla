@@ -141,19 +141,20 @@ func (c *client) isAlive() bool {
 }
 
 // setTimeout adjust the timeout on the connection, goroutine safe
-func (c *client) setTimeout(t time.Duration) {
+func (c *client) setTimeout(t time.Duration) (err error) {
 	defer c.connGuard.Unlock()
 	c.connGuard.Lock()
 	if c.conn != nil {
-		c.conn.SetDeadline(time.Now().Add(t * time.Second))
+		err = c.conn.SetDeadline(time.Now().Add(t * time.Second))
 	}
+	return
 }
 
 // closeConn closes a client connection, , goroutine safe
 func (c *client) closeConn() {
 	defer c.connGuard.Unlock()
 	c.connGuard.Lock()
-	c.conn.Close()
+	_ = c.conn.Close()
 	c.conn = nil
 }
 

@@ -338,7 +338,9 @@ func (s *server) readCommand(client *client) ([]byte, error) {
 
 // flushResponse a response to the client. Flushes the client.bufout buffer to the connection
 func (s *server) flushResponse(client *client) error {
-	client.setTimeout(s.timeout.Load().(time.Duration))
+	if err := client.setTimeout(s.timeout.Load().(time.Duration)); err != nil {
+		return err
+	}
 	return client.bufout.Flush()
 }
 

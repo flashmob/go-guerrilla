@@ -3,7 +3,6 @@ package mocks
 import (
 	"fmt"
 	"net/smtp"
-	"time"
 )
 
 const (
@@ -14,14 +13,6 @@ func lastWords(message string, err error) {
 	fmt.Println(message, err.Error())
 	return
 	// panic(err)
-}
-
-// Sends a single SMTP message, for testing.
-func main() {
-	for i := 0; i < 100; i++ {
-		go sendMail(i)
-	}
-	time.Sleep(time.Minute / 10)
 }
 
 func sendMail(i int) {

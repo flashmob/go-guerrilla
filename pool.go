@@ -17,11 +17,12 @@ var (
 // a struct can be pooled if it has the following interface
 type Poolable interface {
 	// ability to set read/write timeout
-	setTimeout(t time.Duration)
+	setTimeout(t time.Duration) error
 	// set a new connection and client id
 	init(c net.Conn, clientID uint64, ep *mail.Pool)
 	// get a unique id
 	getID() uint64
+	kill()
 }
 
 // Pool holds Clients.
@@ -82,9 +83,11 @@ func (p *Pool) ShutdownState() {
 	p.isShuttingDownFlg.Store(true) // no more borrowing
 	p.ShutdownChan <- 1             // release any waiting p.sem
 
-	// set a low timeout
+	// set a low timeout (let the clients finish whatever the're doing)
 	p.activeClients.mapAll(func(p Poolable) {
-		p.setTimeout(time.Duration(int64(aVeryLowTimeout)))
+		if err := p.setTimeout(time.Duration(int64(aVeryLowTimeout))); err != nil {
+			p.kill()
+		}
 	})
 
 }
@@ -111,7 +114,9 @@ func (p *Pool) IsShuttingDown() bool {
 // set a timeout for all lent clients
 func (p *Pool) SetTimeout(duration time.Duration) {
 	p.activeClients.mapAll(func(p Poolable) {
-		p.setTimeout(duration)
+		if err := p.setTimeout(duration); err != nil {
+			p.kill()
+		}
 	})
 }
 
