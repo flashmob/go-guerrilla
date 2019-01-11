@@ -69,6 +69,7 @@ type Result interface {
 
 // Internal implementation of BackendResult for use by backend implementations.
 type result struct {
+	// we're going to use a bytes.Buffer for building a string
 	bytes.Buffer
 }
 
@@ -95,11 +96,11 @@ func NewResult(r ...interface{}) Result {
 	for _, item := range r {
 		switch v := item.(type) {
 		case error:
-			buf.WriteString(v.Error())
+			_, _ = buf.WriteString(v.Error())
 		case fmt.Stringer:
-			buf.WriteString(v.String())
+			_, _ = buf.WriteString(v.String())
 		case string:
-			buf.WriteString(v)
+			_, _ = buf.WriteString(v)
 		}
 	}
 	return buf
@@ -255,13 +256,13 @@ func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 	for i := 0; i < v.NumField(); i++ {
 		f := v.Field(i)
 		// read the tags of the config struct
-		field_name := t.Field(i).Tag.Get("json")
+		fieldName := t.Field(i).Tag.Get("json")
 		omitempty := false
-		if len(field_name) > 0 {
+		if len(fieldName) > 0 {
 			// parse the tag to
 			// get the field name from struct tag
-			split := strings.Split(field_name, ",")
-			field_name = split[0]
+			split := strings.Split(fieldName, ",")
+			fieldName = split[0]
 			if len(split) > 1 {
 				if split[1] == "omitempty" {
 					omitempty = true
@@ -270,30 +271,30 @@ func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 		} else {
 			// could have no tag
 			// so use the reflected field name
-			field_name = typeOfT.Field(i).Name
+			fieldName = typeOfT.Field(i).Name
 		}
 		if f.Type().Name() == "int" {
 			// in json, there is no int, only floats...
-			if intVal, converted := configData[field_name].(float64); converted {
+			if intVal, converted := configData[fieldName].(float64); converted {
 				v.Field(i).SetInt(int64(intVal))
-			} else if intVal, converted := configData[field_name].(int); converted {
+			} else if intVal, converted := configData[fieldName].(int); converted {
 				v.Field(i).SetInt(int64(intVal))
 			} else if !omitempty {
-				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
+				return configType, convertError("property missing/invalid: '" + fieldName + "' of expected type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "string" {
-			if stringVal, converted := configData[field_name].(string); converted {
+			if stringVal, converted := configData[fieldName].(string); converted {
 				v.Field(i).SetString(stringVal)
 			} else if !omitempty {
-				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+				return configType, convertError("missing/invalid: '" + fieldName + "' of type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "bool" {
-			if boolVal, converted := configData[field_name].(bool); converted {
+			if boolVal, converted := configData[fieldName].(bool); converted {
 				v.Field(i).SetBool(boolVal)
 			} else if !omitempty {
-				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+				return configType, convertError("missing/invalid: '" + fieldName + "' of type: " + f.Type().Name())
 			}
 		}
 	}

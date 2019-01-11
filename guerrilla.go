@@ -230,7 +230,7 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigLogReopen] = daemonEvent(func(c *AppConfig) {
 		err := g.mainlog().Reopen()
 		if err != nil {
-			g.mainlog().WithError(err).Error("main log file [%s] failed to re-open", c.LogFile)
+			g.mainlog().WithError(err).Errorf("main log file [%s] failed to re-open", c.LogFile)
 			return
 		}
 		g.mainlog().Infof("re-opened main log file [%s]", c.LogFile)
@@ -363,7 +363,7 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigServerLogReopen] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if err = server.log().Reopen(); err != nil {
-				g.mainlog().WithError(err).Error("server [%s] log file [%s] failed to re-open", sc.ListenInterface, sc.LogFile)
+				g.mainlog().WithError(err).Errorf("server [%s] log file [%s] failed to re-open", sc.ListenInterface, sc.LogFile)
 				return
 			}
 			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
@@ -410,7 +410,7 @@ func (g *guerrilla) subscribeEvents() {
 			err = g.Subscribe(topic, f)
 		}
 		if err != nil {
-			g.mainlog().WithError(err).Error("failed to subscribe on topic [%s]", topic)
+			g.mainlog().WithError(err).Errorf("failed to subscribe on topic [%s]", topic)
 			break
 		}
 	}

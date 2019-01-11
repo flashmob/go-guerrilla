@@ -67,7 +67,7 @@ func Redis() Decorator {
 		}
 		config = bcfg.(*RedisProcessorConfig)
 		if redisErr := redisClient.redisConnection(config.RedisInterface); redisErr != nil {
-			err := fmt.Errorf("Redis cannot connect, check your settings: %s", redisErr)
+			err := fmt.Errorf("redis cannot connect, check your settings: %s", redisErr)
 			return err
 		}
 		return nil
