@@ -13,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -44,32 +45,30 @@ func publicKey(priv interface{}) interface{} {
 	}
 }
 
-func pemBlockForKey(priv interface{}) *pem.Block {
+func pemBlockForKey(priv interface{}) (*pem.Block, error) {
 	switch k := priv.(type) {
 	case *rsa.PrivateKey:
-		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}
+		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}, nil
 	case *ecdsa.PrivateKey:
 		b, err := x509.MarshalECPrivateKey(k)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to marshal ECDSA private key: %v", err)
-			os.Exit(2)
+			err = errors.New(fmt.Sprintf("Unable to marshal ECDSA private key: %v", err))
 		}
-		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
+		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}, err
 	default:
-		return nil
+		return nil, errors.New("not a private key")
 	}
 }
 
 // validFrom - Creation date formatted as Jan 1 15:04:05 2011 or ""
 
-func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string, dirPrefix string) {
+func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bool, rsaBits int, ecdsaCurve string, dirPrefix string) (err error) {
 
 	if len(host) == 0 {
 		log.Fatalf("Missing required --host parameter")
 	}
 
 	var priv interface{}
-	var err error
 	switch ecdsaCurve {
 	case "":
 		priv, err = rsa.GenerateKey(rand.Reader, rsaBits)
@@ -82,11 +81,11 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 	case "P521":
 		priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 	default:
-		fmt.Fprintf(os.Stderr, "Unrecognized elliptic curve: %q", ecdsaCurve)
-		os.Exit(1)
+		err = errors.New(fmt.Sprintf("Unrecognized elliptic curve: %q", ecdsaCurve))
 	}
 	if err != nil {
 		log.Fatalf("failed to generate private key: %s", err)
+		return
 	}
 
 	var notBefore time.Time
@@ -95,8 +94,8 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 	} else {
 		notBefore, err = time.Parse("Jan 2 15:04:05 2006", validFrom)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse creation date: %s\n", err)
-			os.Exit(1)
+			err = errors.New(fmt.Sprintf("Failed to parse creation date: %s\n", err))
+			return
 		}
 	}
 
@@ -144,16 +143,35 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 	if err != nil {
 		log.Fatalf("failed to open cert.pem for writing: %s", err)
 	}
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	certOut.Close()
+	err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	if err != nil {
+		return
+	}
+	if err = certOut.Sync(); err != nil {
+		return
+	}
+	if err = certOut.Close(); err != nil {
+		return
+	}
 
 	keyOut, err := os.OpenFile(dirPrefix+host+".key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Print("failed to open key.pem for writing:", err)
 		return
 	}
-	pem.Encode(keyOut, pemBlockForKey(priv))
-	keyOut.Sync()
-	keyOut.Close()
+	var block *pem.Block
+	if block, err = pemBlockForKey(priv); err != nil {
+		return err
+	}
+	if err = pem.Encode(keyOut, block); err != nil {
+		return err
+	}
+	if err = keyOut.Sync(); err != nil {
+		return err
+	}
+	if err = keyOut.Close(); err != nil {
+		return err
+	}
+	return
 
 }
