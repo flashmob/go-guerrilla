@@ -322,9 +322,17 @@ func sigKill() {
 	}
 }
 
+func Round(x float64) float64 {
+	t := math.Trunc(x)
+	if math.Abs(x-t) >= 0.5 {
+		return t + math.Copysign(1, x)
+	}
+	return t
+}
+
 // exponentialBackoff sleeps in nanoseconds, according to this formula 2^(i-1) * 25 / 2
 func exponentialBackoff(i int) {
-	time.Sleep(time.Duration(math.Round(math.Pow(3.0, float64(i))-1.0)*100.0/2.0) * time.Millisecond)
+	time.Sleep(time.Duration(Round(math.Pow(3.0, float64(i))-1.0)*100.0/2.0) * time.Millisecond)
 }
 
 var grepNotFound error
@@ -621,7 +629,7 @@ func TestServe(t *testing.T) {
 		}
 	}
 	// send kill signal and wait for exit
-	sigKill()
+	d.Shutdown()
 	// wait for exit
 	serveWG.Wait()
 
@@ -662,13 +670,15 @@ func TestServerAddEvent(t *testing.T) {
 	}
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-	var serveWG sync.WaitGroup
-	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
-		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration) // allow the server to start
+
+	// allow the server to start
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+		t.Error("server didn't start")
+	}
+
 	// now change the config by adding a server
 	conf := &guerrilla.AppConfig{}       // blank one
 	err = conf.Load([]byte(configJsonA)) // load configJsonA
@@ -687,10 +697,12 @@ func TestServerAddEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
+	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
+		t.Error("new server didn't start")
+	}
 
 	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
-		t.Error("Could not connect to new server", newServer.ListenInterface)
+		t.Error("Could not connect to new server", newServer.ListenInterface, err)
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -702,30 +714,18 @@ func TestServerAddEvent(t *testing.T) {
 		}
 	}
 
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
+	// shutdown the server
+	d.Shutdown()
 
 	// did backend started as expected?
 	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-		t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
+		t.Error("Did not add server [127.0.0.1:2526] after sighup")
 	}
-	/*
-		fd, err := os.Open("../../tests/testlog")
-		if err != nil {
-			t.Error(err)
-		}
-		if read, err := ioutil.ReadAll(fd); err == nil {
-			logOutput := string(read)
-			//fmt.Println(logOutput)
-			if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-				t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
-			}
-			if i := strings.Index(logOutput, "New server added [127.0.0.1:2526]"); i < 0 {
-				t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
-			}
-		}
-	*/
+
+	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+		t.Error("Server failed to stop")
+	}
+
 }
 
 // Start with configJsonA.json,
@@ -1067,7 +1067,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	}
-	//defer cleanTestArtifacts(t)
+	defer cleanTestArtifacts(t)
 	mainlog, err = getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
@@ -1090,7 +1090,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	//time.Sleep(testPauseDuration)
+	time.Sleep(testPauseDuration)
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
