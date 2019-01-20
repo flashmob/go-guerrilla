@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -410,12 +409,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 	return found, grepNotFound
 }
 
-func TestGrep(t *testing.T) {
-	found, err := grepTestlog("pids", 3)
-	fmt.Println(found, err)
-
-}
-
 // In all the tests, there will be a minimum of about 2000 available
 func TestFileLimit(t *testing.T) {
 	cfg := &guerrilla.AppConfig{LogFile: log.OutputOff.String()}
@@ -591,14 +584,13 @@ func TestServe(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-	var serveWG sync.WaitGroup
-	serveWG.Add(1)
+
 	go func() {
 		serve(cmd, []string{})
-		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
-
+	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
+		t.Error("server not started")
+	}
 	data, err := ioutil.ReadFile("pidfile.pid")
 	if err != nil {
 		t.Error("error reading pidfile.pid", err)
@@ -622,28 +614,20 @@ func TestServe(t *testing.T) {
 	// TODO: Implement an alternative test for windows.
 	if runtime.GOOS != "windows" {
 		sigHup()
-		time.Sleep(testPauseDuration) // allow sighup to do its job
 		// did the pidfile change as expected?
-		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
-			t.Error("pidfile not changed after sighup SIGHUP", err)
+		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+			t.Error("server did not catch sighp")
 		}
 	}
 	// send kill signal and wait for exit
 	d.Shutdown()
-	// wait for exit
-	serveWG.Wait()
 
 	// did backend started as expected?
-	fd, err := os.Open("../../tests/testlog")
-	if err != nil {
-		t.Error(err)
+
+	if _, err := grepTestlog("new backend started", 0); err != nil {
+		t.Error("Dummy backend not restarted")
 	}
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		if i := strings.Index(logOutput, "new backend started"); i < 0 {
-			t.Error("Dummy backend not restarted")
-		}
-	}
+
 }
 
 // Start with configJsonA.json,
