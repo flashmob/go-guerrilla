@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -315,6 +320,91 @@ func sigKill() {
 	} else {
 		mainlog.WithError(err).Info("sigKill - Could not read pidfle")
 	}
+}
+
+// exponentialBackoff sleeps in nanoseconds, according to this formula 2^(i-1) * 25 / 2
+func exponentialBackoff(i int) {
+	time.Sleep(time.Duration(math.Round(math.Pow(3.0, float64(i))-1.0)*100.0/2.0) * time.Millisecond)
+}
+
+var grepNotFound error
+
+// grepTestlog looks for the `match` string in the testlog
+// the lineNumber indicates what line to start the search from
+// returns line number it was found on
+// error otherwise
+//
+// It will attempt to search the log multiple times, pausing loner for each re-try
+//
+func grepTestlog(match string, lineNumber int) (found int, err error) {
+	found = 0
+	fd, err := os.Open("../../tests/testlog")
+	if err != nil {
+		return found, err
+	}
+	defer func() {
+		_ = fd.Close()
+	}()
+	buff := bufio.NewReader(fd)
+	var ln int
+	var line string
+	for tries := 0; tries < 6; tries++ {
+		//fmt.Println("try..", tries)
+		for {
+			ln++
+			line, err = buff.ReadString('\n')
+			if err != nil {
+				break
+			}
+			if ln > lineNumber {
+				//fmt.Print(ln, line)
+				if i := strings.Index(line, match); i != -1 {
+					return ln, nil
+				}
+			}
+		}
+		if err != nil && err != io.EOF {
+			return found, err
+		}
+		//fmt.Println("wait..")
+
+		err = fd.Close()
+		if err != nil {
+			return 0, err
+		}
+		fd = nil
+
+		// sleep
+		exponentialBackoff(tries)
+		_ = mainlog.Reopen()
+
+		// re-open
+		fd, err = os.OpenFile("../../tests/testlog", os.O_RDONLY, 0644)
+		if err != nil {
+			return found, err
+		}
+		buff.Reset(fd)
+
+		/*
+			_, err = fd.WriteString("moo")
+
+			if err != nil {
+				return 0, err
+			}
+			fd.Sync()
+		*/
+		//buff = bufio.NewReader(fd)
+
+		ln = 0
+	}
+
+	grepNotFound = errors.New("could not find " + match + " in tests/testlog after line" + strconv.Itoa(lineNumber))
+	return found, grepNotFound
+}
+
+func TestGrep(t *testing.T) {
+	found, err := grepTestlog("pids", 3)
+	fmt.Println(found, err)
 
 }
 
@@ -617,17 +707,25 @@ func TestServerAddEvent(t *testing.T) {
 	serveWG.Wait()
 
 	// did backend started as expected?
-	fd, err := os.Open("../../tests/testlog")
-	if err != nil {
-		t.Error(err)
+	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
+		t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
 	}
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "New server added [127.0.0.1:2526]"); i < 0 {
-			t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
+	/*
+		fd, err := os.Open("../../tests/testlog")
+		if err != nil {
+			t.Error(err)
 		}
-	}
+		if read, err := ioutil.ReadAll(fd); err == nil {
+			logOutput := string(read)
+			//fmt.Println(logOutput)
+			if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
+				t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
+			}
+			if i := strings.Index(logOutput, "New server added [127.0.0.1:2526]"); i < 0 {
+				t.Error("Did not add [127.0.0.1:2526], most likely because Bus.Subscribe(\"server_change:new_server\" didnt fire")
+			}
+		}
+	*/
 }
 
 // Start with configJsonA.json,
@@ -969,7 +1067,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
+	//defer cleanTestArtifacts(t)
 	mainlog, err = getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
@@ -992,7 +1090,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+	//time.Sleep(testPauseDuration)
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
@@ -1052,7 +1150,7 @@ func TestTLSConfigEvent(t *testing.T) {
 
 	sigHup()
 
-	time.Sleep(testPauseDuration * 2) // pause for config to reload
+	//time.Sleep(testPauseDuration * 2) // pause for config to reload
 	testTlsHandshake()
 
 	//time.Sleep(testPauseDuration)
@@ -1060,6 +1158,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	sigKill()
 	serveWG.Wait()
 	// did backend started as expected?
+	//mainlog.Reopen()
 	fd, err := os.Open("../../tests/testlog")
 	if err != nil {
 		t.Error(err)
