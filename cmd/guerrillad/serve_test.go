@@ -820,11 +820,9 @@ func TestServerStopEvent(t *testing.T) {
 	}
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-	var serveWG sync.WaitGroup
-	serveWG.Add(1)
+
 	go func() {
 		serve(cmd, []string{})
-		serveWG.Done()
 	}()
 	// allow the server to start
 	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
@@ -889,13 +887,12 @@ func TestServerStopEvent(t *testing.T) {
 	if _, _, err := test.Connect(newConf.Servers[1], 20); err == nil {
 		t.Error("127.0.0.1:2228 was disabled, but still accepting connections", newConf.Servers[1].ListenInterface)
 	}
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
+	// shutdown wait for exit
+	d.Shutdown()
 
 	// did backend started as expected?
-	if _, err := grepTestlog("Server [127.0.0.1:2228] stopped", 30); err != nil {
-		t.Error("did not stop [127.0.0.1:2228]")
+	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+		t.Error("server didn't stop")
 	}
 }
 
