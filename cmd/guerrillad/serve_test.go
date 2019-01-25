@@ -1023,9 +1023,13 @@ func TestAllowedHostsEvent(t *testing.T) {
 		_ = conn.Close()
 	}
 
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
+	// shutdown wait for exit
+	d.Shutdown()
+
+	// did backend started as expected?
+	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+		t.Error("server didn't stop")
+	}
 
 }
 
