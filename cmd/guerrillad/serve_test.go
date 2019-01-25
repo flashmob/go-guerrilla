@@ -628,6 +628,11 @@ func TestServe(t *testing.T) {
 		t.Error("Dummy backend not restarted")
 	}
 
+	// wait for shutdown
+	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+		t.Error("server didn't stop")
+	}
+
 }
 
 // Start with configJsonA.json,
@@ -674,7 +679,6 @@ func TestServerAddEvent(t *testing.T) {
 	newConf := conf                                      // copy the cmdConfg
 	newConf.Servers = append(newConf.Servers, newServer) // add the new server
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		//fmt.Println(string(jsonbytes))
 		if err := ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
 			t.Error(err)
 		}
@@ -737,13 +741,12 @@ func TestServerStartEvent(t *testing.T) {
 	}
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-	var serveWG sync.WaitGroup
-	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
-		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+		t.Error("server didn't start")
+	}
 	// now change the config by adding a server
 	conf := &guerrilla.AppConfig{}                        // blank one
 	if err = conf.Load([]byte(configJsonA)); err != nil { // load configJsonA
@@ -761,8 +764,13 @@ func TestServerStartEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
 
+	// see if the new server started?
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+		t.Error("second server didn't start")
+	}
+
+	// can we talk to it?
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
 	} else {
@@ -775,21 +783,13 @@ func TestServerStartEvent(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	// send kill signal and wait for exit
-	sigKill()
-	serveWG.Wait()
-	// did backend started as expected?
-	fd, err := os.Open("../../tests/testlog")
-	if err != nil {
-		t.Error(err)
+	// shutdown and wait for exit
+	d.Shutdown()
+
+	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+		t.Error("server didn't stop")
 	}
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Starting server [127.0.0.1:2228]"); i < 0 {
-			t.Error("did not add [127.0.0.1:2228], most likely because Bus.Subscribe(\"server_change:start_server\" didnt fire")
-		}
-	}
+
 }
 
 // Start with configJsonA.json,
@@ -826,14 +826,17 @@ func TestServerStopEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+	// allow the server to start
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+		t.Error("server didn't start")
+	}
 	// now change the config by enabling a server
 	conf := &guerrilla.AppConfig{}                        // blank one
 	if err = conf.Load([]byte(configJsonA)); err != nil { // load configJsonA
 		t.Error(err)
 	}
-	newConf := conf // copy the cmdConfg
-	newConf.Servers[1].IsEnabled = true
+	newConf := conf                     // copy the cmdConfg
+	newConf.Servers[1].IsEnabled = true // enable 2nd server
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		//fmt.Println(string(jsonbytes))
 		if err = ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
@@ -844,7 +847,10 @@ func TestServerStopEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
+	// detect config change
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+		t.Error("new server didn't start")
+	}
 
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
@@ -874,7 +880,10 @@ func TestServerStopEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
+	// detect config change
+	if _, err := grepTestlog("Server [127.0.0.1:2228] has stopped accepting new clients", 27); err != nil {
+		t.Error("127.0.0.1:2228 did not stop")
+	}
 
 	// it should not connect to the server
 	if _, _, err := test.Connect(newConf.Servers[1], 20); err == nil {
@@ -885,15 +894,9 @@ func TestServerStopEvent(t *testing.T) {
 	serveWG.Wait()
 
 	// did backend started as expected?
-	fd, _ := os.Open("../../tests/testlog")
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Server [127.0.0.1:2228] stopped"); i < 0 {
-			t.Error("did not stop [127.0.0.1:2228], most likely because Bus.Subscribe(\"server_change:stop_server\" didnt fire")
-		}
+	if _, err := grepTestlog("Server [127.0.0.1:2228] stopped", 30); err != nil {
+		t.Error("did not stop [127.0.0.1:2228]")
 	}
-
 }
 
 // just a utility for debugging when using the debugger, skipped by default
@@ -954,13 +957,15 @@ func TestAllowedHostsEvent(t *testing.T) {
 	cmd := &cobra.Command{}
 	configPath = "configJsonD.json"
 	var serveWG sync.WaitGroup
-	time.Sleep(testPauseDuration)
 	serveWG.Add(1)
 	go func() {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+		t.Error("server didn't start")
+	}
 
 	// now connect and try RCPT TO with an invalid host
 	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
@@ -995,7 +1000,11 @@ func TestAllowedHostsEvent(t *testing.T) {
 	}
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
+
+	if _, err := grepTestlog("allowed_hosts config changed", 0); err != nil {
+		t.Error("allowed_hosts config not changed")
+		t.FailNow()
+	}
 
 	// now repeat the same conversion, RCPT TO should be accepted
 	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
@@ -1020,22 +1029,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	// send kill signal and wait for exit
 	sigKill()
 	serveWG.Wait()
-	// did backend started as expected?
-	if fd, err := os.Open("../../tests/testlog"); err != nil {
-		t.Error(err)
-		t.FailNow()
-	} else {
-		if read, err := ioutil.ReadAll(fd); err == nil {
-			logOutput := string(read)
-			//fmt.Println(logOutput)
-			if i := strings.Index(logOutput, "allowed_hosts config changed, a new list was set"); i < 0 {
-				t.Errorf("did not change allowed_hosts, most likely because Bus.Subscribe(\"%s\" didnt fire",
-					guerrilla.EventConfigAllowedHosts)
-			}
-		} else {
-			t.Error(err)
-		}
-	}
+
 }
 
 // Test TLS config change event
@@ -1074,7 +1068,11 @@ func TestTLSConfigEvent(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+
+	// wait for server to start
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+		t.Error("server didn't start")
+	}
 
 	// Test STARTTLS handshake
 	testTlsHandshake := func() {
@@ -1101,7 +1099,6 @@ func TestTLSConfigEvent(t *testing.T) {
 								conn = tlsConn
 								mainlog.Info("TLS Handshake succeeded")
 							}
-
 						}
 					}
 				}
@@ -1118,7 +1115,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	if err := deleteIfExists("../../tests/mail2.guerrillamail.com.key.pem"); err != nil {
 		t.Error("could not delete ../../tests/mail2.guerrillamail.com.key.pem", err)
 	}
-
+	time.Sleep(testPauseDuration) // need to pause so that the new certs have different timestamps!
 	// generate a new cert
 	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
@@ -1134,27 +1131,21 @@ func TestTLSConfigEvent(t *testing.T) {
 
 	sigHup()
 
-	//time.Sleep(testPauseDuration * 2) // pause for config to reload
+	// wait for config to reload
+	if _, err := grepTestlog("Server [127.0.0.1:4655] re-opened", 0); err != nil {
+		t.Error("server didn't catch sighup")
+	}
+
+	// test again
 	testTlsHandshake()
 
 	//time.Sleep(testPauseDuration)
 	// send kill signal and wait for exit
 	sigKill()
 	serveWG.Wait()
-	// did backend started as expected?
-	//mainlog.Reopen()
-	fd, err := os.Open("../../tests/testlog")
-	if err != nil {
-		t.Error(err)
-	}
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Server [127.0.0.1:2552] new TLS configuration loaded"); i < 0 {
-			t.Error("did not change tls, most likely because Bus.Subscribe(\"server_change:tls_config\" didnt fire")
-		}
-	} else {
-		t.Error(err)
+	// did tls configuration reload as expected?
+	if _, err := grepTestlog("new TLS configuration loaded", 0); err != nil {
+		t.Error("server didn't catch sighup")
 	}
 
 }
@@ -1168,7 +1159,6 @@ func TestBadTLSStart(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
 	// Need to run the test in a different process by executing a command
 	// because the serve() does os.Exit when starting with a bad TLS config
 	if os.Getenv("BE_CRASHER") == "1" {
@@ -1197,6 +1187,7 @@ func TestBadTLSStart(t *testing.T) {
 			serve(cmd, []string{})
 			serveWG.Done()
 		}()
+		// it should exit by now because the TLS config is incorrect
 		time.Sleep(testPauseDuration)
 
 		sigKill()
@@ -1204,13 +1195,18 @@ func TestBadTLSStart(t *testing.T) {
 
 		return
 	}
+	defer cleanTestArtifacts(t)
+
 	cmd := exec.Command(os.Args[0], "-test.run=TestBadTLSStart")
 	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
 	err = cmd.Run()
 	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
+		if _, err := grepTestlog("level=fatal", 0); err != nil {
+			t.Error("server didn't exit with a fatal error")
+		}
 		return
 	}
-	t.Error("Server started with a bad TLS config, was expecting exit status 1")
+	t.Error("Server started with a bad TLS config, was expecting exit status 0")
 
 }
 
@@ -1249,7 +1245,10 @@ func TestBadTLSReload(t *testing.T) {
 		serve(cmd, []string{})
 		serveWG.Done()
 	}()
-	time.Sleep(testPauseDuration)
+	// wait for server to start
+	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
+		t.Error("server didn't start")
+	}
 
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
@@ -1284,7 +1283,10 @@ func TestBadTLSReload(t *testing.T) {
 	}
 	// send a sighup signal to the server to reload config
 	sigHup()
-	time.Sleep(testPauseDuration) // pause for config to reload
+	// did the config reload reload event fire?
+	if _, err := grepTestlog("could not read config file", 0); err != nil {
+		t.Error("config reload event didnt fire")
+	}
 
 	// we should still be able to to talk to it
 
@@ -1302,18 +1304,6 @@ func TestBadTLSReload(t *testing.T) {
 	sigKill()
 	serveWG.Wait()
 
-	// did config reload fail as expected?
-	fd, err := os.Open("../../tests/testlog")
-	if err != nil {
-		t.Error(err)
-	}
-	if read, err := ioutil.ReadAll(fd); err == nil {
-		logOutput := string(read)
-		//fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "cannot use TLS config for"); i < 0 {
-			t.Error("[127.0.0.1:2552] did not reject our tls config as expected")
-		}
-	}
 }
 
 // Test for when the server config Timeout value changes
