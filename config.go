@@ -49,7 +49,7 @@ type ServerConfig struct {
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
 
-	// MaxClients controls how many maxiumum clients we can handle at once.
+	// MaxClients controls how many maximum clients we can handle at once.
 	// Defaults to defaultMaxClients
 	MaxClients int `json:"max_clients"`
 	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off".
@@ -88,7 +88,7 @@ type ServerTLSConfig struct {
 	// Use Go's default if empty
 	ClientAuthType string `json:"client_auth_type,omitempty"`
 	// controls whether the server selects the
-	// client's most preferred ciphersuite
+	// client's most preferred cipher suite
 	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
 
 	// The following used to watch certificate changes so that the TLS can be reloaded

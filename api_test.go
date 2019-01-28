@@ -212,7 +212,9 @@ func TestSMTPLoadFile(t *testing.T) {
 			return
 		}
 
-		d.ReloadConfigFile("goguerrilla.conf.api")
+		if err = d.ReloadConfigFile("goguerrilla.conf.api"); err != nil {
+			t.Error(err)
+		}
 
 		if d.Config.LogFile != "./tests/testlog2" {
 			t.Error("d.Config.LogFile != \"./tests/testlog\"")
@@ -227,7 +229,9 @@ func TestSMTPLoadFile(t *testing.T) {
 }
 
 func TestReopenLog(t *testing.T) {
-	os.Truncate("test/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	cfg := &AppConfig{LogFile: "tests/testlog"}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
@@ -240,7 +244,9 @@ func TestReopenLog(t *testing.T) {
 	if err != nil {
 		t.Error("start error", err)
 	} else {
-		d.ReopenLogs()
+		if err = d.ReopenLogs(); err != nil {
+			t.Error(err)
+		}
 		time.Sleep(time.Second * 2)
 
 		d.Shutdown()
@@ -261,7 +267,9 @@ func TestReopenLog(t *testing.T) {
 
 func TestSetConfig(t *testing.T) {
 
-	os.Truncate("test/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	cfg := AppConfig{LogFile: "tests/testlog"}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
@@ -305,7 +313,9 @@ func TestSetConfig(t *testing.T) {
 
 func TestSetConfigError(t *testing.T) {
 
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	cfg := AppConfig{LogFile: "tests/testlog"}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
@@ -369,7 +379,9 @@ var funkyLogger = func() backends.Decorator {
 
 // How about a custom processor?
 func TestSetAddProcessor(t *testing.T) {
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	cfg := &AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -381,9 +393,13 @@ func TestSetAddProcessor(t *testing.T) {
 	d := Daemon{Config: cfg}
 	d.AddProcessor("FunkyLogger", funkyLogger)
 
-	d.Start()
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
 	// lets have a talk with the server
-	talkToServer("127.0.0.1:2525")
+	if err := talkToServer("127.0.0.1:2525"); err != nil {
+		t.Error(err)
+	}
 
 	d.Shutdown()
 
@@ -410,38 +426,87 @@ func TestSetAddProcessor(t *testing.T) {
 
 }
 
-func talkToServer(address string) {
+func talkToServer(address string) (err error) {
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-
 		return
 	}
 	in := bufio.NewReader(conn)
 	str, err := in.ReadString('\n')
-	fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
+	if err != nil {
+		return err
+	}
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+	if err != nil {
+		return err
+	}
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
+	if err != nil {
+		return err
+	}
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "DATA\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "DATA\r\n")
+	if err != nil {
+		return err
+	}
 	str, err = in.ReadString('\n')
-	fmt.Fprint(conn, "Subject: Test subject\r\n")
-	fmt.Fprint(conn, "\r\n")
-	fmt.Fprint(conn, "A an email body\r\n")
-	fmt.Fprint(conn, ".\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "A an email body\r\n")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, ".\r\n")
+	if err != nil {
+		return err
+	}
 	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
 	_ = str
+	return nil
 }
 
 // Test hot config reload
 // Here we forgot to add FunkyLogger so backend will fail to init
 
 func TestReloadConfig(t *testing.T) {
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	d := Daemon{}
-	d.Start()
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
 	defer d.Shutdown()
 	cfg := AppConfig{
 		LogFile:      "tests/testlog",
@@ -452,16 +517,22 @@ func TestReloadConfig(t *testing.T) {
 		},
 	}
 	// Look mom, reloading the config without shutting down!
-	d.ReloadConfig(cfg)
+	if err := d.ReloadConfig(cfg); err != nil {
+		t.Error(err)
+	}
 
 }
 
 func TestPubSubAPI(t *testing.T) {
 
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 
 	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
-	d.Start()
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
 	defer d.Shutdown()
 	// new config
 	cfg := AppConfig{
@@ -482,14 +553,22 @@ func TestPubSubAPI(t *testing.T) {
 		}
 		d.Logger.Info("number", i)
 	}
-	d.Subscribe(EventConfigPidFile, pidEvHandler)
+	if err := d.Subscribe(EventConfigPidFile, pidEvHandler); err != nil {
+		t.Error(err)
+	}
 
-	d.ReloadConfig(cfg)
+	if err := d.ReloadConfig(cfg); err != nil {
+		t.Error(err)
+	}
 
-	d.Unsubscribe(EventConfigPidFile, pidEvHandler)
+	if err := d.Unsubscribe(EventConfigPidFile, pidEvHandler); err != nil {
+		t.Error(err)
+	}
 	cfg.PidFile = "tests/pidfile2.pid"
 	d.Publish(EventConfigPidFile, &cfg)
-	d.ReloadConfig(cfg)
+	if err := d.ReloadConfig(cfg); err != nil {
+		t.Error(err)
+	}
 
 	b, err := ioutil.ReadFile("tests/testlog")
 	if err != nil {
@@ -504,7 +583,9 @@ func TestPubSubAPI(t *testing.T) {
 }
 
 func TestAPILog(t *testing.T) {
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	d := Daemon{}
 	l := d.Log()
 	l.Info("logtest1") // to stderr
@@ -540,7 +621,9 @@ func TestSkipAllowsHost(t *testing.T) {
 	defer d.Shutdown()
 	// setting the allowed hosts to a single entry with a dot will let any host through
 	d.Config = &AppConfig{AllowedHosts: []string{"."}, LogFile: "off"}
-	d.Start()
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
 
 	conn, err := net.Dial("tcp", d.Config.Servers[0].ListenInterface)
 	if err != nil {
@@ -548,10 +631,19 @@ func TestSkipAllowsHost(t *testing.T) {
 		return
 	}
 	in := bufio.NewReader(conn)
-	fmt.Fprint(conn, "HELO test\r\n")
-	fmt.Fprint(conn, "RCPT TO:<test@funkyhost.com>\r\n")
-	in.ReadString('\n')
-	in.ReadString('\n')
+	if _, err := fmt.Fprint(conn, "HELO test\r\n"); err != nil {
+		t.Error(err)
+	}
+	if _, err := fmt.Fprint(conn, "RCPT TO:<test@funkyhost.com>\r\n"); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := in.ReadString('\n'); err != nil {
+		t.Error(err)
+	}
+	if _, err := in.ReadString('\n'); err != nil {
+		t.Error(err)
+	}
 	str, _ := in.ReadString('\n')
 	if strings.Index(str, "250") != 0 {
 		t.Error("expected 250 reply, got:", str)
@@ -578,7 +670,9 @@ var customBackend2 = func() backends.Decorator {
 
 // Test a custom backend response
 func TestCustomBackendResult(t *testing.T) {
-	os.Truncate("tests/testlog", 0)
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
 	cfg := &AppConfig{
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
@@ -594,7 +688,9 @@ func TestCustomBackendResult(t *testing.T) {
 		t.Error(err)
 	}
 	// lets have a talk with the server
-	talkToServer("127.0.0.1:2525")
+	if err := talkToServer("127.0.0.1:2525"); err != nil {
+		t.Error(err)
+	}
 
 	d.Shutdown()
 

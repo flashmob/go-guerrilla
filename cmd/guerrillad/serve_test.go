@@ -431,7 +431,6 @@ func deleteIfExists(filename string) error {
 	return nil
 }
 
-// todo move pidfile to test // ../../tests/
 func cleanTestArtifacts(t *testing.T) {
 
 	if err := truncateIfExists("../../tests/testlog"); err != nil {

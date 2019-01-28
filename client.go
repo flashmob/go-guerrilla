@@ -115,7 +115,7 @@ func (c *client) sendResponse(r ...interface{}) {
 // Transaction ends on:
 // -HELO/EHLO/REST command
 // -End of DATA command
-// TLS handhsake
+// TLS handshake
 func (c *client) resetTransaction() {
 	c.Envelope.ResetTransaction()
 }
