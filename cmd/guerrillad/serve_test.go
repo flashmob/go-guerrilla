@@ -290,7 +290,7 @@ var configJsonE = `
 }
 `
 
-const testPauseDuration = time.Millisecond * 600
+const testPauseDuration = time.Millisecond * 1010
 
 // reload config
 func sigHup() {
@@ -473,7 +473,7 @@ func cleanTestArtifacts(t *testing.T) {
 
 // make sure that we get all the config change events
 func TestCmdConfigChangeEvents(t *testing.T) {
-
+	defer cleanTestArtifacts(t)
 	var err error
 	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
@@ -505,7 +505,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
@@ -559,14 +558,14 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
-
+	defer cleanTestArtifacts(t)
 	var err error
 	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
+
 	mainlog, err = getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
