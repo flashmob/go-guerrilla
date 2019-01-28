@@ -373,7 +373,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 		if err != nil && err != io.EOF {
 			return found, err
 		}
-		//fmt.Println("wait..")
 
 		err = fd.Close()
 		if err != nil {
@@ -391,16 +390,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 			return found, err
 		}
 		buff.Reset(fd)
-
-		/*
-			_, err = fd.WriteString("moo")
-
-			if err != nil {
-				return 0, err
-			}
-			fd.Sync()
-		*/
-		//buff = bufio.NewReader(fd)
 
 		ln = 0
 	}
@@ -963,7 +952,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-
+	// wait for start
 	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
 		t.Error("server didn't start")
 	}
@@ -1298,9 +1287,9 @@ func TestBadTLSReload(t *testing.T) {
 	}
 	// send a sighup signal to the server to reload config
 	sigHup()
-	// did the config reload reload event fire?
+	// did the config reload reload event fire? There should be config read error
 	if _, err := grepTestlog("could not read config file", 0); err != nil {
-		t.Error("config reload event didnt fire")
+		t.Error("was expecting an error reading config")
 	}
 
 	// we should still be able to to talk to it
@@ -1356,6 +1345,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
+	// wait for start
 	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
 		t.Error("server didn't start")
 	}
@@ -1548,6 +1538,10 @@ func TestBadBackendReload(t *testing.T) {
 			t.Error("config didn't update")
 		}
 		// did the pidfile change as expected?
+
+		if _, err := grepTestlog("pid_file (./pidfile2.pid) written", 0); err != nil {
+			t.Error("pid_file (./pidfile2.pid) not written")
+		}
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
 			t.Error("pidfile not changed after sighup SIGHUP", err)
 		}
