@@ -21,7 +21,9 @@ func sendMail(i int) {
 	if err != nil {
 		lastWords("Dial ", err)
 	}
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+	}()
 
 	from := "somebody@gmail.com"
 	to := "somebody.else@gmail.com"
@@ -38,7 +40,9 @@ func sendMail(i int) {
 	if err != nil {
 		lastWords("Data ", err)
 	}
-	defer wr.Close()
+	defer func() {
+		_ = wr.Close()
+	}()
 
 	msg := fmt.Sprint("Subject: something\n")
 	msg += "From: " + from + "\n"

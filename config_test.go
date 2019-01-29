@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-func init() {
-	testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/")
-}
-
 // a configuration file with a dummy backend
 
 //
@@ -114,8 +110,8 @@ var configJsonB = `
             "listen_interface":"127.0.0.1:2526",
             "max_clients": 3,
 			"tls" : {
- 				"private_key_file":"./config_test.go",
-            	"public_key_file":"./config_test.go",
+ 				"private_key_file":"./tests/mail2.guerrillamail.com.key.pem",
+            	"public_key_file": "./tests/mail2.guerrillamail.com.cert.pem",
 				"start_tls_on":false,
             	"tls_always_on":true
 			}
@@ -161,7 +157,7 @@ var configJsonB = `
 			"tls" : {
 				"private_key_file":"config_test.go",
             	"public_key_file":"config_test.go",
-				"start_tls_on":true,
+				"start_tls_on":false,
             	"tls_always_on":false
 			}
         }
@@ -170,6 +166,18 @@ var configJsonB = `
 `
 
 func TestConfigLoad(t *testing.T) {
+	if err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/"); err != nil {
+		t.Error(err)
+	}
+	defer func() {
+		if err := deleteIfExists("../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+			t.Error(err)
+		}
+		if err := deleteIfExists("../tests/mail2.guerrillamail.com.key.pem"); err != nil {
+			t.Error(err)
+		}
+	}()
+
 	ac := &AppConfig{}
 	if err := ac.Load([]byte(configJsonA)); err != nil {
 		t.Error("Cannot load config |", err)
@@ -205,9 +213,22 @@ func TestSampleConfig(t *testing.T) {
 
 // make sure that we get all the config change events
 func TestConfigChangeEvents(t *testing.T) {
+	if err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "./tests/"); err != nil {
+		t.Error(err)
+	}
+	defer func() {
+		if err := deleteIfExists("../tests/mail2.guerrillamail.com.cert.pem"); err != nil {
+			t.Error(err)
+		}
+		if err := deleteIfExists("../tests/mail2.guerrillamail.com.key.pem"); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	oldconf := &AppConfig{}
-	oldconf.Load([]byte(configJsonA))
+	if err := oldconf.Load([]byte(configJsonA)); err != nil {
+		t.Error(err)
+	}
 	logger, _ := log.GetLogger(oldconf.LogFile, oldconf.LogLevel)
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, logger)
@@ -221,10 +242,16 @@ func TestConfigChangeEvents(t *testing.T) {
 	// simulate timestamp change
 
 	time.Sleep(time.Second + time.Millisecond*500)
-	os.Chtimes(oldconf.Servers[1].TLS.PrivateKeyFile, time.Now(), time.Now())
-	os.Chtimes(oldconf.Servers[1].TLS.PublicKeyFile, time.Now(), time.Now())
+	if err := os.Chtimes(oldconf.Servers[1].TLS.PrivateKeyFile, time.Now(), time.Now()); err != nil {
+		t.Error(err)
+	}
+	if err := os.Chtimes(oldconf.Servers[1].TLS.PublicKeyFile, time.Now(), time.Now()); err != nil {
+		t.Error(err)
+	}
 	newconf := &AppConfig{}
-	newconf.Load([]byte(configJsonB))
+	if err := newconf.Load([]byte(configJsonB)); err != nil {
+		t.Error(err)
+	}
 	newconf.Servers[0].LogFile = log.OutputOff.String() // test for log file change
 	newconf.LogLevel = log.InfoLevel.String()
 	newconf.LogFile = "off"
@@ -253,14 +280,14 @@ func TestConfigChangeEvents(t *testing.T) {
 				f := func(c *AppConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
+				_ = app.Subscribe(event, f)
 				toUnsubscribe[event] = f
 			} else {
 				// must be a server config change then
 				f := func(c *ServerConfig) {
 					expectedEvents[e] = true
 				}
-				app.Subscribe(event, f)
+				_ = app.Subscribe(event, f)
 				toUnsubscribeSrv[event] = f
 			}
 
@@ -271,10 +298,10 @@ func TestConfigChangeEvents(t *testing.T) {
 	newconf.EmitChangeEvents(oldconf, app)
 	// unsubscribe
 	for unevent, unfun := range toUnsubscribe {
-		app.Unsubscribe(unevent, unfun)
+		_ = app.Unsubscribe(unevent, unfun)
 	}
 	for unevent, unfun := range toUnsubscribeSrv {
-		app.Unsubscribe(unevent, unfun)
+		_ = app.Unsubscribe(unevent, unfun)
 	}
 	for event, val := range expectedEvents {
 		if val == false {
@@ -285,5 +312,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	}
 
 	// don't forget to reset
-	os.Truncate(oldconf.LogFile, 0)
+	if err := os.Truncate(oldconf.LogFile, 0); err != nil {
+		t.Error(err)
+	}
 }
