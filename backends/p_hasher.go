@@ -38,13 +38,13 @@ func Hasher() Decorator {
 				// base hash, use subject from and timestamp-nano
 				h := md5.New()
 				ts := fmt.Sprintf("%d", time.Now().UnixNano())
-				io.Copy(h, strings.NewReader(e.MailFrom.String()))
-				io.Copy(h, strings.NewReader(e.Subject))
-				io.Copy(h, strings.NewReader(ts))
+				_, _ = io.Copy(h, strings.NewReader(e.MailFrom.String()))
+				_, _ = io.Copy(h, strings.NewReader(e.Subject))
+				_, _ = io.Copy(h, strings.NewReader(ts))
 				// using the base hash, calculate a unique hash for each recipient
 				for i := range e.RcptTo {
 					h2 := h
-					io.Copy(h2, strings.NewReader(e.RcptTo[i].String()))
+					_, _ = io.Copy(h2, strings.NewReader(e.RcptTo[i].String()))
 					sum := h2.Sum([]byte{})
 					e.Hashes = append(e.Hashes, fmt.Sprintf("%x", sum))
 				}

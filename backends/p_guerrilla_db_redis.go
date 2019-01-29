@@ -130,9 +130,9 @@ func (c *compressedData) String() string {
 	var r *bytes.Reader
 	w, _ := zlib.NewWriterLevel(b, zlib.BestSpeed)
 	r = bytes.NewReader(c.extraHeaders)
-	io.Copy(w, r)
-	io.Copy(w, c.data)
-	w.Close()
+	_, _ = io.Copy(w, r)
+	_, _ = io.Copy(w, c.data)
+	_ = w.Close()
 	return b.String()
 }
 
@@ -150,9 +150,25 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	if g.cache[rows-1] != nil {
 		return g.cache[rows-1]
 	}
-	sqlstr := "INSERT INTO " + g.config.Table + " "
-	sqlstr += "(`date`, `to`, `from`, `subject`, `body`, `charset`, `mail`, `spam_score`, `hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, `return_path`, `is_tls`)"
-	sqlstr += " values "
+	sqlstr := "INSERT INTO %s " + g.config.Table + "" +
+		"(" +
+		"`date`, " +
+		"`to`, " +
+		"`from`, " +
+		"`subject`, " +
+		"`body`, " +
+		"`charset`, " +
+		"`mail`, " +
+		"`spam_score`, " +
+		"`hash`, " +
+		"`content_type`, " +
+		"`recipient`, " +
+		"`has_attach`, " +
+		"`ip_addr`, " +
+		"`return_path`, " +
+		"`is_tls`" +
+		")" +
+		" values "
 	values := "(NOW(), ?, ?, ?, ? , 'UTF-8' , ?, 0, ?, '', ?, 0, ?, ?, ?)"
 	// add more rows
 	comma := ""
@@ -346,12 +362,12 @@ func GuerrillaDbRedis() Decorator {
 	g := GuerrillaDBAndRedisBackend{}
 	redisClient := &redisClient{}
 
-	var db *sql.DB
-	var to, body string
-
-	var redisErr error
-
-	var feeders []feedChan
+	var (
+		db       *sql.DB
+		to, body string
+		redisErr error
+		feeders  []feedChan
+	)
 
 	g.batcherStoppers = make([]chan bool, 0)
 
@@ -387,11 +403,17 @@ func GuerrillaDbRedis() Decorator {
 	}))
 
 	Svc.AddShutdowner(ShutdownWith(func() error {
-		db.Close()
-		Log().Infof("closed sql")
+		if err := db.Close(); err != nil {
+			Log().WithError(err).Error("close mysql failed")
+		} else {
+			Log().Infof("closed mysql")
+		}
 		if redisClient.conn != nil {
-			Log().Infof("closed redis")
-			redisClient.conn.Close()
+			if err := redisClient.conn.Close(); err != nil {
+				Log().WithError(err).Error("close redis failed")
+			} else {
+				Log().Infof("closed redis")
+			}
 		}
 		// send a close signal to all query batchers to exit.
 		for i := range g.batcherStoppers {
@@ -413,7 +435,9 @@ func GuerrillaDbRedis() Decorator {
 				e.Helo = trimToLimit(e.Helo, 255)
 				e.RcptTo[0].Host = trimToLimit(e.RcptTo[0].Host, 255)
 				ts := fmt.Sprintf("%d", time.Now().UnixNano())
-				e.ParseHeaders()
+				if err := e.ParseHeaders(); err != nil {
+					Log().WithError(err).Error("failed to parse headers")
+				}
 				hash := MD5Hex(
 					to,
 					e.MailFrom.String(),
