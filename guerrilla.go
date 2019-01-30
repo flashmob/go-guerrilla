@@ -3,20 +3,21 @@ package guerrilla
 import (
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 const (
-	// server has just been created
-	GuerrillaStateNew = iota
-	// Server has been started and is running
-	GuerrillaStateStarted
-	// Server has just been stopped
-	GuerrillaStateStopped
+	// all configured servers were just been created
+	daemonStateNew = iota
+	// ... been started and running
+	daemonStateStarted
+	// ... been stopped
+	daemonStateStopped
 )
 
 type Errors []error
@@ -62,6 +63,9 @@ type backendStore struct {
 	atomic.Value
 }
 
+type daemonEvent func(c *AppConfig)
+type serverEvent func(sc *ServerConfig)
+
 // Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
 func (ls *logStore) mainlog() log.Logger {
 	if v, ok := ls.Load().(log.Logger); ok {
@@ -71,7 +75,7 @@ func (ls *logStore) mainlog() log.Logger {
 	return l
 }
 
-// storeMainlog stores the log value in an atomic operation
+// setMainlog stores the log value in an atomic operation
 func (ls *logStore) setMainlog(log log.Logger) {
 	ls.Store(log)
 }
@@ -92,17 +96,18 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 			}
 		}
 	}
+	// Write the process id (pid) to a file
+	// we should still be able to continue even if we can't write the pid, error will be logged by writePid()
+	_ = g.writePid()
 
-	g.state = GuerrillaStateNew
+	g.state = daemonStateNew
 	err := g.makeServers()
 
 	// start backend for processing email
 	err = g.backend().Start()
-
 	if err != nil {
 		return g, err
 	}
-	g.writePid()
 
 	// subscribe for any events that may come in while running
 	g.subscribeEvents()
@@ -136,7 +141,7 @@ func (g *guerrilla) makeServers() error {
 		}
 	}
 	if len(g.servers) == 0 {
-		errs = append(errs, errors.New("There are no servers that can start, please check your config"))
+		errs = append(errs, errors.New("there are no servers that can start, please check your config"))
 	}
 	if len(errs) == 0 {
 		return nil
@@ -191,13 +196,13 @@ func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
 // subscribeEvents subscribes event handlers for configuration change events
 func (g *guerrilla) subscribeEvents() {
 
+	events := map[Event]interface{}{}
 	// main config changed
-	g.Subscribe(EventConfigNewConfig, func(c *AppConfig) {
+	events[EventConfigNewConfig] = daemonEvent(func(c *AppConfig) {
 		g.setConfig(c)
 	})
-
 	// allowed_hosts changed, set for all servers
-	g.Subscribe(EventConfigAllowedHosts, func(c *AppConfig) {
+	events[EventConfigAllowedHosts] = daemonEvent(func(c *AppConfig) {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
 		})
@@ -205,7 +210,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// the main log file changed
-	g.Subscribe(EventConfigLogFile, func(c *AppConfig) {
+	events[EventConfigLogFile] = daemonEvent(func(c *AppConfig) {
 		var err error
 		var l log.Logger
 		if l, err = log.GetLogger(c.LogFile, c.LogLevel); err == nil {
@@ -222,13 +227,17 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// re-open the main log file (file not changed)
-	g.Subscribe(EventConfigLogReopen, func(c *AppConfig) {
-		g.mainlog().Reopen()
+	events[EventConfigLogReopen] = daemonEvent(func(c *AppConfig) {
+		err := g.mainlog().Reopen()
+		if err != nil {
+			g.mainlog().WithError(err).Errorf("main log file [%s] failed to re-open", c.LogFile)
+			return
+		}
 		g.mainlog().Infof("re-opened main log file [%s]", c.LogFile)
 	})
 
 	// when log level changes, apply to mainlog and server logs
-	g.Subscribe(EventConfigLogLevel, func(c *AppConfig) {
+	events[EventConfigLogLevel] = daemonEvent(func(c *AppConfig) {
 		l, err := log.GetLogger(g.mainlog().GetLogDest(), c.LogLevel)
 		if err == nil {
 			g.logStore.Store(l)
@@ -240,18 +249,18 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// write out our pid whenever the file name changes in the config
-	g.Subscribe(EventConfigPidFile, func(ac *AppConfig) {
-		g.writePid()
+	events[EventConfigPidFile] = daemonEvent(func(ac *AppConfig) {
+		_ = g.writePid()
 	})
 
 	// server config was updated
-	g.Subscribe(EventConfigServerConfig, func(sc *ServerConfig) {
+	events[EventConfigServerConfig] = serverEvent(func(sc *ServerConfig) {
 		g.setServerConfig(sc)
 		g.mainlog().Infof("server %s config change event, a new config has been saved", sc.ListenInterface)
 	})
 
 	// add a new server to the config & start
-	g.Subscribe(EventConfigServerNew, func(sc *ServerConfig) {
+	events[EventConfigServerNew] = serverEvent(func(sc *ServerConfig) {
 		g.mainlog().Debugf("event fired [%s] %s", EventConfigServerNew, sc.ListenInterface)
 		if _, err := g.findServer(sc.ListenInterface); err != nil {
 			// not found, lets add it
@@ -261,7 +270,7 @@ func (g *guerrilla) subscribeEvents() {
 				return
 			}
 			g.mainlog().Infof("New server added [%s]", sc.ListenInterface)
-			if g.state == GuerrillaStateStarted {
+			if g.state == daemonStateStarted {
 				err := g.Start()
 				if err != nil {
 					g.mainlog().WithError(err).Info("Event server_change:new_server returned errors when starting")
@@ -271,8 +280,9 @@ func (g *guerrilla) subscribeEvents() {
 			g.mainlog().Debugf("new event, but server already fund")
 		}
 	})
+
 	// start a server that already exists in the config and has been enabled
-	g.Subscribe(EventConfigServerStart, func(sc *ServerConfig) {
+	events[EventConfigServerStart] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
 				g.mainlog().Infof("Starting server [%s]", server.listenInterface)
@@ -283,8 +293,9 @@ func (g *guerrilla) subscribeEvents() {
 			}
 		}
 	})
+
 	// stop running a server
-	g.Subscribe(EventConfigServerStop, func(sc *ServerConfig) {
+	events[EventConfigServerStop] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if server.state == ServerStateRunning {
 				server.Shutdown()
@@ -292,8 +303,9 @@ func (g *guerrilla) subscribeEvents() {
 			}
 		}
 	})
+
 	// server was removed from config
-	g.Subscribe(EventConfigServerRemove, func(sc *ServerConfig) {
+	events[EventConfigServerRemove] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			server.Shutdown()
 			g.removeServer(sc.ListenInterface)
@@ -302,7 +314,7 @@ func (g *guerrilla) subscribeEvents() {
 	})
 
 	// TLS changes
-	g.Subscribe(EventConfigServerTLSConfig, func(sc *ServerConfig) {
+	events[EventConfigServerTLSConfig] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if err := server.configureSSL(); err == nil {
 				g.mainlog().Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
@@ -312,19 +324,19 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// when server's timeout change.
-	g.Subscribe(EventConfigServerTimeout, func(sc *ServerConfig) {
+	events[EventConfigServerTimeout] = serverEvent(func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			server.setTimeout(sc.Timeout)
 		})
 	})
 	// when server's max clients change.
-	g.Subscribe(EventConfigServerMaxClients, func(sc *ServerConfig) {
+	events[EventConfigServerMaxClients] = serverEvent(func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
 			// TODO resize the pool somehow
 		})
 	})
 	// when a server's log file changes
-	g.Subscribe(EventConfigServerLogFile, func(sc *ServerConfig) {
+	events[EventConfigServerLogFile] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			var err error
 			var l log.Logger
@@ -348,14 +360,17 @@ func (g *guerrilla) subscribeEvents() {
 		}
 	})
 	// when the daemon caught a sighup, event for individual server
-	g.Subscribe(EventConfigServerLogReopen, func(sc *ServerConfig) {
+	events[EventConfigServerLogReopen] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
-			server.log().Reopen()
+			if err = server.log().Reopen(); err != nil {
+				g.mainlog().WithError(err).Errorf("server [%s] log file [%s] failed to re-open", sc.ListenInterface, sc.LogFile)
+				return
+			}
 			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
 		}
 	})
 	// when the backend changes
-	g.Subscribe(EventConfigBackendConfig, func(appConfig *AppConfig) {
+	events[EventConfigBackendConfig] = daemonEvent(func(appConfig *AppConfig) {
 		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
 		// shutdown the backend first.
 		var err error
@@ -386,6 +401,19 @@ func (g *guerrilla) subscribeEvents() {
 			g.storeBackend(newBackend)
 		}
 	})
+	var err error
+	for topic, fn := range events {
+		switch f := fn.(type) {
+		case daemonEvent:
+			err = g.Subscribe(topic, f)
+		case serverEvent:
+			err = g.Subscribe(topic, f)
+		}
+		if err != nil {
+			g.mainlog().WithError(err).Errorf("failed to subscribe on topic [%s]", topic)
+			break
+		}
+	}
 
 }
 
@@ -408,16 +436,20 @@ func (g *guerrilla) Start() error {
 	var startErrors Errors
 	g.guard.Lock()
 	defer func() {
-		g.state = GuerrillaStateStarted
+		g.state = daemonStateStarted
 		g.guard.Unlock()
 	}()
 	if len(g.servers) == 0 {
-		return append(startErrors, errors.New("No servers to start, please check the config"))
+		return append(startErrors, errors.New("no servers to start, please check the config"))
 	}
-	if g.state == GuerrillaStateStopped {
+	if g.state == daemonStateStopped {
 		// when a backend is shutdown, we need to re-initialize before it can be started again
-		g.backend().Reinitialize()
-		g.backend().Start()
+		if err := g.backend().Reinitialize(); err != nil {
+			startErrors = append(startErrors, err)
+		}
+		if err := g.backend().Start(); err != nil {
+			startErrors = append(startErrors, err)
+		}
 	}
 	// channel for reading errors
 	errs := make(chan error, len(g.servers))
@@ -469,7 +501,7 @@ func (g *guerrilla) Shutdown() {
 
 	g.guard.Lock()
 	defer func() {
-		g.state = GuerrillaStateStopped
+		g.state = daemonStateStopped
 		defer g.guard.Unlock()
 	}()
 	if err := g.backend().Shutdown(); err != nil {
@@ -487,22 +519,52 @@ func (g *guerrilla) SetLogger(l log.Logger) {
 
 // writePid writes the pid (process id) to the file specified in the config.
 // Won't write anything if no file specified
-func (g *guerrilla) writePid() error {
-	if len(g.Config.PidFile) > 0 {
-		if f, err := os.Create(g.Config.PidFile); err == nil {
-			defer f.Close()
-			pid := os.Getpid()
-			if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err == nil {
-				f.Sync()
-				g.mainlog().Infof("pid_file (%s) written with pid:%v", g.Config.PidFile, pid)
-			} else {
-				g.mainlog().WithError(err).Errorf("Error while writing pidFile (%s)", g.Config.PidFile)
-				return err
+func (g *guerrilla) writePid() (err error) {
+	var f *os.File
+	defer func() {
+		if f != nil {
+			if closeErr := f.Close(); closeErr != nil {
+				err = closeErr
 			}
-		} else {
-			g.mainlog().WithError(err).Errorf("Error while creating pidFile (%s)", g.Config.PidFile)
+		}
+		if err != nil {
+			g.mainlog().WithError(err).Errorf("error while writing pidFile (%s)", g.Config.PidFile)
+		}
+	}()
+	if len(g.Config.PidFile) > 0 {
+		if f, err = os.Create(g.Config.PidFile); err != nil {
 			return err
 		}
+		pid := os.Getpid()
+		if _, err := f.WriteString(fmt.Sprintf("%d", pid)); err != nil {
+			return err
+		}
+		if err = f.Sync(); err != nil {
+			return err
+		}
+		g.mainlog().Infof("pid_file (%s) written with pid:%v", g.Config.PidFile, pid)
 	}
 	return nil
+}
+
+// CheckFileLimit checks the number of files we can open (works on OS'es that support the ulimit command)
+func CheckFileLimit(c *AppConfig) (bool, int, uint64) {
+	fileLimit, err := getFileLimit()
+	maxClients := 0
+	if err != nil {
+		// since we can't get the limit, return true to indicate the check passed
+		return true, maxClients, fileLimit
+	}
+	if c.Servers == nil {
+		// no servers have been configured, assuming default
+		maxClients = defaultMaxClients
+	} else {
+		for _, s := range c.Servers {
+			maxClients += s.MaxClients
+		}
+	}
+	if uint64(maxClients) > fileLimit {
+		return false, maxClients, fileLimit
+	}
+	return true, maxClients, fileLimit
 }

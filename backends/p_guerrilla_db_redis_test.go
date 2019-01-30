@@ -19,12 +19,16 @@ func TestCompressedData(t *testing.T) {
 	cd.set([]byte(sbj), &b)
 
 	// compress
-	fmt.Fprint(&out, cd)
+	if _, err := fmt.Fprint(&out, cd); err != nil {
+		t.Error(err)
+	}
 
 	// decompress
 	var result bytes.Buffer
 	zReader, _ := zlib.NewReader(bytes.NewReader(out.Bytes()))
-	io.Copy(&result, zReader)
+	if _, err := io.Copy(&result, zReader); err != nil {
+		t.Error(err)
+	}
 	expect := sbj + str
 	if delta := strings.Compare(expect, result.String()); delta != 0 {
 		t.Error(delta, "compression did match, expected", expect, "but got", result.String())

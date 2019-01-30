@@ -4,18 +4,6 @@ import (
 	"testing"
 )
 
-func TestClass(t *testing.T) {
-	if ClassPermanentFailure != 5 {
-		t.Error("ClassPermanentFailure is not 5")
-	}
-	if ClassTransientFailure != 4 {
-		t.Error("ClassTransientFailure is not 4")
-	}
-	if ClassSuccess != 2 {
-		t.Error("ClassSuccess is not 2")
-	}
-}
-
 func TestGetBasicStatusCode(t *testing.T) {
 	// Known status code
 	a := getBasicStatusCode(EnhancedStatusCode{2, OtherOrUndefinedProtocolStatus})

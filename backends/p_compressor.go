@@ -77,9 +77,9 @@ func (c *compressor) String() string {
 	var r *bytes.Reader
 	w, _ := zlib.NewWriterLevel(b, zlib.BestSpeed)
 	r = bytes.NewReader(c.extraHeaders)
-	io.Copy(w, r)
-	io.Copy(w, c.data)
-	w.Close()
+	_, _ = io.Copy(w, r)
+	_, _ = io.Copy(w, c.data)
+	_ = w.Close()
 	return b.String()
 }
 

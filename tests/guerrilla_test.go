@@ -62,10 +62,13 @@ func init() {
 	if err := json.Unmarshal([]byte(configJson), config); err != nil {
 		initErr = errors.New("Could not Unmarshal config," + err.Error())
 	} else {
-		setupCerts(config)
 		logger, _ = log.GetLogger(config.LogFile, "debug")
+		initErr = setupCerts(config)
+		if err != nil {
+			return
+		}
 		backend, _ := getBackend(config.BackendConfig, logger)
-		app, _ = guerrilla.New(&config.AppConfig, backend, logger)
+		app, initErr = guerrilla.New(&config.AppConfig, backend, logger)
 	}
 
 }
@@ -91,8 +94,8 @@ var configJson = `
             "max_clients": 2,
             "log_file" : "",
 			"tls" : {
-				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"private_key_file":"/this/will/be/ignored/guerrillamail.com.key.pem",
+            	"public_key_file":"/this/will/be/ignored//guerrillamail.com.crt",
 				"start_tls_on":true,
             	"tls_always_on":false
 			}
@@ -107,8 +110,8 @@ var configJson = `
             "max_clients":1,
             "log_file" : "",
 			"tls" : {
-				"private_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.key",
-            	"public_key_file":"/vagrant/projects/htdocs/guerrilla/config/ssl/guerrillamail.com.crt",
+				"private_key_file":"/this/will/be/ignored/guerrillamail.com.key.pem",
+            	"public_key_file":"/this/will/be/ignored/guerrillamail.com.crt",
 				"start_tls_on":false,
             	"tls_always_on":true
 			}
@@ -126,12 +129,56 @@ func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Ba
 	return b, err
 }
 
-func setupCerts(c *TestConfig) {
+func setupCerts(c *TestConfig) error {
 	for i := range c.Servers {
-		testcert.GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
+		err := testcert.GenerateCert(c.Servers[i].Hostname, "", 365*24*time.Hour, false, 2048, "P256", "./")
+		if err != nil {
+			return err
+		}
 		c.Servers[i].TLS.PrivateKeyFile = c.Servers[i].Hostname + ".key.pem"
 		c.Servers[i].TLS.PublicKeyFile = c.Servers[i].Hostname + ".cert.pem"
 	}
+	return nil
+}
+func truncateIfExists(filename string) error {
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		return os.Truncate(filename, 0)
+	}
+	return nil
+}
+func deleteIfExists(filename string) error {
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		return os.Remove(filename)
+	}
+	return nil
+}
+func cleanTestArtifacts(t *testing.T) {
+
+	if err := truncateIfExists("./testlog"); err != nil {
+		t.Error("could not clean tests/testlog:", err)
+	}
+
+	letters := []byte{'A', 'B', 'C', 'D', 'E'}
+	for _, l := range letters {
+		if err := deleteIfExists("configJson" + string(l) + ".json"); err != nil {
+			t.Error("could not delete configJson"+string(l)+".json:", err)
+		}
+	}
+
+	if err := deleteIfExists("./go-guerrilla.pid"); err != nil {
+		t.Error("could not delete ./guerrilla", err)
+	}
+	if err := deleteIfExists("./go-guerrilla2.pid"); err != nil {
+		t.Error("could not delete ./go-guerrilla2.pid", err)
+	}
+
+	if err := deleteIfExists("./mail.guerrillamail.com.cert.pem"); err != nil {
+		t.Error("could not delete ./mail.guerrillamail.com.cert.pem", err)
+	}
+	if err := deleteIfExists("./mail.guerrillamail.com.key.pem"); err != nil {
+		t.Error("could not delete ./mail.guerrillamail.com.key.pem", err)
+	}
+
 }
 
 // Testing start and stop of server
@@ -140,6 +187,7 @@ func TestStart(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors != nil {
 		t.Error(startErrors)
 		t.FailNow()
@@ -184,18 +232,16 @@ func TestStart(t *testing.T) {
 		}
 
 	}
-	// don't forget to reset
 
-	os.Truncate("./testlog", 0)
 }
 
 // Simple smoke-test to see if the server can listen & issues a greeting on connect
 func TestGreeting(t *testing.T) {
-	//log.SetOutput(os.Stdout)
 	if initErr != nil {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		// 1. plaintext connection
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
@@ -203,9 +249,10 @@ func TestGreeting(t *testing.T) {
 			// handle error
 			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
 		}
-		conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500)))
+		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+			t.Error(err)
+		}
 		greeting, err := bufio.NewReader(conn).ReadString('\n')
-		//fmt.Println(greeting)
 		if err != nil {
 			t.Error(err)
 			t.FailNow()
@@ -215,7 +262,7 @@ func TestGreeting(t *testing.T) {
 				t.Error("Server[1] did not have the expected greeting prefix", expected)
 			}
 		}
-		conn.Close()
+		_ = conn.Close()
 
 		// 2. tls connection
 		//	roots, err := x509.SystemCertPool()
@@ -229,9 +276,10 @@ func TestGreeting(t *testing.T) {
 			t.Error(err, "Cannot dial server (TLS)", config.Servers[1].ListenInterface)
 			t.FailNow()
 		}
-		conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500)))
+		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+			t.Error(err)
+		}
 		greeting, err = bufio.NewReader(conn).ReadString('\n')
-		//fmt.Println(greeting)
 		if err != nil {
 			t.Error(err)
 			t.FailNow()
@@ -241,7 +289,7 @@ func TestGreeting(t *testing.T) {
 				t.Error("Server[2] (TLS) did not have the expected greeting prefix", expected)
 			}
 		}
-		conn.Close()
+		_ = conn.Close()
 
 	} else {
 		fmt.Println("Nope", startErrors)
@@ -253,13 +301,10 @@ func TestGreeting(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 
 }
 
@@ -272,6 +317,7 @@ func TestShutDown(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -300,7 +346,7 @@ func TestShutDown(t *testing.T) {
 			time.Sleep(time.Millisecond * 250) // let server to close
 		}
 
-		conn.Close()
+		_ = conn.Close()
 
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -317,8 +363,6 @@ func TestShutDown(t *testing.T) {
 			t.Error("Server did not handle any clients")
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 
 }
 
@@ -328,6 +372,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -357,7 +402,7 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 			}
 		}
 
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 
 	} else {
@@ -368,8 +413,6 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 		}
 	}
 
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 // RCPT TO & MAIL FROM with 64 chars in local part, it should fail at 65
@@ -378,7 +421,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
-
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -411,7 +454,7 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			}
 		}
 
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 
 	} else {
@@ -422,8 +465,6 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 		}
 	}
 
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 //RFC2821LimitPath fail if path > 256 but different error if below
@@ -464,7 +505,7 @@ func TestRFC2821LimitPath(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -473,8 +514,6 @@ func TestRFC2821LimitPath(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 // RFC2821LimitDomain 501 Domain cannot exceed 255 characters
@@ -483,6 +522,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -514,7 +554,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -523,8 +563,7 @@ func TestRFC2821LimitDomain(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
+
 }
 
 // Test several different inputs to MAIL FROM command
@@ -533,6 +572,7 @@ func TestMailFromCmd(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -767,7 +807,7 @@ func TestMailFromCmd(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -785,6 +825,7 @@ func TestHeloEhlo(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		hostname := config.Servers[0].Hostname
@@ -841,7 +882,7 @@ func TestHeloEhlo(t *testing.T) {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -859,6 +900,7 @@ func TestNestedMailCmd(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -915,7 +957,7 @@ func TestNestedMailCmd(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -924,8 +966,6 @@ func TestNestedMailCmd(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 // It should error on a very long command line, exceeding CommandLineMaxLength 1024
@@ -934,7 +974,7 @@ func TestCommandLineMaxLength(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
-
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -958,7 +998,7 @@ func TestCommandLineMaxLength(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -967,8 +1007,7 @@ func TestCommandLineMaxLength(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
+
 }
 
 // It should error on a very long message, exceeding servers config value
@@ -977,7 +1016,7 @@ func TestDataMaxLength(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
-
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -1012,13 +1051,13 @@ func TestDataMaxLength(t *testing.T) {
 					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 
 			//expected := "500 Line too long"
-			expected := "451 4.3.0 Error: Maximum DATA size exceeded"
+			expected := "451 4.3.0 Error: maximum DATA size exceeded"
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -1027,8 +1066,7 @@ func TestDataMaxLength(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
+
 }
 
 func TestDataCommand(t *testing.T) {
@@ -1036,7 +1074,7 @@ func TestDataCommand(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
-
+	defer cleanTestArtifacts(t)
 	testHeader :=
 		"Subject: =?Shift_JIS?B?W4NYg06DRYNGg0GBRYNHg2qDYoNOg1ggg0GDSoNFg5ODZ12DQYNKg0WDk4Nn?=\r\n" +
 			"\t=?Shift_JIS?B?k2+YXoqul7mCzIKokm2C54K5?=\r\n"
@@ -1114,7 +1152,7 @@ func TestDataCommand(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -1123,8 +1161,6 @@ func TestDataCommand(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 // Fuzzer crashed the server by submitting "DATA\r\n" as the first command
@@ -1133,7 +1169,7 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
-
+	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
 		conn, bufin, err := Connect(config.Servers[0], 20)
 		if err != nil {
@@ -1152,7 +1188,7 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -1161,8 +1197,6 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }
 
 // Appears to hang the fuzz test, but not server.
@@ -1171,6 +1205,7 @@ func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
 		t.Error(initErr)
 		t.FailNow()
 	}
+	defer cleanTestArtifacts(t)
 	str := "X_\r\nMAIL FROM:<u\xfd\xfdrU" +
 		"\x10c22695140\xfd727235530" +
 		" Walter Sobchak\x1a\tDon" +
@@ -1246,7 +1281,7 @@ func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
 			}
 
 		}
-		conn.Close()
+		_ = conn.Close()
 		app.Shutdown()
 	} else {
 		if startErrors := app.Start(); startErrors != nil {
@@ -1255,6 +1290,4 @@ func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
 			t.FailNow()
 		}
 	}
-	// don't forget to reset
-	os.Truncate("./testlog", 0)
 }

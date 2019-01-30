@@ -25,7 +25,9 @@ func HeadersParser() Decorator {
 	return func(p Processor) Processor {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
-				e.ParseHeaders()
+				if err := e.ParseHeaders(); err != nil {
+					Log().WithError(err).Error("parse headers error")
+				}
 				// next processor
 				return p.Process(e, task)
 			} else {

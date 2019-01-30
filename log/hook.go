@@ -153,7 +153,7 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 				return err
 			}
 			if hook.fd != nil {
-				hook.fd.Sync()
+				err = hook.fd.Sync()
 			}
 		}
 		return err

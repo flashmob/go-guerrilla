@@ -41,7 +41,7 @@ func MD5Hex(stringArguments ...string) string {
 	var r *strings.Reader
 	for i := 0; i < len(stringArguments); i++ {
 		r = strings.NewReader(stringArguments[i])
-		io.Copy(h, r)
+		_, _ = io.Copy(h, r)
 	}
 	sum := h.Sum([]byte{})
 	return fmt.Sprintf("%x", sum)
@@ -54,8 +54,8 @@ func Compress(stringArguments ...string) string {
 	w, _ := zlib.NewWriterLevel(&b, zlib.BestSpeed)
 	for i := 0; i < len(stringArguments); i++ {
 		r = strings.NewReader(stringArguments[i])
-		io.Copy(w, r)
+		_, _ = io.Copy(w, r)
 	}
-	w.Close()
+	_ = w.Close()
 	return b.String()
 }

@@ -32,7 +32,9 @@ func Connect(serverConfig guerrilla.ServerConfig, deadline time.Duration) (net.C
 	bufin = bufio.NewReader(conn)
 
 	// should be ample time to complete the test
-	conn.SetDeadline(time.Now().Add(time.Duration(time.Second * deadline)))
+	if err = conn.SetDeadline(time.Now().Add(time.Duration(time.Second * deadline))); err != nil {
+		return conn, bufin, err
+	}
 	// read greeting, ignore it
 	_, err = bufin.ReadString('\n')
 	return conn, bufin, err

@@ -1,6 +1,7 @@
 package guerrilla
 
 import (
+	"os"
 	"testing"
 
 	"bufio"
@@ -16,7 +17,6 @@ import (
 	"github.com/flashmob/go-guerrilla/mocks"
 	"io/ioutil"
 	"net"
-	"os"
 )
 
 // getMockServerConfig gets a mock ServerConfig struct used for creating a new server
@@ -139,8 +139,62 @@ jDGZARZqGyrPeXi+RNe1cMvZCxAFy7gqEtWFLWWrp0gYNPvxkHhhQBrUcF+8T/Nf
 ug8tR8eSL1vGleONtFRBUVG7NbtjhBf9FhvPZcSRR10od/vWHku9E01i4xg=
 -----END CERTIFICATE-----`
 
+func truncateIfExists(filename string) error {
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		return os.Truncate(filename, 0)
+	}
+	return nil
+}
+func deleteIfExists(filename string) error {
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		return os.Remove(filename)
+	}
+	return nil
+}
+
+func cleanTestArtifacts(t *testing.T) {
+	if err := deleteIfExists("rootca.test.pem"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("client.test.key"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("client.test.pem"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/mail.guerrillamail.com.key.pem"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/mail.guerrillamail.com.cert.pem"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/different-go-guerrilla.pid"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/go-guerrilla.pid"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/go-guerrilla2.pid"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/pidfile.pid"); err != nil {
+		t.Error(err)
+	}
+	if err := deleteIfExists("./tests/pidfile2.pid"); err != nil {
+		t.Error(err)
+	}
+
+	if err := truncateIfExists("./tests/testlog"); err != nil {
+		t.Error(err)
+	}
+	if err := truncateIfExists("./tests/testlog2"); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestTLSConfig(t *testing.T) {
 
+	defer cleanTestArtifacts(t)
 	if err := ioutil.WriteFile("rootca.test.pem", []byte(rootCAPK), 0644); err != nil {
 		t.Fatal("couldn't create rootca.test.pem file.", err)
 		return
@@ -167,7 +221,9 @@ func TestTLSConfig(t *testing.T) {
 			Protocols:      []string{"tls1.0", "tls1.2"},
 		},
 	})
-	s.configureSSL()
+	if err := s.configureSSL(); err != nil {
+		t.Error(err)
+	}
 
 	c := s.tlsConfigStore.Load().(*tls.Config)
 
@@ -203,15 +259,12 @@ func TestTLSConfig(t *testing.T) {
 		t.Error("PreferServerCipherSuites should be false")
 	}
 
-	os.Remove("rootca.test.pem")
-	os.Remove("client.test.key")
-	os.Remove("client.test.pem")
-
 }
 
 func TestHandleClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
+	defer cleanTestArtifacts(t)
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
@@ -231,10 +284,14 @@ func TestHandleClient(t *testing.T) {
 	line, _ := r.ReadLine()
 	//	fmt.Println(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
-	w.PrintfLine("HELO test.test.com")
+	if err := w.PrintfLine("HELO test.test.com"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 	//fmt.Println(line)
-	w.PrintfLine("QUIT")
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 	//fmt.Println("line is:", line)
 	expected := "221 2.0.0 Bye"
@@ -247,6 +304,7 @@ func TestHandleClient(t *testing.T) {
 func TestXClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
+	defer cleanTestArtifacts(t)
 	sc := getMockServerConfig()
 	sc.XClientOn = true
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
@@ -267,10 +325,14 @@ func TestXClient(t *testing.T) {
 	line, _ := r.ReadLine()
 	//	fmt.Println(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
-	w.PrintfLine("HELO test.test.com")
+	if err := w.PrintfLine("HELO test.test.com"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 	//fmt.Println(line)
-	w.PrintfLine("XCLIENT ADDR=212.96.64.216 NAME=[UNAVAILABLE]")
+	if err := w.PrintfLine("XCLIENT ADDR=212.96.64.216 NAME=[UNAVAILABLE]"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 
 	if client.RemoteIP != "212.96.64.216" {
@@ -282,7 +344,9 @@ func TestXClient(t *testing.T) {
 	}
 
 	// try malformed input
-	w.PrintfLine("XCLIENT c")
+	if err := w.PrintfLine("XCLIENT c"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 
 	expected = "250 2.1.0 OK"
@@ -290,7 +354,9 @@ func TestXClient(t *testing.T) {
 		t.Error("expected", expected, "but got:", line)
 	}
 
-	w.PrintfLine("QUIT")
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
 	line, _ = r.ReadLine()
 	wg.Wait() // wait for handleClient to exit
 }
@@ -299,7 +365,7 @@ func TestXClient(t *testing.T) {
 // The transaction should wait until finished, and then test to see if we can do
 // a second transaction
 func TestGatewayTimeout(t *testing.T) {
-
+	defer cleanTestArtifacts(t)
 	bcfg := backends.BackendConfig{
 		"save_workers_size":   1,
 		"save_process":        "HeadersParser|Debugger",
@@ -330,24 +396,51 @@ func TestGatewayTimeout(t *testing.T) {
 		}
 		in := bufio.NewReader(conn)
 		str, err := in.ReadString('\n')
-		fmt.Fprint(conn, "HELO host\r\n")
+		if err != nil {
+			t.Error(err)
+		}
+		if _, err := fmt.Fprint(conn, "HELO host\r\n"); err != nil {
+			t.Error(err)
+		}
 		str, err = in.ReadString('\n')
 		// perform 2 transactions
 		// both should panic.
 		for i := 0; i < 2; i++ {
-			fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "DATA\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "Subject: Test subject\r\n")
-			fmt.Fprint(conn, "\r\n")
-			fmt.Fprint(conn, "A an email body\r\n")
-			fmt.Fprint(conn, ".\r\n")
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+				t.Error(err)
+			}
+			if str, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n"); err != nil {
+				t.Error(err)
+			}
+			if str, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "DATA\r\n"); err != nil {
+				t.Error(err)
+			}
+			if str, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "Subject: Test subject\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "A an email body\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, ".\r\n"); err != nil {
+				t.Error(err)
+			}
 			str, err = in.ReadString('\n')
 			expect := "transaction timeout"
-			if strings.Index(str, expect) == -1 {
+			if err != nil {
+				t.Error(err)
+			} else if strings.Index(str, expect) == -1 {
 				t.Error("Expected the reply to have'", expect, "'but got", str)
 			}
 		}
@@ -359,6 +452,7 @@ func TestGatewayTimeout(t *testing.T) {
 
 // The processor will panic and gateway should recover from it
 func TestGatewayPanic(t *testing.T) {
+	defer cleanTestArtifacts(t)
 	bcfg := backends.BackendConfig{
 		"save_workers_size":   1,
 		"save_process":        "HeadersParser|Debugger",
@@ -388,37 +482,66 @@ func TestGatewayPanic(t *testing.T) {
 			return
 		}
 		in := bufio.NewReader(conn)
-		str, err := in.ReadString('\n')
-		fmt.Fprint(conn, "HELO host\r\n")
-		str, err = in.ReadString('\n')
+		if _, err := in.ReadString('\n'); err != nil {
+			t.Error(err)
+		}
+		if _, err := fmt.Fprint(conn, "HELO host\r\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err = in.ReadString('\n'); err != nil {
+			t.Error(err)
+		}
 		// perform 2 transactions
 		// both should timeout. The reason why 2 is because we want to make
 		// sure that the client waits until processing finishes, and the
 		// timeout event is captured.
 		for i := 0; i < 2; i++ {
-			fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "DATA\r\n")
-			str, err = in.ReadString('\n')
-			fmt.Fprint(conn, "Subject: Test subject\r\n")
-			fmt.Fprint(conn, "\r\n")
-			fmt.Fprint(conn, "A an email body\r\n")
-			fmt.Fprint(conn, ".\r\n")
-			str, err = in.ReadString('\n')
-			expect := "storage failed"
-			if strings.Index(str, expect) == -1 {
-				t.Error("Expected the reply to have'", expect, "'but got", str)
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "DATA\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err = in.ReadString('\n'); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "Subject: Test subject\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, "A an email body\r\n"); err != nil {
+				t.Error(err)
+			}
+			if _, err := fmt.Fprint(conn, ".\r\n"); err != nil {
+				t.Error(err)
+			}
+			if str, err := in.ReadString('\n'); err != nil {
+				t.Error(err)
+			} else {
+				expect := "storage failed"
+				if strings.Index(str, expect) == -1 {
+					t.Error("Expected the reply to have'", expect, "'but got", str)
+				}
 			}
 		}
-		_ = str
 		d.Shutdown()
 	}
 
 }
 
 func TestAllowsHosts(t *testing.T) {
+	defer cleanTestArtifacts(t)
 	s := server{}
 	allowedHosts := []string{
 		"spam4.me",
@@ -464,6 +587,3 @@ func TestAllowsHosts(t *testing.T) {
 	s.setAllowedHosts([]string{"grr.la", "example.com"})
 
 }
-
-// TODO
-// - test github issue #44 and #42

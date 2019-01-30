@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -61,9 +62,12 @@ func TestEnvelope(t *testing.T) {
 
 	data, _ := ioutil.ReadAll(r)
 	if len(data) != e.Len() {
-		t.Error("e.Len() is inccorrect, it shown ", e.Len(), " but we wanted ", len(data))
+		t.Error("e.Len() is incorrect, it shown ", e.Len(), " but we wanted ", len(data))
 	}
-	e.ParseHeaders()
+	if err := e.ParseHeaders(); err != nil && err != io.EOF {
+		t.Error("cannot parse headers:", err)
+		return
+	}
 	if e.Subject != "Test" {
 		t.Error("Subject expecting: Test, got:", e.Subject)
 	}
