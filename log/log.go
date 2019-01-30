@@ -221,8 +221,7 @@ func (l *HookedLogger) GetLogDest() string {
 
 // WithConn extends logrus to be able to log with a net.Conn
 func (l *HookedLogger) WithConn(conn net.Conn) *log.Entry {
-	var addr string = "unknown"
-
+	var addr = "unknown"
 	if conn != nil {
 		addr = conn.RemoteAddr().String()
 	}

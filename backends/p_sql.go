@@ -181,7 +181,6 @@ func SQL() Decorator {
 
 				hash := ""
 				if len(e.Hashes) > 0 {
-					// if saved in redis, hash will be the redis key
 					hash = e.Hashes[0]
 					e.QueuedId = e.Hashes[0]
 				}

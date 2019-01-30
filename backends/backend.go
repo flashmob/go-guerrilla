@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
@@ -54,6 +55,7 @@ type BaseConfig interface{}
 type notifyMsg struct {
 	err      error
 	queuedID string
+	result   Result
 }
 
 // Result represents a response to an SMTP client after receiving DATA.
@@ -66,16 +68,19 @@ type Result interface {
 }
 
 // Internal implementation of BackendResult for use by backend implementations.
-type result string
+type result struct {
+	// we're going to use a bytes.Buffer for building a string
+	bytes.Buffer
+}
 
-func (br result) String() string {
-	return string(br)
+func (r *result) String() string {
+	return r.Buffer.String()
 }
 
 // Parses the SMTP code from the first 3 characters of the SMTP message.
 // Returns 554 if code cannot be parsed.
-func (br result) Code() int {
-	trimmed := strings.TrimSpace(string(br))
+func (r *result) Code() int {
+	trimmed := strings.TrimSpace(r.String())
 	if len(trimmed) < 3 {
 		return 554
 	}
@@ -86,8 +91,19 @@ func (br result) Code() int {
 	return code
 }
 
-func NewResult(message string) Result {
-	return result(message)
+func NewResult(r ...interface{}) Result {
+	buf := new(result)
+	for _, item := range r {
+		switch v := item.(type) {
+		case error:
+			_, _ = buf.WriteString(v.Error())
+		case fmt.Stringer:
+			_, _ = buf.WriteString(v.String())
+		case string:
+			_, _ = buf.WriteString(v)
+		}
+	}
+	return buf
 }
 
 type processorInitializer interface {
@@ -240,13 +256,13 @@ func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 	for i := 0; i < v.NumField(); i++ {
 		f := v.Field(i)
 		// read the tags of the config struct
-		field_name := t.Field(i).Tag.Get("json")
+		fieldName := t.Field(i).Tag.Get("json")
 		omitempty := false
-		if len(field_name) > 0 {
+		if len(fieldName) > 0 {
 			// parse the tag to
 			// get the field name from struct tag
-			split := strings.Split(field_name, ",")
-			field_name = split[0]
+			split := strings.Split(fieldName, ",")
+			fieldName = split[0]
 			if len(split) > 1 {
 				if split[1] == "omitempty" {
 					omitempty = true
@@ -255,30 +271,30 @@ func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig)
 		} else {
 			// could have no tag
 			// so use the reflected field name
-			field_name = typeOfT.Field(i).Name
+			fieldName = typeOfT.Field(i).Name
 		}
 		if f.Type().Name() == "int" {
 			// in json, there is no int, only floats...
-			if intVal, converted := configData[field_name].(float64); converted {
+			if intVal, converted := configData[fieldName].(float64); converted {
 				v.Field(i).SetInt(int64(intVal))
-			} else if intVal, converted := configData[field_name].(int); converted {
+			} else if intVal, converted := configData[fieldName].(int); converted {
 				v.Field(i).SetInt(int64(intVal))
 			} else if !omitempty {
-				return configType, convertError("property missing/invalid: '" + field_name + "' of expected type: " + f.Type().Name())
+				return configType, convertError("property missing/invalid: '" + fieldName + "' of expected type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "string" {
-			if stringVal, converted := configData[field_name].(string); converted {
+			if stringVal, converted := configData[fieldName].(string); converted {
 				v.Field(i).SetString(stringVal)
 			} else if !omitempty {
-				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+				return configType, convertError("missing/invalid: '" + fieldName + "' of type: " + f.Type().Name())
 			}
 		}
 		if f.Type().Name() == "bool" {
-			if boolVal, converted := configData[field_name].(bool); converted {
+			if boolVal, converted := configData[fieldName].(bool); converted {
 				v.Field(i).SetBool(boolVal)
 			} else if !omitempty {
-				return configType, convertError("missing/invalid: '" + field_name + "' of type: " + f.Type().Name())
+				return configType, convertError("missing/invalid: '" + fieldName + "' of type: " + f.Type().Name())
 			}
 		}
 	}

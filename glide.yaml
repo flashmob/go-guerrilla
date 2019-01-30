@@ -3,7 +3,7 @@ import:
 - package: github.com/sirupsen/logrus
   version: ~1.0.4
 - package: github.com/gomodule/redigo
-  version: ~1.0.0
+  version: ~2.0.0
   subpackages:
   - redis
 - package: github.com/spf13/cobra

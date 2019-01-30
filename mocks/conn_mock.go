@@ -31,11 +31,11 @@ type End struct {
 	Writer *io.PipeWriter
 }
 
-func (c End) Close() error {
-	if err := c.Writer.Close(); err != nil {
+func (e End) Close() error {
+	if err := e.Writer.Close(); err != nil {
 		return err
 	}
-	if err := c.Reader.Close(); err != nil {
+	if err := e.Reader.Close(); err != nil {
 		return err
 	}
 	return nil

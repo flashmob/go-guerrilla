@@ -27,12 +27,20 @@ func init() {
 	Dec = mime.WordDecoder{}
 }
 
-const maxHeaderChunk = 1 + (3 << 10) // 3KB
+const maxHeaderChunk = 1 + (4 << 10) // 4KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
+	// User is local part
 	User string
+	// Host is the domain
 	Host string
+	// ADL is at-domain list if matched
+	ADL []string
+	// PathParams contains any ESTMP parameters that were matched
+	PathParams [][]string
+	// NullPath is true if <> was received
+	NullPath bool
 }
 
 func (ep *Address) String() string {
@@ -114,18 +122,15 @@ func (e *Envelope) ParseHeaders() error {
 	if e.Header != nil {
 		return errors.New("headers already parsed")
 	}
-	buf := bytes.NewBuffer(e.Data.Bytes())
+	buf := e.Data.Bytes()
 	// find where the header ends, assuming that over 30 kb would be max
-	max := maxHeaderChunk
-	if buf.Len() < max {
-		max = buf.Len()
+	if len(buf) > maxHeaderChunk {
+		buf = buf[:maxHeaderChunk]
 	}
-	// read in the chunk which we'll scan for the header
-	chunk := make([]byte, max)
-	buf.Read(chunk)
-	headerEnd := strings.Index(string(chunk), "\n\n") // the first two new-lines chars are the End Of Header
+
+	headerEnd := bytes.Index(buf, []byte{'\n', '\n'}) // the first two new-lines chars are the End Of Header
 	if headerEnd > -1 {
-		header := chunk[0:headerEnd]
+		header := buf[0:headerEnd]
 		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
 		e.Header, err = headerReader.ReadMIMEHeader()
 		if err != nil {

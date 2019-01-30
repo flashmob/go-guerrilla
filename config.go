@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/dashboard"
@@ -52,8 +53,8 @@ type ServerConfig struct {
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
 
-	// MaxClients controls how many maxiumum clients we can handle at once.
-	// Defaults to 100
+	// MaxClients controls how many maximum clients we can handle at once.
+	// Defaults to defaultMaxClients
 	MaxClients int `json:"max_clients"`
 	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off".
 	// defaults to AppConfig.Log file setting
@@ -91,12 +92,12 @@ type ServerTLSConfig struct {
 	// Use Go's default if empty
 	ClientAuthType string `json:"client_auth_type,omitempty"`
 	// controls whether the server selects the
-	// client's most preferred ciphersuite
+	// client's most preferred cipher suite
 	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
 
 	// The following used to watch certificate changes so that the TLS can be reloaded
-	_privateKeyFile_mtime int64
-	_publicKeyFile_mtime  int64
+	_privateKeyFileMtime int64
+	_publicKeyFileMtime  int64
 }
 
 // https://golang.org/pkg/crypto/tls/#pkg-constants
@@ -152,6 +153,11 @@ var TLSClientAuthTypes = map[string]tls.ClientAuthType{
 	"RequireAndVerifyClientCert": tls.RequireAndVerifyClientCert,
 }
 
+const defaultMaxClients = 100
+const defaultTimeout = 30
+const defaultInterface = "127.0.0.1:2525"
+const defaultMaxSize = int64(10 << 20) // 10 Mebibytes
+
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
 // also does validation, returns error if validation failed or something went wrong
 func (c *AppConfig) Load(jsonBytes []byte) error {
@@ -175,7 +181,9 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 
 	// read the timestamps for the ssl keys, to determine if they need to be reloaded
 	for i := 0; i < len(c.Servers); i++ {
-		c.Servers[i].loadTlsKeyTimestamps()
+		if err := c.Servers[i].loadTlsKeyTimestamps(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -222,8 +230,8 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 
 	}
 	// remove any servers that don't exist anymore
-	for _, oldserver := range oldServers {
-		app.Publish(EventConfigServerRemove, oldserver)
+	for _, oldServer := range oldServers {
+		app.Publish(EventConfigServerRemove, oldServer)
 	}
 }
 
@@ -279,9 +287,9 @@ func (c *AppConfig) setDefaults() error {
 		sc.ListenInterface = defaultInterface
 		sc.IsEnabled = true
 		sc.Hostname = h
-		sc.MaxClients = 100
-		sc.Timeout = 30
-		sc.MaxSize = 10 << 20 // 10 Mebibytes
+		sc.MaxClients = defaultMaxClients
+		sc.Timeout = defaultTimeout
+		sc.MaxSize = defaultMaxSize
 		c.Servers = append(c.Servers, sc)
 	} else {
 		// make sure each server has defaults correctly configured
@@ -290,13 +298,13 @@ func (c *AppConfig) setDefaults() error {
 				c.Servers[i].Hostname = h
 			}
 			if c.Servers[i].MaxClients == 0 {
-				c.Servers[i].MaxClients = 100
+				c.Servers[i].MaxClients = defaultMaxClients
 			}
 			if c.Servers[i].Timeout == 0 {
-				c.Servers[i].Timeout = 20
+				c.Servers[i].Timeout = defaultTimeout
 			}
 			if c.Servers[i].MaxSize == 0 {
-				c.Servers[i].MaxSize = 10 << 20 // 10 Mebibytes
+				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
 			}
 			if c.Servers[i].ListenInterface == "" {
 				return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
@@ -410,13 +418,21 @@ func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 				iface,
 				err.Error()))
 	}
+	if sc.TLS.PrivateKeyFile == "" {
+		sc.TLS._privateKeyFileMtime = time.Now().Unix()
+		return nil
+	}
+	if sc.TLS.PublicKeyFile == "" {
+		sc.TLS._publicKeyFileMtime = time.Now().Unix()
+		return nil
+	}
 	if info, err := os.Stat(sc.TLS.PrivateKeyFile); err == nil {
-		sc.TLS._privateKeyFile_mtime = info.ModTime().Unix()
+		sc.TLS._privateKeyFileMtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
 	if info, err := os.Stat(sc.TLS.PublicKeyFile); err == nil {
-		sc.TLS._publicKeyFile_mtime = info.ModTime().Unix()
+		sc.TLS._publicKeyFileMtime = info.ModTime().Unix()
 	} else {
 		return statErr(sc.ListenInterface, err)
 	}
@@ -449,7 +465,7 @@ func (sc *ServerConfig) Validate() error {
 // Gets the timestamp of the TLS certificates. Returns a unix time of when they were last modified
 // when the config was read. We use this info to determine if TLS needs to be re-loaded.
 func (stc *ServerTLSConfig) getTlsKeyTimestamps() (int64, int64) {
-	return stc._privateKeyFile_mtime, stc._publicKeyFile_mtime
+	return stc._privateKeyFileMtime, stc._publicKeyFileMtime
 }
 
 // Returns value changes between struct a & struct b.

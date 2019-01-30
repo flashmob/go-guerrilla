@@ -73,7 +73,9 @@ func findRows(hash string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	stmt := fmt.Sprintf(`SELECT hash FROM %s WHERE hash = ?`, *mailTableFlag)
 	rows, err := db.Query(stmt, hash)

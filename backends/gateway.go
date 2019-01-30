@@ -129,7 +129,7 @@ func (w *workerMsg) reset(e *mail.Envelope, task SelectTask) {
 // Process distributes an envelope to one of the backend workers with a TaskSaveMail task
 func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	if gw.State != BackendStateRunning {
-		return NewResult(response.Canned.FailBackendNotRunning + gw.State.String())
+		return NewResult(response.Canned.FailBackendNotRunning, response.SP, gw.State)
 	}
 	// borrow a workerMsg from the pool
 	workerMsg := workerMsgPool.Get().(*workerMsg)
@@ -140,11 +140,32 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	// or timeout
 	select {
 	case status := <-workerMsg.notifyMe:
-		workerMsgPool.Put(workerMsg) // can be recycled since we used the notifyMe channel
-		if status.err != nil {
-			return NewResult(response.Canned.FailBackendTransaction + status.err.Error())
+		// email saving transaction completed
+		if status.result == BackendResultOK && status.queuedID != "" {
+			return NewResult(response.Canned.SuccessMessageQueued, response.SP, status.queuedID)
 		}
-		return NewResult(response.Canned.SuccessMessageQueued + status.queuedID)
+
+		// A custom result, there was probably an error, if so, log it
+		if status.result != nil {
+			if status.err != nil {
+				Log().Error(status.err)
+			}
+			return status.result
+		}
+
+		// if there was no result, but there's an error, then make a new result from the error
+		if status.err != nil {
+			if _, err := strconv.Atoi(status.err.Error()[:3]); err != nil {
+				return NewResult(response.Canned.FailBackendTransaction, response.SP, status.err)
+			}
+			return NewResult(status.err)
+		}
+
+		// both result & error are nil (should not happen)
+		err := errors.New("no response from backend - processor did not return a result or an error")
+		Log().Error(err)
+		return NewResult(response.Canned.FailBackendTransaction, response.SP, err)
+
 	case <-time.After(gw.saveTimeout()):
 		Log().Error("Backend has timed out while saving email")
 		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
@@ -435,27 +456,12 @@ func (gw *BackendGateway) workDispatcher(
 			return
 		case msg = <-workIn:
 			state = dispatcherStateWorking // recovers from panic if in this state
+			result, err := save.Process(msg.e, msg.task)
+			state = dispatcherStateNotify
 			if msg.task == TaskSaveMail {
-				// process the email here
-				result, _ := save.Process(msg.e, TaskSaveMail)
-				state = dispatcherStateNotify
-				if result.Code() < 300 {
-					// if all good, let the gateway know that it was saved
-					msg.notifyMe <- &notifyMsg{nil, msg.e.QueuedId}
-				} else {
-					// notify the gateway about the error
-					msg.notifyMe <- &notifyMsg{err: errors.New(result.String())}
-				}
-			} else if msg.task == TaskValidateRcpt {
-				_, err := validate.Process(msg.e, TaskValidateRcpt)
-				state = dispatcherStateNotify
-				if err != nil {
-					// validation failed
-					msg.notifyMe <- &notifyMsg{err: err}
-				} else {
-					// all good.
-					msg.notifyMe <- &notifyMsg{err: nil}
-				}
+				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
+			} else {
+				msg.notifyMe <- &notifyMsg{err: err, result: result}
 			}
 		}
 		state = dispatcherStateIdle
