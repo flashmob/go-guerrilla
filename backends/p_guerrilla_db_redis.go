@@ -150,7 +150,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	if g.cache[rows-1] != nil {
 		return g.cache[rows-1]
 	}
-	sqlstr := "INSERT INTO %s " + g.config.Table + "" +
+	sqlstr := "INSERT INTO " + g.config.Table + "" +
 		"(" +
 		"`date`, " +
 		"`to`, " +
