@@ -48,7 +48,6 @@ func (h logHook) Fire(e *log.Entry) error {
 			ip:     ip,
 		}
 	case "disconnect":
-		mainlog().Infof("disconnect in dashboard, nclients: %d", store.nClients)
 		store.lock.Lock()
 		store.nClients--
 		store.lock.Unlock()
