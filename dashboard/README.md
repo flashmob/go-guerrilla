@@ -4,7 +4,12 @@ The dashboard package gathers data about Guerrilla while it is running and provi
 
 ## Backend
 
-The backend is a Go package that collects and stores data from guerrillad, serves the dashboard to web clients, and updates clients with new analytics data over WebSockets. The backend uses [statik](https://github.com/rakyll/statik) to convert the `build` folder into a http-servable Go package. When deploying, the frontend should be built first, then the `statik` package should be created. An example of this process is in the `.travis.yml`.
+The backend is a Go package that collects and stores data from guerrillad, serves the dashboard to web clients, and updates clients with new analytics data over WebSockets. 
+The backend uses [statik](https://github.com/rakyll/statik) to convert the `build` folder into a http-servable Go package. When deploying, the frontend should be built first, then the `statik` package should be created. An example of this process is in the `.travis.yml`.
+
+`To build the statik Go package, cd to the `dashboard` dir, then run
+ 
+ `statik -src=./js/build` 
 
 ## Frontend
 
@@ -18,3 +23,17 @@ To build the frontend code:
 
 To run the HMR development server (serves frontend on port 3000 rather than through `dashboard` package):
 `npm start`
+
+## Config
+
+Add `dashboard` to the config
+
+```
+"dashboard": {
+    "is_enabled": true,
+    "listen_interface": ":8081",
+    "tick_interval": "5s",
+    "max_window": "24h",
+    "ranking_aggregation_interval": "6h"
+  }
+```

@@ -132,14 +132,20 @@ func (ds *dataStore) aggregateRankings() ranking {
 	ds.lock.Lock()
 	// Aggregate buffers
 	for i := 0; i < nRankingBuffers; i++ {
-		for domain, count := range ds.topDomain[i] {
-			topDomain[domain] += count
+		if len(ds.topDomain) > i {
+			for domain, count := range ds.topDomain[i] {
+				topDomain[domain] += count
+			}
 		}
-		for helo, count := range ds.topHelo[i] {
-			topHelo[helo] += count
+		if len(ds.topHelo) > i {
+			for helo, count := range ds.topHelo[i] {
+				topHelo[helo] += count
+			}
 		}
-		for ip, count := range ds.topIP[i] {
-			topIP[ip] += count
+		if len(ds.topIP) > i {
+			for ip, count := range ds.topIP[i] {
+				topIP[ip] += count
+			}
 		}
 	}
 	ds.lock.Unlock()
