@@ -107,13 +107,13 @@ func (ds *dataStore) rankingManager() {
 			// Add empty map at index 0 and shift other maps one down
 			ds.nClientsInBuffer = 0
 			ds.topDomain = append(
-				[]map[string]int{map[string]int{}},
+				[]map[string]int{{}},
 				ds.topDomain[:len(ds.topDomain)-1]...)
 			ds.topHelo = append(
-				[]map[string]int{map[string]int{}},
+				[]map[string]int{{}},
 				ds.topHelo[:len(ds.topHelo)-1]...)
 			ds.topIP = append(
-				[]map[string]int{map[string]int{}},
+				[]map[string]int{{}},
 				ds.topHelo[:len(ds.topIP)-1]...)
 			ds.lock.Unlock()
 

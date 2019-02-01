@@ -107,7 +107,7 @@ func Run(c *Config, l log.Logger) {
 
 	select {
 	case <-stopHttp:
-		closer.Close()
+		_ = closer.Close()
 		wg.Done()
 		return
 	}
