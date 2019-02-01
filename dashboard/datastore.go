@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"go.uber.org/atomic"
 	"runtime"
 	"sync"
 	"time"
@@ -38,7 +39,7 @@ type dataStore struct {
 	// List of samples of number of connected clients
 	nClientTicks []point
 	// Up-to-date number of clients
-	nClients uint64
+	nClients atomic.Uint64
 	// Total number of clients in the current aggregation buffer
 	nClientsInBuffer uint64
 	topDomain        bufferedRanking
@@ -125,11 +126,13 @@ func (ds *dataStore) rankingManager() {
 // Aggregates the rankings from the ranking buffer into a single map
 // for each of domain, helo, ip. This is what we send to the frontend.
 func (ds *dataStore) aggregateRankings() ranking {
+	ds.lock.Lock()
+	defer ds.lock.Unlock()
+
 	topDomain := make(map[string]int, len(ds.topDomain[0]))
 	topHelo := make(map[string]int, len(ds.topHelo[0]))
 	topIP := make(map[string]int, len(ds.topIP[0]))
 
-	ds.lock.Lock()
 	// Aggregate buffers
 	for i := 0; i < nRankingBuffers; i++ {
 		if len(ds.topDomain) > i {
@@ -148,7 +151,6 @@ func (ds *dataStore) aggregateRankings() ranking {
 			}
 		}
 	}
-	ds.lock.Unlock()
 
 	return ranking{
 		TopDomain: topDomain,
@@ -219,7 +221,7 @@ func dataListener(interval time.Duration) {
 		case t := <-ticker:
 			runtime.ReadMemStats(memStats)
 			ramPoint := point{t, memStats.Alloc}
-			nClientPoint := point{t, store.nClients}
+			nClientPoint := point{t, store.nClients.Load()}
 			mainlog().WithFields(map[string]interface{}{
 				"ram":     ramPoint.Y,
 				"clients": nClientPoint.Y,
@@ -235,7 +237,6 @@ func dataListener(interval time.Duration) {
 		case <-stopDataListener:
 			return
 		}
-
 	}
 }
 

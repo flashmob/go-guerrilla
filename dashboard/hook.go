@@ -38,9 +38,7 @@ func (h logHook) Fire(e *log.Entry) error {
 
 	switch event {
 	case "connect":
-		store.lock.Lock()
-		store.nClients++
-		store.lock.Unlock()
+		store.nClients.Add(1)
 	case "mailfrom":
 		store.newConns <- conn{
 			domain: domain,
@@ -48,9 +46,7 @@ func (h logHook) Fire(e *log.Entry) error {
 			ip:     ip,
 		}
 	case "disconnect":
-		store.lock.Lock()
-		store.nClients--
-		store.lock.Unlock()
+		store.nClients.Sub(1)
 	}
 	return nil
 }
