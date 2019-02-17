@@ -222,7 +222,7 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	}
 }
 
-// Begin accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
+// Start: Begin accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
 func (s *server) Start(startWG *sync.WaitGroup) error {
 	var clientID uint64
 	clientID = 0

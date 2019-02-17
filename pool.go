@@ -73,7 +73,7 @@ func (p *Pool) Start() {
 	p.isShuttingDownFlg.Store(true)
 }
 
-// Lock the pool from borrowing then remove all active clients
+// ShutdownState: Lock the pool from borrowing then remove all active clients
 // each active client's timeout is lowered to 1 sec and notified
 // to stop accepting commands
 func (p *Pool) ShutdownState() {
@@ -103,7 +103,7 @@ func (p *Pool) ShutdownWait() {
 	p.isShuttingDownFlg.Store(false)
 }
 
-// returns true if the pool is shutting down
+// IsShuttingDown returns true if the pool is shutting down
 func (p *Pool) IsShuttingDown() bool {
 	if value, ok := p.isShuttingDownFlg.Load().(bool); ok {
 		return value
@@ -111,7 +111,7 @@ func (p *Pool) IsShuttingDown() bool {
 	return false
 }
 
-// set a timeout for all lent clients
+// SetTimeout: set a timeout for all lent clients
 func (p *Pool) SetTimeout(duration time.Duration) {
 	p.activeClients.mapAll(func(p Poolable) {
 		if err := p.setTimeout(duration); err != nil {
@@ -120,7 +120,7 @@ func (p *Pool) SetTimeout(duration time.Duration) {
 	})
 }
 
-// Gets the number of active clients that are currently
+// GetActiveClientsCount gets the number of active clients that are currently
 // out of the pool and busy serving
 func (p *Pool) GetActiveClientsCount() int {
 	return len(p.sem)

@@ -30,7 +30,7 @@ func init() {
 	}
 }
 
-// Generate the MTA delivery header
+// Header: Generate the MTA delivery header
 // Sets e.DeliveryHeader part of the envelope with the generated header
 func Header() Decorator {
 

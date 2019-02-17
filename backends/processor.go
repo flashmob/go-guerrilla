@@ -31,7 +31,7 @@ type Processor interface {
 // Signature of Processor
 type ProcessWith func(*mail.Envelope, SelectTask) (Result, error)
 
-// Make ProcessWith will satisfy the Processor interface
+// Process: Make ProcessWith will satisfy the Processor interface
 func (f ProcessWith) Process(e *mail.Envelope, task SelectTask) (Result, error) {
 	// delegate to the anonymous function
 	return f(e, task)
@@ -41,7 +41,7 @@ func (f ProcessWith) Process(e *mail.Envelope, task SelectTask) (Result, error) 
 // Notice DefaultProcessor has no knowledge of the other decorators that have orthogonal concerns.
 type DefaultProcessor struct{}
 
-// do nothing except return the result
+// Process: do nothing except return the result
 // (this is the last call in the decorator stack, if it got here, then all is good)
 func (w DefaultProcessor) Process(e *mail.Envelope, task SelectTask) (Result, error) {
 	return BackendResultOK, nil

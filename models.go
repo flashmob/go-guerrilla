@@ -21,7 +21,7 @@ func (alr *adjustableLimitedReader) setLimit(n int64) {
 	alr.R.N = n
 }
 
-// Returns a specific error when a limit is reached, that can be differentiated
+// Read returns a specific error when a limit is reached, that can be differentiated
 // from an EOF error from the standard io.Reader.
 func (alr *adjustableLimitedReader) Read(p []byte) (n int, err error) {
 	n, err = alr.R.Read(p)
@@ -50,7 +50,7 @@ func (sbr *smtpBufferedReader) setLimit(n int64) {
 	sbr.alr.setLimit(n)
 }
 
-// Set a new reader & use it to reset the underlying reader
+// Reset: Set a new reader & use it to reset the underlying reader
 func (sbr *smtpBufferedReader) Reset(r io.Reader) {
 	sbr.alr = newAdjustableLimitedReader(r, CommandLineMaxLength)
 	sbr.Reader.Reset(sbr.alr)

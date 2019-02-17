@@ -31,7 +31,7 @@ const (
 
 type Level uint8
 
-// Convert the Level to a string. E.g. PanicLevel becomes "panic".
+// String: Convert the Level to a string. E.g. PanicLevel becomes "panic".
 func (level Level) String() string {
 	switch level {
 	case DebugLevel:

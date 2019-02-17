@@ -114,7 +114,7 @@ func (c *compressedData) set(b []byte, d *bytes.Buffer) {
 	c.data = d
 }
 
-// implement Stringer interface
+// String: implement Stringer interface
 func (c *compressedData) String() string {
 	if c.data == nil {
 		return ""

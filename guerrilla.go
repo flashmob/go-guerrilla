@@ -22,7 +22,7 @@ const (
 
 type Errors []error
 
-// implement the Error interface
+// Error: implement the Error interface
 func (e Errors) Error() string {
 	if len(e) == 1 {
 		return e[0].Error()
@@ -80,7 +80,7 @@ func (ls *logStore) setMainlog(log log.Logger) {
 	ls.Store(log)
 }
 
-// Returns a new instance of Guerrilla with the given config, not yet running. Backend started.
+// New returns a new instance of Guerrilla with the given config, not yet running. Backend started.
 func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
@@ -431,7 +431,7 @@ func (g *guerrilla) backend() backends.Backend {
 	return nil
 }
 
-// Entry point for the application. Starts all servers.
+// Start: Entry point for the application. Starts all servers.
 func (g *guerrilla) Start() error {
 	var startErrors Errors
 	g.guard.Lock()

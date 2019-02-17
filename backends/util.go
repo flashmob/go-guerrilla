@@ -35,7 +35,7 @@ func ParseHeaders(mailData string) map[string]string {
 	return headers
 }
 
-// returns an md5 hash as string of hex characters
+// MD5Hex returns an md5 hash as string of hex characters
 func MD5Hex(stringArguments ...string) string {
 	h := md5.New()
 	var r *strings.Reader
@@ -47,7 +47,7 @@ func MD5Hex(stringArguments ...string) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-// concatenate & compress all strings  passed in
+// Compress: concatenate & compress all strings  passed in
 func Compress(stringArguments ...string) string {
 	var b bytes.Buffer
 	var r *strings.Reader
