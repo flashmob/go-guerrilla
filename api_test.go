@@ -709,3 +709,44 @@ func TestCustomBackendResult(t *testing.T) {
 	}
 
 }
+
+func TestStreamProcessor(t *testing.T) {
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":        "HeadersParser|Debugger",
+			"stream_save_process": "Header",
+		},
+	}
+	d := Daemon{Config: cfg}
+	//d.AddProcessor("Custom", customBackend2)
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+	// lets have a talk with the server
+	if err := talkToServer("127.0.0.1:2525"); err != nil {
+		t.Error(err)
+	}
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	// lets check for fingerprints
+	if strings.Index(string(b), "451 4.3.0 Error") < 0 {
+		t.Error("did not log: 451 4.3.0 Error")
+	}
+
+	if strings.Index(string(b), "system shock") < 0 {
+		t.Error("did not log: system shock")
+	}
+
+}

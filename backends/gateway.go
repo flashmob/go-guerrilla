@@ -3,6 +3,7 @@ package backends
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type BackendGateway struct {
 	workStoppers []chan bool
 	processors   []Processor
 	validators   []Processor
+	streamers    []streamer
 
 	// controls access to state
 	sync.Mutex
@@ -48,6 +50,8 @@ type GatewayConfig struct {
 	TimeoutSave string `json:"gw_save_timeout,omitempty"`
 	// TimeoutValidateRcpt duration before timeout when validating a recipient, eg "1s"
 	TimeoutValidateRcpt string `json:"gw_val_rcpt_timeout,omitempty"`
+	// StreamSaveProcess is same as a ProcessorStack, but reads from an io.Reader to write email data
+	StreamSaveProcess string `json:"stream_save_process,omitempty"`
 }
 
 // workerMsg is what get placed on the BackendGateway.saveMailChan channel
@@ -58,6 +62,43 @@ type workerMsg struct {
 	notifyMe chan *notifyMsg
 	// select the task type
 	task SelectTask
+	// io.Reader for streamed processor
+	r io.Reader
+}
+
+type streamer struct {
+	// StreamProcessor is a chain of StreamProcessor
+	sp StreamProcessor
+	// so that we can call Open and Close
+	d []StreamDecorator
+}
+
+func (s streamer) Write(p []byte) (n int, err error) {
+	return s.sp.Write(p)
+}
+
+func (s *streamer) open(e *mail.Envelope) Errors {
+	var err Errors
+	for i := range s.d {
+		if s.d[i].Open != nil {
+			if e := s.d[i].Open(e); e != nil {
+				err = append(err, e)
+			}
+		}
+	}
+	return err
+}
+
+func (s *streamer) close() Errors {
+	var err Errors
+	for i := range s.d {
+		if s.d[i].Close != nil {
+			if e := s.d[i].Close(); e != nil {
+				err = append(err, e)
+			}
+		}
+	}
+	return err
 }
 
 type backendState int
@@ -132,6 +173,7 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 	}
 	// borrow a workerMsg from the pool
 	workerMsg := workerMsgPool.Get().(*workerMsg)
+	defer workerMsgPool.Put(workerMsg)
 	workerMsg.reset(e, TaskSaveMail)
 	// place on the channel so that one of the save mail workers can pick it up
 	gw.conveyor <- workerMsg
@@ -172,7 +214,6 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 			// keep waiting for the backend to finish processing
 			<-workerMsg.notifyMe
 			e.Unlock()
-			workerMsgPool.Put(workerMsg)
 		}()
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
@@ -190,13 +231,13 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 	}
 	// place on the channel so that one of the save mail workers can pick it up
 	workerMsg := workerMsgPool.Get().(*workerMsg)
+	defer workerMsgPool.Put(workerMsg)
 	workerMsg.reset(e, TaskValidateRcpt)
 	gw.conveyor <- workerMsg
 	// wait for the validation to complete
 	// or timeout
 	select {
 	case status := <-workerMsg.notifyMe:
-		workerMsgPool.Put(workerMsg)
 		if status.err != nil {
 			return status.err
 		}
@@ -207,11 +248,69 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 		go func() {
 			<-workerMsg.notifyMe
 			e.Unlock()
-			workerMsgPool.Put(workerMsg)
 			Log().Error("Backend has timed out while validating rcpt")
 		}()
 		return StorageTimeout
 	}
+}
+
+func (gw *BackendGateway) StreamOn() bool {
+	return len(gw.gwConfig.StreamSaveProcess) != 0
+}
+
+func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, error) {
+	res := response.Canned
+	if gw.State != BackendStateRunning {
+		return NewResult(res.FailBackendNotRunning, response.SP, gw.State), errors.New(res.FailBackendNotRunning.String())
+	}
+	// borrow a workerMsg from the pool
+	workerMsg := workerMsgPool.Get().(*workerMsg)
+	workerMsg.reset(e, TaskSaveMailStream)
+	workerMsg.r = r
+	// place on the channel so that one of the save mail workers can pick it up
+	gw.conveyor <- workerMsg
+	// wait for the save to complete
+	// or timeout
+	select {
+	case status := <-workerMsg.notifyMe:
+		// email saving transaction completed
+		if status.result == BackendResultOK && status.queuedID != "" {
+			return NewResult(res.SuccessMessageQueued, response.SP, status.queuedID), status.err
+		}
+
+		// A custom result, there was probably an error, if so, log it
+		if status.result != nil {
+			if status.err != nil {
+				Log().Error(status.err)
+			}
+			return status.result, status.err
+		}
+
+		// if there was no result, but there's an error, then make a new result from the error
+		if status.err != nil {
+			if _, err := strconv.Atoi(status.err.Error()[:3]); err != nil {
+				return NewResult(res.FailBackendTransaction, response.SP, status.err), status.err
+			}
+			return NewResult(status.err), status.err
+		}
+
+		// both result & error are nil (should not happen)
+		err := errors.New("no response from backend - processor did not return a result or an error")
+		Log().Error(err)
+		return NewResult(res.FailBackendTransaction, response.SP, err), err
+
+	case <-time.After(gw.saveTimeout()):
+		Log().Error("Backend has timed out while saving email")
+		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
+		go func() {
+			// keep waiting for the backend to finish processing
+			<-workerMsg.notifyMe
+			e.Unlock()
+			workerMsgPool.Put(workerMsg)
+		}()
+		return NewResult(res.FailBackendTimeout), errors.New("gateway timeout")
+	}
+
 }
 
 // Shutdown shuts down the backend and leaves it in BackendStateShuttered state
@@ -257,7 +356,6 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
 	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
 	if len(cfg) == 0 {
-		//cfg = strings.ToLower(defaultProcessor)
 		return NoopProcessor{}, nil
 	}
 	items := strings.Split(cfg, "|")
@@ -273,6 +371,30 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	// build the call-stack of decorators
 	p := Decorate(DefaultProcessor{}, decorators...)
 	return p, nil
+}
+
+func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
+	var decorators []StreamDecorator
+	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
+	if len(cfg) == 0 {
+
+		return streamer{NoopStreamProcessor{}, decorators}, nil
+	}
+	items := strings.Split(cfg, "|")
+	for i := range items {
+		name := items[len(items)-1-i] // reverse order, since decorators are stacked
+		if makeFunc, ok := streamers[name]; ok {
+			emmy := makeFunc()
+			decorators = append(decorators, emmy)
+		} else {
+			ErrProcessorNotFound = errors.New(fmt.Sprintf("stream processor [%s] not found", name))
+			return streamer{nil, decorators}, ErrProcessorNotFound
+		}
+	}
+
+	// build the call-stack of decorators
+	sp := DecorateStream(DefaultStreamProcessor{}, decorators...)
+	return streamer{sp, decorators}, nil
 }
 
 // loadConfig loads the config for the GatewayConfig
@@ -308,6 +430,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	}
 	gw.processors = make([]Processor, 0)
 	gw.validators = make([]Processor, 0)
+	gw.streamers = make([]streamer, 0)
 	for i := 0; i < workersSize; i++ {
 		p, err := gw.newStack(gw.gwConfig.SaveProcess)
 		if err != nil {
@@ -322,6 +445,14 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 			return err
 		}
 		gw.validators = append(gw.validators, v)
+
+		s, err := gw.newStreamStack(gw.gwConfig.StreamSaveProcess)
+		if err != nil {
+			gw.State = BackendStateError
+			return err
+		}
+
+		gw.streamers = append(gw.streamers, s)
 	}
 	// initialize processors
 	if err := Svc.initialize(cfg); err != nil {
@@ -357,6 +488,7 @@ func (gw *BackendGateway) Start() error {
 						gw.conveyor,
 						gw.processors[workerId],
 						gw.validators[workerId],
+						gw.streamers[workerId],
 						workerId+1,
 						stop)
 					// keep running after panic
@@ -422,6 +554,7 @@ func (gw *BackendGateway) workDispatcher(
 	workIn chan *workerMsg,
 	save Processor,
 	validate Processor,
+	stream streamer,
 	workerId int,
 	stop chan bool) (state dispatcherState) {
 
@@ -455,11 +588,37 @@ func (gw *BackendGateway) workDispatcher(
 			return
 		case msg = <-workIn:
 			state = dispatcherStateWorking // recovers from panic if in this state
-			result, err := save.Process(msg.e, msg.task)
-			state = dispatcherStateNotify
 			if msg.task == TaskSaveMail {
+				result, err := save.Process(msg.e, msg.task)
+				state = dispatcherStateNotify
+				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
+			} else if msg.task == TaskSaveMailStream {
+
+				err := stream.open(msg.e)
+				if err == nil {
+					N, copyErr := io.Copy(stream, msg.r)
+					if copyErr != nil {
+						err = append(err, copyErr)
+					}
+					msg.e.Values["size"] = N
+
+					closeErr := stream.close()
+					if closeErr != nil {
+						err = append(err, copyErr)
+					}
+				}
+
+				state = dispatcherStateNotify
+				var result Result
+				if err != nil {
+					result = NewResult(response.Canned.SuccessMessageQueued, response.SP, msg.e.QueuedId)
+				} else {
+					result = NewResult(response.Canned.FailBackendTransaction, err)
+				}
 				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
 			} else {
+				result, err := validate.Process(msg.e, msg.task)
+				state = dispatcherStateNotify
 				msg.notifyMe <- &notifyMsg{err: err, result: result}
 			}
 		}

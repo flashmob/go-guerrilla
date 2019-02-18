@@ -542,11 +542,24 @@ func (s *server) handleClient(client *client) {
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
 			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
+			be := s.backend()
+			var (
+				n   int64
+				err error
+				res backends.Result
+			)
+			if be.StreamOn() {
+				// process the message as a stream
+				res, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
 
-			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
-			if n > sc.MaxSize {
-				err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
+			} else {
+				// or buffer the entire message
+				n, err = client.Data.ReadFrom(client.smtpReader.DotReader())
+				if n > sc.MaxSize {
+					err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
+				}
 			}
+
 			if err != nil {
 				if err == LineLimitExceeded {
 					client.sendResponse(r.FailReadLimitExceededDataCmd, " ", LineLimitExceeded.Error())
@@ -563,7 +576,10 @@ func (s *server) handleClient(client *client) {
 				break
 			}
 
-			res := s.backend().Process(client.Envelope)
+			if !be.StreamOn() {
+				res = be.Process(client.Envelope)
+			}
+
 			if res.Code() < 300 {
 				client.messagesSent++
 			}

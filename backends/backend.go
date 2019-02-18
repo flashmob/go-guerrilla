@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ var (
 func init() {
 	Svc = &service{}
 	processors = make(map[string]ProcessorConstructor)
+	streamers = make(map[string]StreamProcessorConstructor)
 }
 
 type ProcessorConstructor func() Decorator
@@ -37,6 +39,10 @@ type Backend interface {
 	Process(*mail.Envelope) Result
 	// ValidateRcpt validates the last recipient that was pushed to the mail envelope
 	ValidateRcpt(e *mail.Envelope) RcptError
+	// ProcessStream is the alternative for Process, a stream is read from io.Reader
+	ProcessStream(r io.Reader, e *mail.Envelope) (Result, error)
+	// StreamOn signals if ProcessStream can be used
+	StreamOn() bool
 	// Initializes the backend, eg. creates folders, sets-up database connections
 	Initialize(BackendConfig) error
 	// Initializes the backend after it was Shutdown()
@@ -91,19 +97,19 @@ func (r *result) Code() int {
 	return code
 }
 
-func NewResult(r ...interface{}) Result {
-	buf := new(result)
-	for _, item := range r {
+func NewResult(param ...interface{}) Result {
+	r := new(result)
+	for _, item := range param {
 		switch v := item.(type) {
 		case error:
-			_, _ = buf.WriteString(v.Error())
+			_, _ = r.WriteString(v.Error())
 		case fmt.Stringer:
-			_, _ = buf.WriteString(v.String())
+			_, _ = r.WriteString(v.String())
 		case string:
-			_, _ = buf.WriteString(v)
+			_, _ = r.WriteString(v)
 		}
 	}
-	return buf
+	return r
 }
 
 type processorInitializer interface {
@@ -238,6 +244,16 @@ func (s *service) AddProcessor(name string, p ProcessorConstructor) {
 	}
 	// add to our processors list
 	processors[strings.ToLower(name)] = c
+}
+
+func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) {
+	// wrap in a constructor since we want to defer calling it
+	var c StreamProcessorConstructor
+	c = func() StreamDecorator {
+		return p()
+	}
+	// add to our processors list
+	streamers[strings.ToLower(name)] = c
 }
 
 // extractConfig loads the backend config. It has already been unmarshalled
