@@ -20,7 +20,7 @@ func (c CloseWith) Close() error {
 	return c()
 }
 
-type StreamProcessorConstructor func() StreamDecorator
+type StreamProcessorConstructor func() *StreamDecorator
 
 type streamService struct {
 	service

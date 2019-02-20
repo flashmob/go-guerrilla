@@ -70,7 +70,7 @@ type streamer struct {
 	// StreamProcessor is a chain of StreamProcessor
 	sp StreamProcessor
 	// so that we can call Open and Close
-	d []StreamDecorator
+	d []*StreamDecorator
 }
 
 func (s streamer) Write(p []byte) (n int, err error) {
@@ -78,7 +78,7 @@ func (s streamer) Write(p []byte) (n int, err error) {
 }
 
 func (s *streamer) open(e *mail.Envelope) Errors {
-	var err Errors
+	var err Errors = nil
 	for i := range s.d {
 		if s.d[i].Open != nil {
 			if e := s.d[i].Open(e); e != nil {
@@ -90,14 +90,16 @@ func (s *streamer) open(e *mail.Envelope) Errors {
 }
 
 func (s *streamer) close() Errors {
-	var err Errors
-	for i := range s.d {
+	var err Errors = nil
+	// close in reverse order
+	for i := len(s.d) - 1; i >= 0; i-- {
 		if s.d[i].Close != nil {
 			if e := s.d[i].Close(); e != nil {
 				err = append(err, e)
 			}
 		}
 	}
+
 	return err
 }
 
@@ -374,7 +376,7 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 }
 
 func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
-	var decorators []StreamDecorator
+	var decorators []*StreamDecorator
 	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
 	if len(cfg) == 0 {
 
@@ -384,8 +386,7 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	for i := range items {
 		name := items[len(items)-1-i] // reverse order, since decorators are stacked
 		if makeFunc, ok := streamers[name]; ok {
-			emmy := makeFunc()
-			decorators = append(decorators, emmy)
+			decorators = append(decorators, makeFunc())
 		} else {
 			ErrProcessorNotFound = errors.New(fmt.Sprintf("stream processor [%s] not found", name))
 			return streamer{nil, decorators}, ErrProcessorNotFound
@@ -393,7 +394,7 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	}
 
 	// build the call-stack of decorators
-	sp := DecorateStream(DefaultStreamProcessor{}, decorators...)
+	sp, decorators := DecorateStream(&DefaultStreamProcessor{}, decorators)
 	return streamer{sp, decorators}, nil
 }
 
@@ -593,27 +594,22 @@ func (gw *BackendGateway) workDispatcher(
 				state = dispatcherStateNotify
 				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
 			} else if msg.task == TaskSaveMailStream {
-
 				err := stream.open(msg.e)
 				if err == nil {
-					N, copyErr := io.Copy(stream, msg.r)
-					if copyErr != nil {
+					if N, copyErr := io.Copy(stream, msg.r); copyErr != nil {
 						err = append(err, copyErr)
+						msg.e.Values["size"] = N
 					}
-					msg.e.Values["size"] = N
-
-					closeErr := stream.close()
-					if closeErr != nil {
-						err = append(err, copyErr)
+					if closeErr := stream.close(); closeErr != nil {
+						err = append(err, closeErr)
 					}
 				}
-
 				state = dispatcherStateNotify
 				var result Result
 				if err != nil {
-					result = NewResult(response.Canned.SuccessMessageQueued, response.SP, msg.e.QueuedId)
-				} else {
 					result = NewResult(response.Canned.FailBackendTransaction, err)
+				} else {
+					result = NewResult(response.Canned.SuccessMessageQueued, response.SP, msg.e.QueuedId)
 				}
 				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
 			} else {

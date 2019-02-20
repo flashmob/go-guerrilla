@@ -1,6 +1,8 @@
 package backends
 
-import "github.com/flashmob/go-guerrilla/mail"
+import (
+	"github.com/flashmob/go-guerrilla/mail"
+)
 
 type streamOpenWith func(e *mail.Envelope) error
 
@@ -15,12 +17,11 @@ type StreamDecorator struct {
 }
 
 // DecorateStream will decorate a StreamProcessor with a slice of passed decorators
-func DecorateStream(c StreamProcessor, ds ...StreamDecorator) StreamProcessor {
-	decorated := c
-	for _, decorate := range ds {
-		decorated = decorate.p(decorated)
+func DecorateStream(c StreamProcessor, ds []*StreamDecorator) (StreamProcessor, []*StreamDecorator) {
+	for i := range ds {
+		c = ds[i].p(c)
 	}
-	return decorated
+	return c, ds
 }
 
 func (sd *StreamDecorator) OpenX(e *mail.Envelope) error {

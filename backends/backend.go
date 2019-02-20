@@ -201,7 +201,7 @@ func (s *service) reset() {
 func (s *service) initialize(backend BackendConfig) Errors {
 	s.Lock()
 	defer s.Unlock()
-	var errors Errors
+	var errors Errors = nil
 	failed := make([]processorInitializer, 0)
 	for i := range s.initializers {
 		if err := s.initializers[i].Initialize(backend); err != nil {
@@ -249,7 +249,7 @@ func (s *service) AddProcessor(name string, p ProcessorConstructor) {
 func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) {
 	// wrap in a constructor since we want to defer calling it
 	var c StreamProcessorConstructor
-	c = func() StreamDecorator {
+	c = func() *StreamDecorator {
 		return p()
 	}
 	// add to our processors list

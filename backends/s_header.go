@@ -8,8 +8,8 @@ import (
 )
 
 func init() {
-	streamers["header"] = func() StreamDecorator {
-		return *StreamHeader()
+	streamers["header"] = func() *StreamDecorator {
+		return StreamHeader()
 	}
 }
 
@@ -42,57 +42,35 @@ func (sh *streamHeader) addHeader(e *mail.Envelope, config HeaderConfig) {
 	sh.addHead = []byte(addHead)
 }
 
-func (sh *streamHeader) Write(p []byte) (n int, err error) {
-	if sh.i < len(sh.addHead) {
-		for {
-			if N, err := sh.w.Write(sh.addHead[sh.i:]); err != nil {
-				return N, err
-			} else {
-				sh.i += N
-				if sh.i >= len(sh.addHead) {
-					break
-				}
-			}
-		}
-	}
-	return sh.w.Write(p)
-}
-
 func StreamHeader() *StreamDecorator {
 	sd := &StreamDecorator{}
 	sd.p =
 
 		func(sp StreamProcessor) StreamProcessor {
-			var dc *streamHeader
-			x := 1 + 5
-			_ = x
+			var sh *streamHeader
+
 			sd.Open = func(e *mail.Envelope) error {
-				dc = newStreamHeader(sp)
+				sh = newStreamHeader(sp)
 				hc := HeaderConfig{"sharklasers.com"}
-				dc.addHeader(e, hc)
+				sh.addHeader(e, hc)
 				return nil
 			}
 			return StreamProcessWith(func(p []byte) (int, error) {
-
+				if sh.i < len(sh.addHead) {
+					for {
+						if N, err := sh.w.Write(sh.addHead[sh.i:]); err != nil {
+							return N, err
+						} else {
+							sh.i += N
+							if sh.i >= len(sh.addHead) {
+								break
+							}
+						}
+					}
+				}
 				return sp.Write(p)
 			})
 		}
 
-		/*
-			func(sp StreamProcessor) StreamProcessor {
-				var dc *streamHeader
-
-				sd.Open = func(e *mail.Envelope) error {
-					dc = newStreamHeader(sp)
-					hc := HeaderConfig{"sharklasers.com"}
-					dc.addHeader(e, hc)
-					return nil
-				}
-
-				return StreamProcessWith(dc.Write)
-
-
-			}
-		*/
 	return sd
 }

@@ -719,11 +719,10 @@ func TestStreamProcessor(t *testing.T) {
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":        "HeadersParser|Debugger",
-			"stream_save_process": "Header",
+			"stream_save_process": "Header|compress|Decompress|debug",
 		},
 	}
 	d := Daemon{Config: cfg}
-	//d.AddProcessor("Custom", customBackend2)
 
 	if err := d.Start(); err != nil {
 		t.Error(err)
@@ -740,13 +739,14 @@ func TestStreamProcessor(t *testing.T) {
 		t.Error("could not read logfile")
 		return
 	}
+
 	// lets check for fingerprints
-	if strings.Index(string(b), "451 4.3.0 Error") < 0 {
-		t.Error("did not log: 451 4.3.0 Error")
+	if strings.Index(string(b), "Debug stream") < 0 {
+		t.Error("did not log: Debug stream")
 	}
 
-	if strings.Index(string(b), "system shock") < 0 {
-		t.Error("did not log: system shock")
+	if strings.Index(string(b), "Error") == -1 {
+		t.Error("There was an error", string(b))
 	}
 
 }
