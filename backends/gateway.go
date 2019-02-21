@@ -77,8 +77,8 @@ func (s streamer) Write(p []byte) (n int, err error) {
 	return s.sp.Write(p)
 }
 
-func (s *streamer) open(e *mail.Envelope) Errors {
-	var err Errors = nil
+func (s *streamer) open(e *mail.Envelope) error {
+	var err Errors
 	for i := range s.d {
 		if s.d[i].Open != nil {
 			if e := s.d[i].Open(e); e != nil {
@@ -86,11 +86,14 @@ func (s *streamer) open(e *mail.Envelope) Errors {
 			}
 		}
 	}
+	if len(err) == 0 {
+		return nil
+	}
 	return err
 }
 
-func (s *streamer) close() Errors {
-	var err Errors = nil
+func (s *streamer) close() error {
+	var err Errors
 	// close in reverse order
 	for i := len(s.d) - 1; i >= 0; i-- {
 		if s.d[i].Close != nil {
@@ -99,7 +102,9 @@ func (s *streamer) close() Errors {
 			}
 		}
 	}
-
+	if len(err) == 0 {
+		return nil
+	}
 	return err
 }
 
@@ -596,12 +601,11 @@ func (gw *BackendGateway) workDispatcher(
 			} else if msg.task == TaskSaveMailStream {
 				err := stream.open(msg.e)
 				if err == nil {
-					if N, copyErr := io.Copy(stream, msg.r); copyErr != nil {
-						err = append(err, copyErr)
-						msg.e.Values["size"] = N
+					if msg.e.Values["size"], err = io.Copy(stream, msg.r); err != nil {
+						Log().WithError(err).Error("stream writing failed")
 					}
-					if closeErr := stream.close(); closeErr != nil {
-						err = append(err, closeErr)
+					if err = stream.close(); err != nil {
+						Log().WithError(err).Error("stream closing failed")
 					}
 				}
 				state = dispatcherStateNotify

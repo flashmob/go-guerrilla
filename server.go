@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"net"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -559,11 +558,6 @@ func (s *server) handleClient(client *client) {
 				if n > sc.MaxSize {
 					err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
 				}
-			}
-			if err == nil {
-				fmt.Println(err)
-			} else {
-				fmt.Println(err.Error(), "type is:", reflect.TypeOf(err))
 			}
 
 			if err != nil {

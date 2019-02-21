@@ -745,7 +745,7 @@ func TestStreamProcessor(t *testing.T) {
 		t.Error("did not log: Debug stream")
 	}
 
-	if strings.Index(string(b), "Error") == -1 {
+	if strings.Index(string(b), "Error") != -1 {
 		t.Error("There was an error", string(b))
 	}
 
