@@ -23,12 +23,3 @@ func DecorateStream(c StreamProcessor, ds []*StreamDecorator) (StreamProcessor, 
 	}
 	return c, ds
 }
-
-func (sd *StreamDecorator) OpenX(e *mail.Envelope) error {
-	sd.e = e
-	return nil
-}
-
-func (sd *StreamDecorator) Closex() error {
-	return nil
-}

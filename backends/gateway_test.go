@@ -86,7 +86,7 @@ func TestStartProcessStop(t *testing.T) {
 	e.Data.WriteString("Subject:Test\n\nThis is a test.")
 	notify := make(chan *notifyMsg)
 
-	gateway.conveyor <- &workerMsg{e, notify, TaskSaveMail}
+	gateway.conveyor <- &workerMsg{e, notify, TaskSaveMail, nil}
 
 	// it should not produce any errors
 	// headers (subject) should be parsed.
