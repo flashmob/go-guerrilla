@@ -15,7 +15,7 @@ type HeaderConfig struct {
 // ----------------------------------------------------------------------------------
 // Description   : Adds delivery information headers to e.DeliveryHeader
 // ----------------------------------------------------------------------------------
-// Config Options: none
+// Config Options: primary_mail_host - string of the primary mail hostname
 // --------------:-------------------------------------------------------------------
 // Input         : e.Helo
 //               : e.RemoteAddress

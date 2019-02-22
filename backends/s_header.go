@@ -7,6 +7,21 @@ import (
 	"time"
 )
 
+// ----------------------------------------------------------------------------------
+// Processor Name: header
+// ----------------------------------------------------------------------------------
+// Description   : Adds delivery information headers to e.DeliveryHeader
+// ----------------------------------------------------------------------------------
+// Config Options: primary_mail_host - string of the primary mail hostname
+// --------------:-------------------------------------------------------------------
+// Input         : e.Helo
+//               : e.RemoteAddress
+//               : e.RcptTo
+//               : e.Hashes
+// ----------------------------------------------------------------------------------
+// Output        : Sets e.DeliveryHeader with additional delivery info
+// ----------------------------------------------------------------------------------
+
 func init() {
 	streamers["header"] = func() *StreamDecorator {
 		return StreamHeader()
@@ -25,7 +40,7 @@ func newStreamHeader(w io.Writer) *streamHeader {
 	return sc
 }
 
-func (sh *streamHeader) addHeader(e *mail.Envelope, config HeaderConfig) {
+func (sh *streamHeader) addHeader(e *mail.Envelope, config *HeaderConfig) {
 	to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
 	hash := "unknown"
 	if len(e.Hashes) > 0 {
@@ -43,6 +58,19 @@ func (sh *streamHeader) addHeader(e *mail.Envelope, config HeaderConfig) {
 }
 
 func StreamHeader() *StreamDecorator {
+
+	var hc *HeaderConfig
+
+	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
+		configType := BaseConfig(&HeaderConfig{})
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		if err != nil {
+			return err
+		}
+		hc = bcfg.(*HeaderConfig)
+		return nil
+	}))
+
 	sd := &StreamDecorator{}
 	sd.p =
 
@@ -51,10 +79,10 @@ func StreamHeader() *StreamDecorator {
 
 			sd.Open = func(e *mail.Envelope) error {
 				sh = newStreamHeader(sp)
-				hc := HeaderConfig{"sharklasers.com"}
 				sh.addHeader(e, hc)
 				return nil
 			}
+
 			return StreamProcessWith(func(p []byte) (int, error) {
 				if sh.i < len(sh.addHead) {
 					for {

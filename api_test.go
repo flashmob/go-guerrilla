@@ -496,6 +496,66 @@ func talkToServer(address string) (err error) {
 	return nil
 }
 
+func talkToServer2(address string, body string) (err error) {
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		return
+	}
+	in := bufio.NewReader(conn)
+	str, err := in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
+	if err != nil {
+		return err
+	}
+	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+	if err != nil {
+		return err
+	}
+	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
+	if err != nil {
+		return err
+	}
+	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(conn, "DATA\r\n")
+	if err != nil {
+		return err
+	}
+	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprint(conn, body)
+	if err != nil {
+		return err
+	}
+
+	str, err = in.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	_ = str
+	return nil
+}
+
 // Test hot config reload
 // Here we forgot to add FunkyLogger so backend will fail to init
 
@@ -719,7 +779,7 @@ func TestStreamProcessor(t *testing.T) {
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":        "HeadersParser|Debugger",
-			"stream_save_process": "Header|compress|Decompress|debug",
+			"stream_save_process": "Header|headersparser|compress|Decompress|debug",
 		},
 	}
 	d := Daemon{Config: cfg}
@@ -727,8 +787,25 @@ func TestStreamProcessor(t *testing.T) {
 	if err := d.Start(); err != nil {
 		t.Error(err)
 	}
+	body := "Subject: Test subject\r\n" +
+		//"\r\n" +
+		"A an email body.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+
+		".\r\n"
 	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525"); err != nil {
+	if err := talkToServer2("127.0.0.1:2525", body); err != nil {
 		t.Error(err)
 	}
 

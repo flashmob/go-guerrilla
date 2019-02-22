@@ -601,7 +601,9 @@ func (gw *BackendGateway) workDispatcher(
 			} else if msg.task == TaskSaveMailStream {
 				err := stream.open(msg.e)
 				if err == nil {
-					if msg.e.Values["size"], err = io.Copy(stream, msg.r); err != nil {
+					var buf []byte
+					buf = make([]byte, 1024*4)
+					if msg.e.Values["size"], err = io.CopyBuffer(stream, msg.r, buf); err != nil {
 						Log().WithError(err).Error("stream writing failed")
 					}
 					if err = stream.close(); err != nil {
