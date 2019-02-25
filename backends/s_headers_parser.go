@@ -3,10 +3,10 @@ package backends
 import (
 	"bufio"
 	"bytes"
-	"fmt"
-	"github.com/flashmob/go-guerrilla/mail"
 	"io"
 	"net/textproto"
+
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 func init() {
@@ -17,6 +17,7 @@ func init() {
 
 const stateHeaderScanning = 0
 const stateHeaderNotScanning = 1
+const headerMaxBytes = 1024 * 4
 
 func StreamHeadersParser() *StreamDecorator {
 	sd := &StreamDecorator{}
@@ -24,7 +25,7 @@ func StreamHeadersParser() *StreamDecorator {
 
 		func(sp StreamProcessor) StreamProcessor {
 
-			// contains the header
+			// buf buffers the header
 			var buf bytes.Buffer
 			var state byte
 			var lastByte byte
@@ -100,7 +101,7 @@ func StreamHeadersParser() *StreamDecorator {
 					} else {
 						total += n
 						// give up if we didn't detect the header after x bytes
-						if total > 100 {
+						if total > headerMaxBytes {
 							state = stateHeaderNotScanning
 							n, err = io.Copy(sp, &buf)
 							return int(n), err
@@ -111,8 +112,7 @@ func StreamHeadersParser() *StreamDecorator {
 					// just forward everything to the next writer without buffering
 					return sp.Write(p)
 				}
-				fmt.Println(string(p))
-				Log().WithField("p", string(p)).Info("Debug stream")
+
 				return sp.Write(p)
 			})
 		}
