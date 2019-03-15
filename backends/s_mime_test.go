@@ -154,26 +154,32 @@ func TestBoundary(t *testing.T) {
 		t.Error(err)
 	}
 
+	//for c := p.next(); c != 0; c= p.next() {} // drain
+
 	p.inject([]byte("The quick brown fox jumped over the lazy dog-wololo-"))
 	err = p.boundary(part)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// the boundary with an additional buffer in between
-	p.inject([]byte("The quick brown fox jumped over the lazy dog"),
-		[]byte("this is the middle"),
-		[]byte("and thats the end-wololo-"))
-
-	err = p.boundary(part)
-	if err != nil {
-		t.Error(err)
-	}
+	for c := p.next(); c != 0; c = p.next() {
+	} // drain
 
 	// boundary is split over multiple slices
 	p.inject(
 		[]byte("The quick brown fox jumped ov-wolo"),
 		[]byte("lo-er the lazy dog"))
+	err = p.boundary(part)
+	if err != nil {
+		t.Error(err)
+	}
+	for c := p.next(); c != 0; c = p.next() {
+	} // drain
+	// the boundary with an additional buffer in between
+	p.inject([]byte("The quick brown fox jumped over the lazy dog"),
+		[]byte("this is the middle"),
+		[]byte("and thats the end-wololo-"))
+
 	err = p.boundary(part)
 	if err != nil {
 		t.Error(err)

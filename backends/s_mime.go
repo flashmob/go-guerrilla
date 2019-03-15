@@ -171,6 +171,9 @@ func (p *parser) peek() byte {
 
 // simulate a byte stream
 func (p *parser) inject(input ...[]byte) {
+	p.set(input[0])
+	p.pos = 0
+	p.ch = p.buf[0]
 	go func() {
 		for i := 1; i < len(input); i++ {
 			<-p.consumed
@@ -180,9 +183,6 @@ func (p *parser) inject(input ...[]byte) {
 		<-p.consumed
 		p.gotNewSlice <- false // no more data
 	}()
-	p.set(input[0])
-	p.pos = 0
-	p.ch = p.buf[0]
 }
 
 func (p *parser) set(input []byte) {
