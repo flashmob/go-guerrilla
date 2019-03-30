@@ -80,9 +80,10 @@ type parser struct {
 	isHalting                   bool
 
 	// mime variables
-	parts   []*mimeHeader
-	msgPos  uint
-	msgLine uint
+	parts           []*mimeHeader
+	msgPos          uint
+	msgLine         uint
+	lastBoundaryPos uint
 }
 
 type mimeHeader struct {
@@ -210,6 +211,17 @@ func (p *parser) set(input []byte) {
 
 }
 
+func (p *parser) skip(nBytes int) {
+
+	for i := 0; i < nBytes; i++ {
+		p.next()
+		if p.ch == 0 {
+			return
+		}
+	}
+
+}
+
 // boundary scans until next boundary string, returns error if not found
 // syntax specified https://tools.ietf.org/html/rfc2046 p21
 func (p *parser) boundary(contentBoundary string) (end bool, err error) {
@@ -219,12 +231,8 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 				p.next()
 			}
 		}
-		// todo: remove this
-		//temp := p.buf[p.pos-10:p.pos+45]
-		//_ = temp
 	}()
-	// gensen chosu
-	// shotoku chomen sho
+
 	if len(contentBoundary) < 1 {
 		err = errors.New("content boundary too short")
 	}
@@ -236,13 +244,16 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 			// then let next() to advance the last char.
 			// in case the boundary is the tail part of buffer, calling next()
 			// will wait until we get a new buffer
-			p.pos = p.pos + i + len(boundary) - 1
-			p.next()
+
+			p.skip(i)
+			p.lastBoundaryPos = p.msgPos - 1 // - uint(len(boundary))
+			p.skip(len(boundary))
 			end = p.boundaryEnd()
 			p.transportPadding()
-			if p.ch != '\n' {
+			if p.ch != '\n' && p.ch != 0 {
 				err = errors.New("boundary new line expected")
 			}
+
 			return
 
 		} else {
@@ -262,8 +273,7 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 					p.boundaryMatched = 0
 				}
 			}
-			p.pos = len(p.buf) - 1
-			p.next() // this will block until new bytes come in
+			p.skip(len(p.buf))
 			if p.ch == 0 {
 				return false, io.EOF
 			} else if p.boundaryMatched > 0 {
@@ -272,19 +282,21 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 				if bytes.Compare(
 					p.buf[0:len(boundary)-p.boundaryMatched],
 					[]byte(boundary[p.boundaryMatched:])) == 0 {
+
 					// advance the pointer
-					p.pos += len(boundary) - p.boundaryMatched - 1
-					p.next()
+					p.skip(len(boundary) - p.boundaryMatched)
+
+					p.lastBoundaryPos = p.msgPos - 1 //- uint(len(boundary))
 					end = p.boundaryEnd()
 					p.transportPadding()
-					if p.ch != '\n' {
+					if p.ch != '\n' && p.ch != 0 {
 						err = errors.New("boundary new line expected")
 					}
 					return
 				}
 				p.boundaryMatched = 0
 			}
-			_ = subject
+			//_ = subject
 		}
 	}
 }
@@ -369,7 +381,7 @@ func (p *parser) header(mh *mimeHeader) (err error) {
 		}
 
 	}()
-	mh.startingPos = p.msgPos
+
 	for {
 
 		switch state {
@@ -714,7 +726,6 @@ func (p *parser) body(mh *mimeHeader) (err error) {
 		} else {
 			fmt.Println("boundary end:", end)
 		}
-		mh.endingPosBody = p.msgPos
 		return
 	} else {
 		for {
@@ -725,7 +736,6 @@ func (p *parser) body(mh *mimeHeader) (err error) {
 			}
 			if p.ch == '\n' && p.peek() == '\n' {
 				p.next()
-				mh.endingPosBody = p.msgPos
 				return
 			}
 
@@ -736,238 +746,96 @@ func (p *parser) body(mh *mimeHeader) (err error) {
 
 }
 
-func (p *parser) mime(boundary string, depth string) (err error) {
+func (p *parser) isMulti(part *mimeHeader) bool {
+	if part.contentType != nil {
+		if part.contentType.superType == "multipart" ||
+			part.contentType.superType == "message" {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser) multi(part *mimeHeader, depth string) (err error) {
+	if part.contentType != nil {
+		if part.contentType.superType == "multipart" {
+			if end, bErr := p.boundary(part.contentBoundary); bErr != nil {
+				return bErr
+			} else if end {
+
+				part.endingPosBody = p.lastBoundaryPos
+				return
+			}
+		}
+		if part.contentType.superType == "message" ||
+			part.contentType.superType == "multipart" {
+			err = p.mime(part, depth)
+			if err != nil {
+
+				return err
+			}
+
+		}
+
+	}
+	return
+}
+
+func (p *parser) mime(parent *mimeHeader, depth string) (err error) {
+
 	count := 1
-	h := NewMimeHeader()
-
-	if p.ch >= 33 && p.ch <= 126 {
-		err = p.header(h)
-		if err != nil {
-			//				temp := p.buf[p.pos:p.pos+20]
-			//				_ = temp
-			return err
-		}
-	} else {
-		fmt.Println("empty header")
-	}
-
-	if p.ch == '\n' && p.peek() == '\n' {
-		p.next()
-		p.next()
-	}
-	if h.contentBoundary != "" {
-		boundary = h.contentBoundary
-
-	}
-
-	if end, bErr := p.boundary(boundary); bErr != nil {
-		return bErr
-	} else if end {
-		h.endingPosBody = p.msgPos
-		return
-	}
-
-	if depth == "1" {
-		p.addPart(h, depth)
-	} else {
-		p.addPart(h, depth+"."+strconv.Itoa(count))
-		if h.contentType != nil &&
-			(h.contentType.superType == "message" ||
-				h.contentType.superType == "multipart") {
-			return p.mime(boundary, depth+"."+strconv.Itoa(count))
-		} else {
-			count++
-		}
-	}
-
 	for {
 
 		var part mimeHeader
 
 		part = *NewMimeHeader()
+		part.startingPos = p.msgPos
 		if p.ch >= 33 && p.ch <= 126 {
 			err = p.header(&part)
 			if err != nil {
 				return err
 			}
+		} else {
+			moo := p.buf[p.pos:]
+			_ = moo
+			//break
 		}
 		if p.ch == '\n' && p.peek() == '\n' {
 			p.next()
 			p.next()
 		}
-
-		p.addPart(&part, depth+"."+strconv.Itoa(count))
-		if part.contentType != nil &&
-			(part.contentType.superType == "message" ||
-				part.contentType.superType == "multipart") {
-			return p.mime(boundary, depth+"."+strconv.Itoa(count))
-		} else {
-			if end, bErr := p.boundary(boundary); bErr != nil {
-				return bErr
-			} else if end {
-				part.endingPosBody = p.msgPos
-				break
-			}
+		if part.contentBoundary == "" {
+			part.contentBoundary = parent.contentBoundary
 		}
 
-		count++
-
-	}
-	return
-
-}
-
-func (p *parser) mime2(boundary string, depth string) (err error) {
-	count := 1
-	h := NewMimeHeader()
-
-	if p.ch >= 33 && p.ch <= 126 {
-		err = p.header(h)
-		if err != nil {
-			//				temp := p.buf[p.pos:p.pos+20]
-			//				_ = temp
-			return err
+		part.startingPosBody = p.msgPos
+		partID := strconv.Itoa(count)
+		if depth != "" {
+			partID = depth + "." + strconv.Itoa(count)
 		}
-	} else {
-		fmt.Println("empty header")
-	}
+		p.addPart(&part, partID)
 
-	if depth == "1" {
-		p.addPart(h, depth)
-	} else {
-		p.addPart(h, depth+"."+strconv.Itoa(count))
-		if h.contentType != nil &&
-			(h.contentType.superType == "message" ||
-				h.contentType.superType == "multipart") {
-			depth = depth + "." + strconv.Itoa(count)
-		}
-	}
-
-	if p.ch == '\n' && p.peek() == '\n' {
-		p.next()
-		p.next()
-	}
-	if h.contentBoundary != "" {
-		boundary = h.contentBoundary
-
-	}
-
-	if end, bErr := p.boundary(boundary); bErr != nil {
-		return bErr
-	} else if end {
-		h.endingPosBody = p.msgPos
-		return
-	}
-
-	for {
-
-		var part mimeHeader
-
-		part = *NewMimeHeader()
-		if p.ch >= 33 && p.ch <= 126 {
-			err = p.header(&part)
+		if p.isMulti(&part) {
+			err = p.multi(&part, partID)
+			part.endingPosBody = p.msgPos + 1 //p.lastBoundaryPos
 			if err != nil {
-				return err
-			}
-		}
-		if p.ch == '\n' && p.peek() == '\n' {
-			p.next()
-			p.next()
-		}
-
-		p.addPart(&part, depth+"."+strconv.Itoa(count))
-		if part.contentType != nil &&
-			(part.contentType.superType == "message" ||
-				part.contentType.superType == "multipart") {
-			return p.mime(boundary, depth+"."+strconv.Itoa(count))
-		} else {
-
-			if end, bErr := p.boundary(boundary); bErr != nil {
-				return bErr
-			} else if end {
-				part.endingPosBody = p.msgPos
 				break
 			}
-		}
-		count++
 
-	}
-	return
-
-}
-
-func (p *parser) mimeMsg(boundary string, depth string) (err error) {
-	count := 0
-	for {
-		count++
-		d := depth + "." + strconv.Itoa(count)
-		_ = d
-
-		{
-			h := NewMimeHeader()
-
-			if p.ch >= 33 && p.ch <= 126 {
-				err = p.header(h)
-				if err != nil {
-					//				temp := p.buf[p.pos:p.pos+20]
-					//				_ = temp
-					return err
-				}
-			} else {
-				fmt.Println("empty header")
-			}
-			if p.ch == '\n' && p.peek() == '\n' {
-				p.next()
-				p.next()
-			}
-
-			if h.contentBoundary != "" {
-				boundary = h.contentBoundary
-				if end, bErr := p.boundary(boundary); bErr != nil {
-					return bErr
-				} else if end {
-					return
-				}
-				err = p.mimeMsg(boundary, depth+"."+strconv.Itoa(count))
-				if err != nil {
-					return
-				}
-			} else {
-				// body-part end
-				for {
-					if end, bErr := p.boundary(boundary); bErr != nil {
-						return bErr
-					} else if end {
-						return
-					}
-
-				}
-
-			}
-
-			if p.ch == 0 {
-				return
-			}
-
-			if h.contentType == nil {
-				fmt.Println("nope")
-			}
-
-			p.addPart(h, depth+"."+strconv.Itoa(count))
-			if h.contentType != nil &&
-				(h.contentType.superType == "message" ||
-					h.contentType.superType == "multipart") {
-
-				return p.mimeMsg(boundary, depth+"."+strconv.Itoa(count))
-			} else if end, bErr := p.boundary(boundary); bErr != nil {
+			return
+		} else {
+			if end, bErr := p.boundary(parent.contentBoundary); bErr != nil {
 				return bErr
 			} else if end {
+				part.endingPosBody = p.lastBoundaryPos
 				return
 			}
+			part.endingPosBody = p.lastBoundaryPos
 
 		}
-
+		count++
 	}
+	return
 }
 
 func (p *parser) close() error {

@@ -3,6 +3,7 @@ package backends
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -118,16 +119,15 @@ func TestBoundary(t *testing.T) {
 	part.contentBoundary = "-wololo-"
 
 	// in the middle of the string
-	p.inject([]byte("The quick brown fo-wololo-x jumped over the lazy dog"))
+	p.inject([]byte("The quick brown fo---wololo-\nx jumped over the lazy dog"))
 
 	_, err = p.boundary(part.contentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
 
-	//for c := p.next(); c != 0; c= p.next() {} // drain
-
-	p.inject([]byte("The quick brown fox jumped over the lazy dog-wololo-"))
+	// at the end (with the -- postfix)
+	p.inject([]byte("The quick brown fox jumped over the lazy dog---wololo---\n"))
 	_, err = p.boundary(part.contentBoundary)
 	if err != nil {
 		t.Error(err)
@@ -138,8 +138,8 @@ func TestBoundary(t *testing.T) {
 
 	// boundary is split over multiple slices
 	p.inject(
-		[]byte("The quick brown fox jumped ov-wolo"),
-		[]byte("lo-er the lazy dog"))
+		[]byte("The quick brown fox jumped ov---wolo"),
+		[]byte("lo---\ner the lazy dog"))
 	_, err = p.boundary(part.contentBoundary)
 	if err != nil {
 		t.Error(err)
@@ -149,7 +149,7 @@ func TestBoundary(t *testing.T) {
 	// the boundary with an additional buffer in between
 	p.inject([]byte("The quick brown fox jumped over the lazy dog"),
 		[]byte("this is the middle"),
-		[]byte("and thats the end-wololo-"))
+		[]byte("and thats the end---wololo---\n"))
 
 	_, err = p.boundary(part.contentBoundary)
 	if err != nil {
@@ -203,37 +203,6 @@ func TestMimeContentQuotedParams(t *testing.T) {
 
 }
 
-func msg() (err error) {
-	main := NewMimeHeader()
-	err = p.header(main)
-	if err != nil {
-		return err
-	}
-	p.addPart(main, "1")
-
-	if main.contentBoundary != "" {
-		// it's a message with mime parts
-
-		if end, bErr := p.boundary(main.contentBoundary); bErr != nil {
-			return bErr
-		} else if end {
-			return
-		}
-
-		if err = p.mimeMsg("", "1"); err != nil {
-			return err
-		}
-	} else {
-		// only contains one part (the body)
-		if err := p.body(main); err != nil {
-			return err
-		}
-	}
-	p.endBody(main)
-
-	return
-}
-
 var email = `From:  Al Gore <vice-president@whitehouse.gov>
 To:  White House Transportation Coordinator <transport@whitehouse.gov>
 Subject: [Fwd: Map of Argentina with Description]
@@ -254,7 +223,7 @@ Content-Transfer-Encoding: 7bit
 
 Fred,
 
-Fire up Air Force One!  We\'re going South!
+Fire up Air Force One!  We're going South!
 
 Thanks,
 Al
@@ -287,7 +256,7 @@ Content-Transfer-Encoding: 7bit
 
 Hi A1,
 
-I finally figured out this MIME thing.  Pretty cool.  I\'ll send you
+I finally figured out this MIME thing.  Pretty cool.  I'll send you
 some sax music in .au files next week!
 
 Anyway, the attached image is really too small to get a good look at
@@ -295,7 +264,7 @@ Argentina.  Try this for a much better map:
 
 http://www.1one1yp1anet.com/dest/sam/graphics/map-arg.htm
 
-Then again, shouldn\'t the CIA have something like that?
+Then again, shouldn't the CIA have something like that?
 
 Bill
 --DC8------------DC8638F443D87A7F0726DEF7
@@ -315,14 +284,97 @@ U6ZGxseyk8SasGw3J9GRzdTQky1iHNvcPNNI4TLeKdfMvy0vMqLrItvuxfDW8ubjueDtJufz
 
 `
 
+var email2 = `From: abc@def.de
+Content-Type: multipart/mixed;
+        boundary="----_=_NextPart_001_01CBE273.65A0E7AA"
+To: ghi@def.de
+
+This is a multi-part message in MIME format.
+
+------_=_NextPart_001_01CBE273.65A0E7AA
+Content-Type: multipart/alternative;
+        boundary="----_=_NextPart_002_01CBE273.65A0E7AA"
+
+
+------_=_NextPart_002_01CBE273.65A0E7AA
+Content-Type: text/plain;
+        charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+[base64-content]
+------_=_NextPart_002_01CBE273.65A0E7AA
+Content-Type: text/html;
+        charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+[base64-content]
+------_=_NextPart_002_01CBE273.65A0E7AA--
+------_=_NextPart_001_01CBE273.65A0E7AA
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 7bit
+
+X-MimeOLE: Produced By Microsoft Exchange V6.5
+Content-class: urn:content-classes:message
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+        boundary="----_=_NextPart_003_01CBE272.13692C80"
+From: bla@bla.de
+To: xxx@xxx.de
+
+This is a multi-part message in MIME format.
+
+------_=_NextPart_003_01CBE272.13692C80
+Content-Type: multipart/alternative;
+        boundary="----_=_NextPart_004_01CBE272.13692C80"
+
+
+------_=_NextPart_004_01CBE272.13692C80
+Content-Type: text/plain;
+        charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+=20
+
+Viele Gr=FC=DFe
+
+------_=_NextPart_004_01CBE272.13692C80
+Content-Type: text/html;
+        charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html>...</html>
+------_=_NextPart_004_01CBE272.13692C80--
+------_=_NextPart_003_01CBE272.13692C80
+Content-Type: application/x-zip-compressed;
+        name="abc.zip"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+        filename="abc.zip"
+
+[base64-content]
+
+------_=_NextPart_003_01CBE272.13692C80--
+------_=_NextPart_001_01CBE273.65A0E7AA--`
+
 func TestNestedEmail(t *testing.T) {
+	//email = email2
 	p.inject([]byte(email))
 
-	if err := p.mime("", "1"); err != nil {
+	if err := p.mime(nil, ""); err != nil {
 		t.Error(err)
 	}
 	for part := range p.parts {
-		fmt.Println(p.parts[part].part, " ", p.parts[part].contentType)
+		email = replaceAtIndex(email, '#', p.parts[part].startingPos)
+		email = replaceAtIndex(email, '&', p.parts[part].startingPosBody)
+		email = replaceAtIndex(email, '*', p.parts[part].endingPosBody)
+		fmt.Println(p.parts[part].part + " " + strconv.Itoa(int(p.parts[part].startingPos)) + " " + strconv.Itoa(int(p.parts[part].startingPosBody)) + " " + strconv.Itoa(int(p.parts[part].endingPosBody)))
 	}
+	fmt.Print(email)
+	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 
+	//	fmt.Println(email[p.parts[5].startingPosBody:p.parts[5].endingPosBody])
+}
+
+func replaceAtIndex(str string, replacement rune, index uint) string {
+	return str[:index] + string(replacement) + str[index+1:]
 }
