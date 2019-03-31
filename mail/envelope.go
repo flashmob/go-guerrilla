@@ -133,7 +133,7 @@ func (e *Envelope) ParseHeaders() error {
 		header := buf[0:headerEnd+2]
 		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
 		e.Header, err = headerReader.ReadMIMEHeader()
-		if err != nil {
+		if err == nil || err == io.EOF {
 			// decode the subject
 			if subject, ok := e.Header["Subject"]; ok {
 				e.Subject = MimeHeaderDecode(subject[0])
