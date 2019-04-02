@@ -117,15 +117,15 @@ func queuedID(clientID uint64) string {
 // Data buffer must be full before calling.
 // It assumes that at most 30kb of email data can be a header
 // Decoding of encoding to UTF is only done on the Subject, where the result is assigned to the Subject field
-func (e *Envelope) ParseHeaders() error {
+func (e *Envelope) ParseHeadersMax(maxHeaderLen int) error {
 	var err error
 	if e.Header != nil {
 		return errors.New("headers already parsed")
 	}
 	buf := e.Data.Bytes()
 	// find where the header ends, assuming that over 30 kb would be max
-	if len(buf) > maxHeaderChunk {
-		buf = buf[:maxHeaderChunk]
+	if maxHeaderLen > 0 && len(buf) > maxHeaderLen {
+		buf = buf[:maxHeaderLen]
 	}
 
 	headerEnd := bytes.Index(buf, []byte{'\n', '\n'}) // the first two new-lines chars are the End Of Header
@@ -143,6 +143,10 @@ func (e *Envelope) ParseHeaders() error {
 		err = errors.New("header not found")
 	}
 	return err
+}
+
+func (e *Envelope) ParseHeaders() error {
+	return e.ParseHeadersMax(maxHeaderChunk)
 }
 
 // Len returns the number of bytes that would be in the reader returned by NewReader()
