@@ -16,10 +16,17 @@ help:
 
 clean:
 	rm -f guerrillad
+	rm -rf dashboard/js/node_modules
+	rm -rf dashboard/js/build
 
 dependencies:
 	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) get -u -v
 	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) install -v
+	cd dashboard/js && npm install && cd ../..
+
+dashboard: dashboard/*.go */*/*/*.js */*/*/*/*.js
+	cd dashboard/js && npm run build && cd ../..
+	statik -src=dashboard/js/build -dest=dashboard
 
 guerrillad: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad

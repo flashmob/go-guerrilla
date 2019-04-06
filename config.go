@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/dashboard"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 // AppConfig is the holder of the configuration of the app
@@ -30,6 +32,8 @@ type AppConfig struct {
 	LogLevel string `json:"log_level,omitempty"`
 	// BackendConfig configures the email envelope processing backend
 	BackendConfig backends.BackendConfig `json:"backend_config"`
+	// Dashboard config configures how analytics are gathered and displayed
+	Dashboard dashboard.Config `json:"dashboard"`
 }
 
 // ServerConfig specifies config options for a single server

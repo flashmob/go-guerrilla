@@ -350,9 +350,19 @@ func (s *server) isShuttingDown() bool {
 
 // Handles an entire client SMTP exchange
 func (s *server) handleClient(client *client) {
-	defer client.closeConn()
+	defer func() {
+		s.log().WithFields(map[string]interface{}{
+			"event": "disconnect",
+			"id":    client.ID,
+		}).Info("Disconnect client")
+		client.closeConn()
+	}()
+
 	sc := s.configStore.Load().(ServerConfig)
-	s.log().Infof("Handle client [%s], id: %d", client.RemoteIP, client.ID)
+	s.log().WithFields(map[string]interface{}{
+		"event": "connect",
+		"id":    client.ID,
+	}).Infof("Handle client [%s]", client.RemoteIP)
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
@@ -474,6 +484,14 @@ func (s *server) handleClient(client *client) {
 				} else if client.parser.NullPath {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
+				} else {
+					s.log().WithFields(map[string]interface{}{
+						"event":   "mailfrom",
+						"helo":    client.Helo,
+						"domain":  client.MailFrom.Host,
+						"address": getRemoteAddr(client.conn),
+						"id":      client.ID,
+					}).Info("Mail from")
 				}
 				client.sendResponse(r.SuccessMailCmd)
 
@@ -566,6 +584,11 @@ func (s *server) handleClient(client *client) {
 			res := s.backend().Process(client.Envelope)
 			if res.Code() < 300 {
 				client.messagesSent++
+				s.log().WithFields(map[string]interface{}{
+					"helo":          client.Helo,
+					"remoteAddress": getRemoteAddr(client.conn),
+					"success":       true,
+				}).Info("Received message")
 			}
 			client.sendResponse(res)
 			client.state = ClientCmd

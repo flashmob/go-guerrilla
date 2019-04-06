@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"runtime/debug"
+	"strings"
+
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
-	"runtime/debug"
-	"strings"
 )
 
 var ErrProcessorNotFound error

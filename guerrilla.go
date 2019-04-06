@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/dashboard"
 	"github.com/flashmob/go-guerrilla/log"
 )
 
@@ -92,6 +93,10 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 	if ac.LogLevel != "" {
 		if h, ok := l.(*log.HookedLogger); ok {
 			if h, err := log.GetLogger(h.GetLogDest(), ac.LogLevel); err == nil {
+				// add the dashboard hook
+				if ac.Dashboard.Enabled {
+					h.AddHook(dashboard.LogHook)
+				}
 				g.setMainlog(h)
 			}
 		}
@@ -214,6 +219,9 @@ func (g *guerrilla) subscribeEvents() {
 		var err error
 		var l log.Logger
 		if l, err = log.GetLogger(c.LogFile, c.LogLevel); err == nil {
+			if c.Dashboard.Enabled {
+				l.AddHook(dashboard.LogHook)
+			}
 			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				// it will change server's logger when the next client gets accepted
@@ -240,7 +248,10 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigLogLevel] = daemonEvent(func(c *AppConfig) {
 		l, err := log.GetLogger(g.mainlog().GetLogDest(), c.LogLevel)
 		if err == nil {
-			g.logStore.Store(l)
+			if c.Dashboard.Enabled {
+				l.AddHook(dashboard.LogHook)
+			}
+			g.setMainlog(l)
 			g.mapServers(func(server *server) {
 				server.logStore.Store(l)
 			})
@@ -475,6 +486,10 @@ func (g *guerrilla) Start() error {
 	}
 	// wait for all servers to start (or fail)
 	startWG.Wait()
+
+	if g.Config.Dashboard.Enabled {
+		go dashboard.Run(&g.Config.Dashboard, g.mainlog())
+	}
 
 	// close, then read any errors
 	close(errs)
