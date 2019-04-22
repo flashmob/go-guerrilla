@@ -19,18 +19,37 @@ const stateHeaderScanning = 0
 const stateHeaderNotScanning = 1
 const headerMaxBytes = 1024 * 4
 
+type streamHeaderConfig struct {
+	MaxBytes int64 `json:"s_header_max_bytes,omitempty"`
+}
+
 func StreamHeadersParser() *StreamDecorator {
+	var config *streamHeaderConfig
+	initFunc := InitializeWith(func(backendConfig BackendConfig) error {
+		configType := BaseConfig(&streamHeaderConfig{})
+		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		if err != nil {
+			return err
+		}
+		config = bcfg.(*streamHeaderConfig)
+		if config.MaxBytes == 0 {
+			config.MaxBytes = headerMaxBytes
+		}
+		return nil
+	})
+	Svc.AddInitializer(initFunc)
 	sd := &StreamDecorator{}
 	sd.p =
 
 		func(sp StreamProcessor) StreamProcessor {
 
-			// buf buffers the header
-			var buf bytes.Buffer
-			var state byte
-			var lastByte byte
-			var total int64
-			var envelope *mail.Envelope
+			var (
+				buf      bytes.Buffer // buf buffers the header
+				state    byte
+				lastByte byte
+				total    int64
+				envelope *mail.Envelope
+			)
 
 			parse := func() error {
 				var err error
@@ -101,7 +120,7 @@ func StreamHeadersParser() *StreamDecorator {
 					} else {
 						total += n
 						// give up if we didn't detect the header after x bytes
-						if total > headerMaxBytes {
+						if total > config.MaxBytes {
 							state = stateHeaderNotScanning
 							n, err = io.Copy(sp, &buf)
 							return int(n), err
