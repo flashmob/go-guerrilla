@@ -119,12 +119,14 @@ func TestBoundary(t *testing.T) {
 	part.contentBoundary = "-wololo-"
 
 	// in the middle of the string
-	p.inject([]byte("The quick brown fo---wololo-\nx jumped over the lazy dog"))
+	test := "The quick brown fo---wololo-\nx jumped over the lazy dog"
+	p.inject([]byte(test))
 
 	_, err = p.boundary(part.contentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
+	fmt.Println(string(test[:p.lastBoundaryPos]))
 
 	// at the end (with the -- postfix)
 	p.inject([]byte("The quick brown fox jumped over the lazy dog---wololo---\n"))
@@ -144,6 +146,9 @@ func TestBoundary(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	all := []byte("The quick brown fox jumped ov---wololo---\ner the lazy dog")
+	//all[p.lastBoundaryPos] = 'X'
+	fmt.Println(string(all[:p.lastBoundaryPos]))
 	for c := p.next(); c != 0; c = p.next() {
 	} // drain
 	// the boundary with an additional buffer in between
@@ -357,7 +362,7 @@ Content-Disposition: attachment;
 ------_=_NextPart_001_01CBE273.65A0E7AA--`
 
 func TestNestedEmail(t *testing.T) {
-	//email = email2
+	email = email2
 	p.inject([]byte(email))
 
 	if err := p.mime(nil, ""); err != nil {
@@ -372,7 +377,9 @@ func TestNestedEmail(t *testing.T) {
 	fmt.Print(email)
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 
-	//	fmt.Println(email[p.parts[5].startingPosBody:p.parts[5].endingPosBody])
+	//fmt.Println(email[p.parts[1].startingPosBody:p.parts[1].endingPosBody])
+	i := 6
+	fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
 }
 
 func replaceAtIndex(str string, replacement rune, index uint) string {

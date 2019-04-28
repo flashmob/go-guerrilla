@@ -188,6 +188,7 @@ func (p *parser) peek() byte {
 
 // simulate a byte stream
 func (p *parser) inject(input ...[]byte) {
+	p.msgPos = 0
 	p.set(input[0])
 	p.pos = 0
 	p.ch = p.buf[0]
@@ -246,9 +247,12 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 			// will wait until we get a new buffer
 
 			p.skip(i)
-			p.lastBoundaryPos = p.msgPos - 1 // - uint(len(boundary))
+			p.lastBoundaryPos = p.msgPos // - uint(len(boundary))
 			p.skip(len(boundary))
-			end = p.boundaryEnd()
+			end, err = p.boundaryEnd()
+			if err != nil {
+				return
+			}
 			p.transportPadding()
 			if p.ch != '\n' && p.ch != 0 {
 				err = errors.New("boundary new line expected")
@@ -286,8 +290,11 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 					// advance the pointer
 					p.skip(len(boundary) - p.boundaryMatched)
 
-					p.lastBoundaryPos = p.msgPos - 1 //- uint(len(boundary))
-					end = p.boundaryEnd()
+					p.lastBoundaryPos = p.msgPos - uint(len(boundary))
+					end, err = p.boundaryEnd()
+					if err != nil {
+						return
+					}
 					p.transportPadding()
 					if p.ch != '\n' && p.ch != 0 {
 						err = errors.New("boundary new line expected")
@@ -302,13 +309,16 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 }
 
 // is it the end of a boundary?
-func (p *parser) boundaryEnd() bool {
+func (p *parser) boundaryEnd() (result bool, err error) {
 	if p.ch == '-' && p.peek() == '-' {
 		p.next()
 		p.next()
-		return true
+		result = true
 	}
-	return false
+	if p.ch == 0 {
+		err = io.EOF
+	}
+	return
 }
 
 // *LWSP-char
@@ -816,23 +826,24 @@ func (p *parser) mime(parent *mimeHeader, depth string) (err error) {
 		p.addPart(&part, partID)
 
 		if p.isMulti(&part) {
+
 			err = p.multi(&part, partID)
-			part.endingPosBody = p.msgPos + 1 //p.lastBoundaryPos
+			part.endingPosBody = p.lastBoundaryPos
 			if err != nil {
 				break
 			}
 
-			return
+			//return
 		} else {
-			if end, bErr := p.boundary(parent.contentBoundary); bErr != nil {
-				return bErr
-			} else if end {
-				part.endingPosBody = p.lastBoundaryPos
-				return
-			}
-			part.endingPosBody = p.lastBoundaryPos
 
 		}
+		if end, bErr := p.boundary(parent.contentBoundary); bErr != nil {
+			return bErr
+		} else if end {
+			part.endingPosBody = p.lastBoundaryPos
+			return
+		}
+		part.endingPosBody = p.lastBoundaryPos
 		count++
 	}
 	return
