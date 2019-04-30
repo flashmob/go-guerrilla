@@ -3,6 +3,7 @@ package backends
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strconv"
 	"testing"
 )
@@ -365,7 +366,7 @@ func TestNestedEmail(t *testing.T) {
 	email = email2
 	p.inject([]byte(email))
 
-	if err := p.mime(nil, ""); err != nil {
+	if err := p.mime(nil, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
 	for part := range p.parts {
@@ -378,7 +379,7 @@ func TestNestedEmail(t *testing.T) {
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 
 	//fmt.Println(email[p.parts[1].startingPosBody:p.parts[1].endingPosBody])
-	i := 6
+	i := 2
 	fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
 }
 

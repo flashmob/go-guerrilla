@@ -247,7 +247,7 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 			// will wait until we get a new buffer
 
 			p.skip(i)
-			p.lastBoundaryPos = p.msgPos // - uint(len(boundary))
+			p.lastBoundaryPos = p.msgPos - 1 // - uint(len(boundary))
 			p.skip(len(boundary))
 			end, err = p.boundaryEnd()
 			if err != nil {
@@ -290,7 +290,7 @@ func (p *parser) boundary(contentBoundary string) (end bool, err error) {
 					// advance the pointer
 					p.skip(len(boundary) - p.boundaryMatched)
 
-					p.lastBoundaryPos = p.msgPos - uint(len(boundary))
+					p.lastBoundaryPos = p.msgPos - uint(len(boundary)) - 1
 					end, err = p.boundaryEnd()
 					if err != nil {
 						return
@@ -805,10 +805,6 @@ func (p *parser) mime(parent *mimeHeader, depth string) (err error) {
 			if err != nil {
 				return err
 			}
-		} else {
-			moo := p.buf[p.pos:]
-			_ = moo
-			//break
 		}
 		if p.ch == '\n' && p.peek() == '\n' {
 			p.next()
@@ -833,11 +829,9 @@ func (p *parser) mime(parent *mimeHeader, depth string) (err error) {
 				break
 			}
 
-			//return
-		} else {
-
 		}
 		if end, bErr := p.boundary(parent.contentBoundary); bErr != nil {
+			part.endingPosBody = p.lastBoundaryPos
 			return bErr
 		} else if end {
 			part.endingPosBody = p.lastBoundaryPos
