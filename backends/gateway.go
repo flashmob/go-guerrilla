@@ -455,11 +455,13 @@ func (gw *BackendGateway) workDispatcher(
 			return
 		case msg = <-workIn:
 			state = dispatcherStateWorking // recovers from panic if in this state
-			result, err := save.Process(msg.e, msg.task)
-			state = dispatcherStateNotify
 			if msg.task == TaskSaveMail {
+				result, err := save.Process(msg.e, msg.task)
+				state = dispatcherStateNotify
 				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
 			} else {
+				result, err := validate.Process(msg.e, msg.task)
+				state = dispatcherStateNotify
 				msg.notifyMe <- &notifyMsg{err: err, result: result}
 			}
 		}
