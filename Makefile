@@ -10,25 +10,22 @@ LD_FLAGS := -X $(ROOT).Version=$(VERSION) -X $(ROOT).Commit=$(COMMIT) -X $(ROOT)
 .PHONY: help clean dependencies test
 help:
 	@echo "Please use \`make <ROOT>' where <ROOT> is one of"
-	@echo "  dependencies to go install the dependencies"
 	@echo "  guerrillad   to build the main binary for current platform"
 	@echo "  test         to run unittests"
 
 clean:
-	rm -f guerrillad
+	rm -f guerrillad vendor
 
-dependencies:
-	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) get -u -v
-	$(GO_VARS) $(GO) list -f='{{ join .Deps "\n" }}' $(ROOT)/cmd/guerrillad | grep -v $(ROOT) | tr '\n' ' ' | $(GO_VARS) xargs $(GO) install -v
+vendor:
+	dep ensure
 
-guerrillad: *.go */*.go */*/*.go
+guerrillad: vendor
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
-guerrilladrace: *.go */*.go */*/*.go
+guerrilladrace: vendor
 	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
-
-test: *.go */*.go */*/*.go
+test: vendor
 	$(GO_VARS) $(GO) test -v .
 	$(GO_VARS) $(GO) test -v ./tests
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad
@@ -36,7 +33,7 @@ test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v ./backends
 	$(GO_VARS) $(GO) test -v ./mail
 
-testrace: *.go */*.go */*/*.go
+testrace: vendor
 	$(GO_VARS) $(GO) test -v . -race
 	$(GO_VARS) $(GO) test -v ./tests -race
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad -race
