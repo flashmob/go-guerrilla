@@ -1,7 +1,7 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
-Breaking change: The structure of the config has recently changed to accommodate more advanced TLS settings.
+Note: Latest release, v1.6.0, has moved from Glide to Dep dependency management tool. 
 
 Go-Guerrilla SMTP Daemon
 ====================
