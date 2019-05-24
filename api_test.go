@@ -397,7 +397,7 @@ func TestSetAddProcessor(t *testing.T) {
 		t.Error(err)
 	}
 	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525"); err != nil {
+	if err := talkToServer("127.0.0.1:2525", ""); err != nil {
 		t.Error(err)
 	}
 
@@ -426,7 +426,7 @@ func TestSetAddProcessor(t *testing.T) {
 
 }
 
-func talkToServer(address string) (err error) {
+func talkToServer(address string, body string) (err error) {
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -472,80 +472,32 @@ func talkToServer(address string) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "\r\n")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "A an email body\r\n")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, ".\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	_ = str
-	return nil
-}
-
-func talkToServer2(address string, body string) (err error) {
-
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		return
-	}
-	in := bufio.NewReader(conn)
-	str, err := in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(conn, "DATA\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprint(conn, body)
-	if err != nil {
-		return err
+	if body == "" {
+		_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprint(conn, "\r\n")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprint(conn, "A an email body\r\n")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprint(conn, ".\r\n")
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = fmt.Fprint(conn, body)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprint(conn, ".\r\n")
+		if err != nil {
+			return err
+		}
 	}
 
 	str, err = in.ReadString('\n')
@@ -748,7 +700,7 @@ func TestCustomBackendResult(t *testing.T) {
 		t.Error(err)
 	}
 	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525"); err != nil {
+	if err := talkToServer("127.0.0.1:2525", ""); err != nil {
 		t.Error(err)
 	}
 
@@ -801,11 +753,172 @@ func TestStreamProcessor(t *testing.T) {
 		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
 		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
 		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
-		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n"
 
-		".\r\n"
 	// lets have a talk with the server
-	if err := talkToServer2("127.0.0.1:2525", body); err != nil {
+	if err := talkToServer("127.0.0.1:2525", body); err != nil {
+		t.Error(err)
+	}
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+
+	// lets check for fingerprints
+	if strings.Index(string(b), "Debug stream") < 0 {
+		t.Error("did not log: Debug stream")
+	}
+
+	if strings.Index(string(b), "Error") != -1 {
+		t.Error("There was an error", string(b))
+	}
+
+}
+
+var mime = `MIME-Version: 1.0
+X-Mailer: MailBee.NET 8.0.4.428
+Subject: test subject
+To: kevinm@datamotion.com
+Content-Type: multipart/mixed;
+       boundary="XXXXboundary text"
+
+--XXXXboundary text
+Content-Type: multipart/alternative;
+       boundary="XXXXboundary text"
+
+--XXXXboundary text
+Content-Type: text/plain;
+       charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+This is the body text of a sample message.
+--XXXXboundary text
+Content-Type: text/html;
+       charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<pre>This is the body text of a sample message.</pre>
+
+--XXXXboundary text
+Content-Type: text/plain;
+ name="log_attachment.txt"
+Content-Disposition: attachment;
+ filename="log_attachment.txt"
+Content-Transfer-Encoding: base64
+
+TUlNRS1WZXJzaW9uOiAxLjANClgtTWFpbGVyOiBNYWlsQmVlLk5FVCA4LjAuNC40MjgNClN1Ympl
+Y3Q6IHRlc3Qgc3ViamVjdA0KVG86IGtldmlubUBkYXRhbW90aW9uLmNvbQ0KQ29udGVudC1UeXBl
+OiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7DQoJYm91bmRhcnk9Ii0tLS09X05leHRQYXJ0XzAwMF9B
+RTZCXzcyNUUwOUFGLjg4QjdGOTM0Ig0KDQoNCi0tLS0tLT1fTmV4dFBhcnRfMDAwX0FFNkJfNzI1
+RTA5QUYuODhCN0Y5MzQNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsNCgljaGFyc2V0PSJ1dGYt
+OCINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KdGVzdCBi
+b2R5DQotLS0tLS09X05leHRQYXJ0XzAwMF9BRTZCXzcyNUUwOUFGLjg4QjdGOTM0DQpDb250ZW50
+LVR5cGU6IHRleHQvaHRtbDsNCgljaGFyc2V0PSJ1dGYtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5j
+b2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KPHByZT50ZXN0IGJvZHk8L3ByZT4NCi0tLS0tLT1f
+TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
+
+--XXXXboundary text--
+`
+
+var mime2 = `From: abc@def.de
+Content-Type: multipart/mixed;
+        boundary="----_=_NextPart_001_01CBE273.65A0E7AA"
+To: ghi@def.de
+
+This is a multi-part message in MIME format.
+
+------_=_NextPart_001_01CBE273.65A0E7AA
+Content-Type: multipart/alternative;
+        boundary="----_=_NextPart_002_01CBE273.65A0E7AA"
+
+
+------_=_NextPart_002_01CBE273.65A0E7AA
+Content-Type: text/plain;
+        charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+[base64-content]
+------_=_NextPart_002_01CBE273.65A0E7AA
+Content-Type: text/html;
+        charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+[base64-content]
+------_=_NextPart_002_01CBE273.65A0E7AA--
+------_=_NextPart_001_01CBE273.65A0E7AA
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 7bit
+
+X-MimeOLE: Produced By Microsoft Exchange V6.5
+Content-class: urn:content-classes:message
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+        boundary="----_=_NextPart_003_01CBE272.13692C80"
+From: bla@bla.de
+To: xxx@xxx.de
+
+This is a multi-part message in MIME format.
+
+------_=_NextPart_003_01CBE272.13692C80
+Content-Type: multipart/alternative;
+        boundary="----_=_NextPart_004_01CBE272.13692C80"
+
+
+------_=_NextPart_004_01CBE272.13692C80
+Content-Type: text/plain;
+        charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+=20
+
+Viele Gr=FC=DFe
+
+------_=_NextPart_004_01CBE272.13692C80
+Content-Type: text/html;
+        charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html>...</html>
+------_=_NextPart_004_01CBE272.13692C80--
+------_=_NextPart_003_01CBE272.13692C80
+Content-Type: application/x-zip-compressed;
+        name="abc.zip"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+        filename="abc.zip"
+
+[base64-content]
+
+------_=_NextPart_003_01CBE272.13692C80--
+------_=_NextPart_001_01CBE273.65A0E7AA--
+`
+
+func TestStreamMimeProcessor(t *testing.T) {
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"save_process":        "HeadersParser|Debugger",
+			"stream_save_process": "Header|mimeanalyzer|headersparser|compress|Decompress|debug",
+		},
+	}
+	d := Daemon{Config: cfg}
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+
+	// change \n to \r\n
+	mime = strings.Replace(mime, "\n", "\r\n", -1)
+	// lets have a talk with the server
+	if err := talkToServer("127.0.0.1:2525", mime); err != nil {
 		t.Error(err)
 	}
 

@@ -1,4 +1,4 @@
-package backends
+package mime
 
 import (
 	"bytes"
@@ -6,12 +6,13 @@ import (
 	"io"
 	"strconv"
 	"testing"
+	"time"
 )
 
-var p *parser
+var p *Parser
 
 func init() {
-	p = newMimeParser()
+	p = NewMimeParser()
 }
 func TestInject(t *testing.T) {
 	var b bytes.Buffer
@@ -95,18 +96,18 @@ Al
 This
 `
 	p.inject([]byte(in))
-	h := NewMimeHeader()
+	h := newMimeHeader()
 	err := p.header(h)
 	if err != nil {
 		t.Error(err)
 	}
-	if _, err := p.boundary(h.contentBoundary); err != nil {
+	if _, err := p.boundary(h.ContentBoundary); err != nil {
 		t.Error(err)
 	} else {
 		//_ = part
 		//p.addPart(part)
 
-		//nextPart := NewMimeHeader()
+		//nextPart := newMimeHeader()
 		//err = p.body(part)
 		//if err != nil {
 		//	t.Error(err)
@@ -116,14 +117,14 @@ This
 
 func TestBoundary(t *testing.T) {
 	var err error
-	part := NewMimeHeader()
-	part.contentBoundary = "-wololo-"
+	part := newMimeHeader()
+	part.ContentBoundary = "-wololo-"
 
 	// in the middle of the string
 	test := "The quick brown fo---wololo-\nx jumped over the lazy dog"
 	p.inject([]byte(test))
 
-	_, err = p.boundary(part.contentBoundary)
+	_, err = p.boundary(part.ContentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
@@ -131,7 +132,7 @@ func TestBoundary(t *testing.T) {
 
 	// at the end (with the -- postfix)
 	p.inject([]byte("The quick brown fox jumped over the lazy dog---wololo---\n"))
-	_, err = p.boundary(part.contentBoundary)
+	_, err = p.boundary(part.ContentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
@@ -143,7 +144,7 @@ func TestBoundary(t *testing.T) {
 	p.inject(
 		[]byte("The quick brown fox jumped ov---wolo"),
 		[]byte("lo---\ner the lazy dog"))
-	_, err = p.boundary(part.contentBoundary)
+	_, err = p.boundary(part.ContentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
@@ -157,7 +158,7 @@ func TestBoundary(t *testing.T) {
 		[]byte("this is the middle"),
 		[]byte("and thats the end---wololo---\n"))
 
-	_, err = p.boundary(part.contentBoundary)
+	_, err = p.boundary(part.ContentBoundary)
 	if err != nil {
 		t.Error(err)
 	}
@@ -362,25 +363,78 @@ Content-Disposition: attachment;
 ------_=_NextPart_003_01CBE272.13692C80--
 ------_=_NextPart_001_01CBE273.65A0E7AA--`
 
+var email3 = `MIME-Version: 1.0
+X-Mailer: MailBee.NET 8.0.4.428
+Subject: test subject
+To: kevinm@datamotion.com
+Content-Type: multipart/mixed;
+       boundary="XXXXboundary text"
+
+--XXXXboundary text
+Content-Type: multipart/alternative;
+       boundary="XXXXboundary text"
+
+--XXXXboundary text
+Content-Type: text/plain;
+       charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+This is the body text of a sample message.
+--XXXXboundary text
+Content-Type: text/html;
+       charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<pre>This is the body text of a sample message.</pre>
+
+--XXXXboundary text
+Content-Type: text/plain;
+       name="log_attachment.txt"
+Content-Disposition: attachment;
+       filename="log_attachment.txt"
+Content-Transfer-Encoding: base64
+
+TUlNRS1WZXJzaW9uOiAxLjANClgtTWFpbGVyOiBNYWlsQmVlLk5FVCA4LjAuNC40MjgNClN1Ympl
+Y3Q6IHRlc3Qgc3ViamVjdA0KVG86IGtldmlubUBkYXRhbW90aW9uLmNvbQ0KQ29udGVudC1UeXBl
+OiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7DQoJYm91bmRhcnk9Ii0tLS09X05leHRQYXJ0XzAwMF9B
+RTZCXzcyNUUwOUFGLjg4QjdGOTM0Ig0KDQoNCi0tLS0tLT1fTmV4dFBhcnRfMDAwX0FFNkJfNzI1
+RTA5QUYuODhCN0Y5MzQNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsNCgljaGFyc2V0PSJ1dGYt
+OCINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KdGVzdCBi
+b2R5DQotLS0tLS09X05leHRQYXJ0XzAwMF9BRTZCXzcyNUUwOUFGLjg4QjdGOTM0DQpDb250ZW50
+LVR5cGU6IHRleHQvaHRtbDsNCgljaGFyc2V0PSJ1dGYtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5j
+b2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KPHByZT50ZXN0IGJvZHk8L3ByZT4NCi0tLS0tLT1f
+TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
+--XXXXboundary text--
+`
+
 func TestNestedEmail(t *testing.T) {
-	email = email2
+	email = email
 	p.inject([]byte(email))
+
+	go func() {
+		time.Sleep(time.Second * 15)
+		//panic("here")
+		//		*moo = *moo + 6
+
+		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+		//os.Exit(1)
+	}()
 
 	if err := p.mime(nil, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
-	for part := range p.parts {
-		email = replaceAtIndex(email, '#', p.parts[part].startingPos)
-		email = replaceAtIndex(email, '&', p.parts[part].startingPosBody)
-		email = replaceAtIndex(email, '*', p.parts[part].endingPosBody)
-		fmt.Println(p.parts[part].part + " " + strconv.Itoa(int(p.parts[part].startingPos)) + " " + strconv.Itoa(int(p.parts[part].startingPosBody)) + " " + strconv.Itoa(int(p.parts[part].endingPosBody)))
+	for part := range p.Parts {
+		email = replaceAtIndex(email, '#', p.Parts[part].StartingPos)
+		email = replaceAtIndex(email, '&', p.Parts[part].StartingPosBody)
+		email = replaceAtIndex(email, '*', p.Parts[part].EndingPosBody)
+		fmt.Println(p.Parts[part].Part + " " + strconv.Itoa(int(p.Parts[part].StartingPos)) + " " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + " " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 	}
 	fmt.Print(email)
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 
 	//fmt.Println(email[p.parts[1].startingPosBody:p.parts[1].endingPosBody])
-	i := 2
-	fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
+	//i := 2
+	//fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
 }
 
 func replaceAtIndex(str string, replacement rune, index uint) string {
