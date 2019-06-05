@@ -9,6 +9,10 @@ import (
 	"strconv"
 )
 
+// todo
+// - content-disposition
+// - make the error available
+
 type mimepart struct {
 	/*
 			[starting-pos] => 0
@@ -44,6 +48,8 @@ const (
 	doubleDash     = "--"
 	startPos       = -1
 )
+
+var NotMime = errors.New("not Mime")
 
 type Parser struct {
 
@@ -136,13 +142,16 @@ func (p *Parser) addPart(mh *MimeHeader, id string) {
 	p.Parts = append(p.Parts, mh)
 }
 
-//
+// more waits for more input, returns false if there is no more
 func (p *Parser) more() bool {
 	p.consumed <- true // signal that we've reached the end of available input
 	gotMore := <-p.gotNewSlice
 	return gotMore
 }
 
+// next reads the next byte and advances the pointer
+// returns 0 if no more input can be read
+// blocks if at the end of the buffer
 func (p *Parser) next() byte {
 	// wait for a new new slice if reached the end
 	if p.pos+1 >= len(p.buf) {
@@ -162,6 +171,8 @@ func (p *Parser) next() byte {
 	return p.ch
 }
 
+// peek does not advance the pointer, but will block if there's no more
+// input in the buffer
 func (p *Parser) peek() byte {
 
 	// reached the end?
@@ -202,7 +213,6 @@ func (p *Parser) set(input []byte) {
 		p.pos = startPos
 	}
 	p.buf = input
-
 }
 
 func (p *Parser) skip(nBytes int) {
@@ -213,7 +223,6 @@ func (p *Parser) skip(nBytes int) {
 			return
 		}
 	}
-
 }
 
 // boundary scans until next boundary string, returns error if not found
@@ -339,7 +348,6 @@ func (p *Parser) header(mh *MimeHeader) (err error) {
 	var name string
 
 	defer func() {
-		fmt.Println(mh.Headers)
 		p.accept.Reset()
 		if val := mh.Headers.Get("Content-Transfer-Encoding"); val != "" {
 			mh.TransferEncoding = val
@@ -667,89 +675,65 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 	}
 }
 
-func (p *Parser) body(mh *MimeHeader) (err error) {
-	var body bytes.Buffer
-
-	if mh.ContentBoundary != "" {
-		if end, err := p.boundary(mh.ContentBoundary); err != nil {
-			return err
-		} else {
-			fmt.Println("boundary end:", end)
-		}
-		return
-	} else {
-		for {
-
-			p.next()
-			if p.ch == 0 {
-				return io.EOF
-			}
-			if p.ch == '\n' && p.peek() == '\n' {
-				p.next()
-				return
-			}
-
-			body.WriteByte(p.ch)
-
-		}
-	}
-
-}
-
 // isBranch determines if we should branch this part, when building
 // the mime tree
 func (p *Parser) isBranch(part *MimeHeader, parent *MimeHeader) bool {
 	ct := part.ContentType
+	if ct == nil {
+		return false
+	}
+	if part.ContentBoundary == "" {
+		return false
+	}
+
+	// tolerate some incorrect messages that re-use the identical content-boundary
 	if parent != nil && ct.superType != "message" {
 		if parent.ContentBoundary == part.ContentBoundary {
 			return false
 		}
 	}
-	if ct != nil {
-		if ct.superType == "multipart" ||
-			ct.superType == "message" {
-			return true
-		}
+
+	// branch on these superTypes
+	if ct.superType == "multipart" ||
+		ct.superType == "message" {
+		return true
 	}
 	return false
 }
 
+// multi finds the boundary and call back to mime() itself
 func (p *Parser) multi(part *MimeHeader, depth string) (err error) {
 	if part.ContentType != nil {
+		// scan until the start of the boundary
 		if part.ContentType.superType == "multipart" {
 			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
 				return bErr
 			} else if end {
-
 				part.EndingPosBody = p.lastBoundaryPos
 				return
 			}
 		}
-		if part.ContentType.superType == "message" ||
-			part.ContentType.superType == "multipart" {
-			err = p.mime(part, depth)
-			if err != nil {
-
-				return err
-			}
-
+		// call back to mime() to start working on a new branch
+		err = p.mime(part, depth)
+		if err != nil {
+			return err
 		}
-
 	}
 	return
 }
 
+// mime scans the mime content and builds the mime-part tree in
+// p.Parts on-the-fly, as more bytes get fed in.
 func (p *Parser) mime(parent *MimeHeader, depth string) (err error) {
 
 	count := 1
 	for {
-
-		var part MimeHeader
-
-		part = *newMimeHeader()
+		part := newMimeHeader()
 		part.StartingPos = p.msgPos
+
+		// parse the headers
 		if p.ch >= 33 && p.ch <= 126 {
-			err = p.header(&part)
+			err = p.header(part)
 			if err != nil {
 				return err
 			}
@@ -760,30 +744,50 @@ func (p *Parser) mime(parent *MimeHeader, depth string) (err error) {
 			p.next()
 			p.next()
 		}
-		if part.ContentBoundary == "" {
+
+		// inherit the content boundary from parent if not present
+		if part.ContentBoundary == "" && parent != nil {
 			part.ContentBoundary = parent.ContentBoundary
 		}
 
+		// record the part
 		part.StartingPosBody = p.msgPos
 		partID := strconv.Itoa(count)
 		if depth != "" {
 			partID = depth + "." + strconv.Itoa(count)
 		}
-		p.addPart(&part, partID)
+		p.addPart(part, partID)
 
-		if p.isBranch(&part, parent) {
-
-			err = p.multi(&part, partID)
+		// build the mime tree recursively
+		if p.isBranch(part, parent) {
+			err = p.multi(part, partID)
 			part.EndingPosBody = p.lastBoundaryPos
 			if err != nil {
 				break
 			}
-
 		}
+
+		// if we didn't branch & we're still at the root (not a mime email)
+		if parent == nil {
+			for {
+				// keep scanning until the end
+				p.next()
+				if p.ch == 0 {
+					break
+				}
+			}
+			part.EndingPosBody = p.msgPos
+			err = NotMime
+			return
+		}
+
+		// after we return from the lower branches (if there were any)
+		// we walk each of the siblings of the parent
 		if end, bErr := p.boundary(parent.ContentBoundary); bErr != nil {
 			part.EndingPosBody = p.lastBoundaryPos
 			return bErr
 		} else if end {
+			// the last sibling
 			part.EndingPosBody = p.lastBoundaryPos
 			return
 		}
@@ -796,8 +800,14 @@ func (p *Parser) mime(parent *MimeHeader, depth string) (err error) {
 // Close tells the MIME Parser there's no more data & waits for it to return a result
 // it will return an io.EOF error if no error with parsing MIME was detected
 // Close is not concurrency safe, must be called synchronously after all calls to
-// Read have completed
+// Parse have completed
 func (p *Parser) Close() error {
+	defer func() {
+		p.lastBoundaryPos = 0
+		p.pos = startPos
+		p.msgPos = 0
+		p.msgLine = 0
+	}()
 	if p.count > 0 {
 		for {
 			// dont't exit unless we get the result.
@@ -812,24 +822,18 @@ func (p *Parser) Close() error {
 		}
 	}
 	return nil
-
 }
 
-func (p *Parser) Open() error {
-	p.lastBoundaryPos = 0
-	p.pos = startPos
-	p.msgPos = 0
-	p.msgLine = 0
-	return nil
-
-}
-
-// Read takes a byte stream, and feeds it to the MIME Parser
+// Parse takes a byte stream, and feeds it to the MIME Parser, then
 // waits for the Parser to consume all input before returning.
-// The Parser will build
+// The Parser will build a parse tree in p.Parts
+// The reader doesn't decode any input. All it does
+// is collect information about where the different MIME parts
+// start and end, and other meta-data. This data can be used
+// by others later to determine how to store/display
+// the messages
 // returns error if there's a parse error
-
-func (p *Parser) Read(buf []byte) (int, error) {
+func (p *Parser) Parse(buf []byte) error {
 	defer func() {
 		p.count++
 	}()
@@ -841,17 +845,16 @@ func (p *Parser) Read(buf []byte) (int, error) {
 			fmt.Println("mine() ret", err)
 			p.result <- parserMsg{err}
 		}()
-		return p.pos + 1, nil
-
+		return nil
 	}
 	select {
 	case <-p.consumed: // wait for prev buf to be consumed
 		p.set(buf)
 		p.gotNewSlice <- true
-		return p.pos + 1, nil
+		return nil
 	case r := <-p.result:
 		// mime() has returned with a result
-		return p.pos + 1, r.err
+		return r.err
 	}
 
 }

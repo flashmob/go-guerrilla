@@ -1,13 +1,9 @@
 package backends
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/mime"
-	"io"
-	"net/textproto"
 	"strconv"
 )
 
@@ -54,13 +50,13 @@ func StreamMimeAnalyzer() *StreamDecorator {
 
 			sd.Open = func(e *mail.Envelope) error {
 				envelope = e
-				return parser.Open()
+				return nil
 			}
 
 			sd.Close = func() error {
 				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.MimeHeader); ok {
 					for _, v := range *parts {
-						fmt.Println(v.part + " " + strconv.Itoa(int(v.startingPos)) + " " + strconv.Itoa(int(v.startingPosBody)) + " " + strconv.Itoa(int(v.endingPosBody)))
+						fmt.Println(v.Part + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
 					}
 				}
 
@@ -81,7 +77,7 @@ func StreamMimeAnalyzer() *StreamDecorator {
 					envelope.Values["MimeParts"] = &parser.Parts
 				}
 				if parseErr == nil {
-					_, parseErr = parser.Read(p)
+					parseErr = parser.Parse(p)
 					if parseErr != nil {
 						Log().WithError(parseErr).Error("mime parse error")
 					}

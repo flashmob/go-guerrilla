@@ -363,6 +363,9 @@ Content-Disposition: attachment;
 ------_=_NextPart_003_01CBE272.13692C80--
 ------_=_NextPart_001_01CBE273.65A0E7AA--`
 
+// note: this mime has an error: the boundary for multipart/alternative is re-used.
+// it should use a new unique boundary marker, which then needs to be terminated after
+// the text/html part.
 var email3 = `MIME-Version: 1.0
 X-Mailer: MailBee.NET 8.0.4.428
 Subject: test subject
@@ -408,7 +411,7 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 `
 
 func TestNestedEmail(t *testing.T) {
-	email = email
+	email = email3
 	p.inject([]byte(email))
 
 	go func() {
@@ -416,6 +419,7 @@ func TestNestedEmail(t *testing.T) {
 		//panic("here")
 		//		*moo = *moo + 6
 
+		// for debugging deadlocks
 		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 		//os.Exit(1)
 	}()
@@ -427,7 +431,7 @@ func TestNestedEmail(t *testing.T) {
 		email = replaceAtIndex(email, '#', p.Parts[part].StartingPos)
 		email = replaceAtIndex(email, '&', p.Parts[part].StartingPosBody)
 		email = replaceAtIndex(email, '*', p.Parts[part].EndingPosBody)
-		fmt.Println(p.Parts[part].Part + " " + strconv.Itoa(int(p.Parts[part].StartingPos)) + " " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + " " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+		fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 	}
 	fmt.Print(email)
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
@@ -439,4 +443,22 @@ func TestNestedEmail(t *testing.T) {
 
 func replaceAtIndex(str string, replacement rune, index uint) string {
 	return str[:index] + string(replacement) + str[index+1:]
+}
+
+var email4 = `Subject: test subject
+To: kevinm@datamotion.com
+
+This is not a an MIME email
+`
+
+func TestNonMineEmail(t *testing.T) {
+	p.inject([]byte(email4))
+	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
+		t.Error(err)
+	} else {
+		for part := range p.Parts {
+			fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+		}
+	}
+
 }

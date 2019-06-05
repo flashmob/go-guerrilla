@@ -805,9 +805,9 @@ Content-Transfer-Encoding: quoted-printable
 
 --XXXXboundary text
 Content-Type: text/plain;
- name="log_attachment.txt"
+       name="log_attachment.txt"
 Content-Disposition: attachment;
- filename="log_attachment.txt"
+       filename="log_attachment.txt"
 Content-Transfer-Encoding: base64
 
 TUlNRS1WZXJzaW9uOiAxLjANClgtTWFpbGVyOiBNYWlsQmVlLk5FVCA4LjAuNC40MjgNClN1Ympl
@@ -820,7 +820,6 @@ b2R5DQotLS0tLS09X05leHRQYXJ0XzAwMF9BRTZCXzcyNUUwOUFGLjg4QjdGOTM0DQpDb250ZW50
 LVR5cGU6IHRleHQvaHRtbDsNCgljaGFyc2V0PSJ1dGYtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5j
 b2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KPHByZT50ZXN0IGJvZHk8L3ByZT4NCi0tLS0tLT1f
 TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
-
 --XXXXboundary text--
 `
 
@@ -897,6 +896,13 @@ Content-Disposition: attachment;
 ------_=_NextPart_001_01CBE273.65A0E7AA--
 `
 
+/*
+1  0  166  1514
+1.1  186  260  259
+1.2  280  374  416
+1.3  437  530  584
+1.4  605  769  1514
+*/
 func TestStreamMimeProcessor(t *testing.T) {
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
@@ -906,7 +912,7 @@ func TestStreamMimeProcessor(t *testing.T) {
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":        "HeadersParser|Debugger",
-			"stream_save_process": "Header|mimeanalyzer|headersparser|compress|Decompress|debug",
+			"stream_save_process": "mimeanalyzer|headersparser|compress|Decompress|debug",
 		},
 	}
 	d := Daemon{Config: cfg}
