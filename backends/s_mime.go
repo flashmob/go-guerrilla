@@ -54,11 +54,15 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			}
 
 			sd.Close = func() error {
-				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.MimeHeader); ok {
-					for _, v := range *parts {
-						fmt.Println(v.Part + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
+
+				defer func() {
+					// todo remove debugging
+					if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
+						for _, v := range *parts {
+							fmt.Println(v.Part + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
+						}
 					}
-				}
+				}()
 
 				if parseErr == nil {
 					err := parser.Close()

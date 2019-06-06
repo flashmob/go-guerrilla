@@ -53,7 +53,7 @@ func MysqlChunksaver() *StreamDecorator {
 			}
 
 			sd.Close = func() error {
-				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.MimeHeader); ok {
+				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
 					for _, v := range *parts {
 						fmt.Println(v.Part + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
 					}
@@ -70,10 +70,10 @@ func MysqlChunksaver() *StreamDecorator {
 				if len(envelope.Header) > 0 {
 
 				}
-				var parts []*mime.MimeHeader
+				var parts []*mime.Part
 				if val, ok := envelope.Values["MimeParts"]; !ok {
 					//envelope.Values["MimeParts"] = &parser.Parts
-					parts = val.([]*mime.MimeHeader)
+					parts = val.([]*mime.Part)
 					size := len(parts)
 					if currentPart != size {
 						currentPart = size

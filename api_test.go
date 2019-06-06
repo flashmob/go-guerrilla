@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -920,6 +921,16 @@ func TestStreamMimeProcessor(t *testing.T) {
 	if err := d.Start(); err != nil {
 		t.Error(err)
 	}
+
+	go func() {
+		time.Sleep(time.Second * 15)
+		//panic("here")
+		//		*moo = *moo + 6
+
+		// for debugging deadlocks
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+		os.Exit(1)
+	}()
 
 	// change \n to \r\n
 	mime = strings.Replace(mime, "\n", "\r\n", -1)

@@ -12,9 +12,10 @@ import (
 var p *Parser
 
 func init() {
-	p = NewMimeParser()
+
 }
 func TestInject(t *testing.T) {
+	p = NewMimeParser()
 	var b bytes.Buffer
 
 	// it should read from both slices
@@ -32,7 +33,7 @@ func TestInject(t *testing.T) {
 	}
 }
 func TestMimeType(t *testing.T) {
-
+	p = NewMimeParser()
 	if isTokenSpecial['-'] {
 		t.Error("- should not be in the set")
 	}
@@ -49,6 +50,7 @@ func TestMimeType(t *testing.T) {
 }
 
 func TestMimeContentType(t *testing.T) {
+	p = NewMimeParser()
 	go func() {
 		<-p.consumed
 		p.gotNewSlice <- false
@@ -68,6 +70,7 @@ func TestMimeContentType(t *testing.T) {
 }
 
 func TestEmailHeader(t *testing.T) {
+	p = NewMimeParser()
 	in := `From: Al Gore <vice-president@whitehouse.gov>
 To: White House Transportation Coordinator <transport@whitehouse.gov>
 Subject: [Fwd: Map of Argentina with Description]
@@ -96,7 +99,7 @@ Al
 This
 `
 	p.inject([]byte(in))
-	h := newMimeHeader()
+	h := newPart()
 	err := p.header(h)
 	if err != nil {
 		t.Error(err)
@@ -107,7 +110,7 @@ This
 		//_ = part
 		//p.addPart(part)
 
-		//nextPart := newMimeHeader()
+		//nextPart := newPart()
 		//err = p.body(part)
 		//if err != nil {
 		//	t.Error(err)
@@ -116,8 +119,9 @@ This
 }
 
 func TestBoundary(t *testing.T) {
+	p = NewMimeParser()
 	var err error
-	part := newMimeHeader()
+	part := newPart()
 	part.ContentBoundary = "-wololo-"
 
 	// in the middle of the string
@@ -166,7 +170,7 @@ func TestBoundary(t *testing.T) {
 }
 
 func TestMimeContentQuotedParams(t *testing.T) {
-
+	p = NewMimeParser()
 	// quoted
 	p.inject([]byte("text/plain; charset=\"us-ascii\""))
 	contentType, err := p.contentType()
@@ -411,6 +415,7 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 `
 
 func TestNestedEmail(t *testing.T) {
+	p = NewMimeParser()
 	email = email3
 	p.inject([]byte(email))
 
@@ -452,6 +457,7 @@ This is not a an MIME email
 `
 
 func TestNonMineEmail(t *testing.T) {
+	p = NewMimeParser()
 	p.inject([]byte(email4))
 	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
 		t.Error(err)
