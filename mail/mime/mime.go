@@ -161,11 +161,13 @@ func (p *Parser) next() byte {
 			return 0
 		}
 	}
-
-	// go to the next byte
+	if p.pos > -1 || p.msgPos != 0 {
+		// dont incr on first call to next()
+		p.msgPos++
+	}
 	p.pos++
 	p.ch = p.buf[p.pos]
-	p.msgPos++
+
 	if p.ch == '\n' {
 		p.msgLine++
 	}
@@ -240,7 +242,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 	if len(contentBoundary) < 1 {
 		err = errors.New("content boundary too short")
 	}
-	boundary := doubleDash + contentBoundary
+	boundary := "\n" + doubleDash + contentBoundary
 	p.boundaryMatched = 0
 	for {
 		if i := bytes.Index(p.buf[p.pos:], []byte(boundary)); i > -1 {
@@ -250,8 +252,9 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 			// will wait until we get a new buffer
 
 			p.skip(i)
-			p.lastBoundaryPos = p.msgPos - 1 // - uint(len(boundary))
+			p.lastBoundaryPos = p.msgPos // -1 - uint(len(boundary))
 			p.skip(len(boundary))
+
 			if end, err = p.boundaryEnd(); err != nil {
 				return
 			}
@@ -280,7 +283,9 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 					p.boundaryMatched = 0
 				}
 			}
-			p.skip(len(p.buf))
+
+			p.skip(len(p.buf) - p.pos) // discard the remaining data
+
 			if p.ch == 0 {
 				return false, io.EOF
 			} else if p.boundaryMatched > 0 {
@@ -293,7 +298,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 					// advance the pointer
 					p.skip(len(boundary) - p.boundaryMatched)
 
-					p.lastBoundaryPos = p.msgPos - uint(len(boundary)) - 1
+					p.lastBoundaryPos = p.msgPos - uint(len(boundary)) // -1
 					end, err = p.boundaryEnd()
 					if err != nil {
 						return
@@ -781,9 +786,9 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 			err = NotMime
 			return
 		}
-
 		// after we return from the lower branches (if there were any)
 		// we walk each of the siblings of the parent
+
 		if end, bErr := p.boundary(parent.ContentBoundary); bErr != nil {
 			part.EndingPosBody = p.lastBoundaryPos
 			return bErr
@@ -795,6 +800,7 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 		part.EndingPosBody = p.lastBoundaryPos
 		count++
 	}
+
 	return
 }
 
@@ -804,6 +810,7 @@ func (p *Parser) reset() {
 	p.msgPos = 0
 	p.msgLine = 0
 	p.count = 0
+	p.ch = 0
 }
 
 // Close tells the MIME Parser there's no more data & waits for it to return a result
@@ -843,6 +850,7 @@ func (p *Parser) Parse(buf []byte) error {
 
 	if p.count == 0 {
 		//open
+
 		go func() {
 			p.next()
 			err := p.mime(nil, "")

@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -928,8 +927,8 @@ func TestStreamMimeProcessor(t *testing.T) {
 		//		*moo = *moo + 6
 
 		// for debugging deadlocks
-		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
-		os.Exit(1)
+		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+		//os.Exit(1)
 	}()
 
 	// change \n to \r\n

@@ -44,7 +44,7 @@ func StreamMimeAnalyzer() *StreamDecorator {
 
 			Svc.AddShutdowner(ShutdownWith(func() error {
 				fmt.Println("shutdownewr")
-				_ = parser.Close()
+				//_ = parser.Close()
 				return nil
 			}))
 

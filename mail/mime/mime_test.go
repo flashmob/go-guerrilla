@@ -23,6 +23,11 @@ func TestInject(t *testing.T) {
 	p.inject([]byte("abcd"), []byte("efgh"), []byte("ijkl"))
 	for i := 0; i < 12; i++ {
 		b.WriteByte(p.ch)
+		if p.pos == 3 && p.msgPos < 4 {
+			if c := p.peek(); c != 101 {
+				t.Error("next() expecting e, got:", string(c))
+			}
+		}
 		p.next()
 		if p.ch == 0 {
 			break
@@ -129,7 +134,7 @@ func TestBoundary(t *testing.T) {
 	p.inject([]byte(test))
 
 	_, err = p.boundary(part.ContentBoundary)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Error(err)
 	}
 	fmt.Println(string(test[:p.lastBoundaryPos]))
@@ -137,34 +142,53 @@ func TestBoundary(t *testing.T) {
 	// at the end (with the -- postfix)
 	p.inject([]byte("The quick brown fox jumped over the lazy dog---wololo---\n"))
 	_, err = p.boundary(part.ContentBoundary)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Error(err)
 	}
 
-	for c := p.next(); c != 0; c = p.next() {
-	} // drain
+	//for c := p.next(); c != 0; c = p.next() {
+	//} // drain
 
-	// boundary is split over multiple slices
-	p.inject(
-		[]byte("The quick brown fox jumped ov---wolo"),
-		[]byte("lo---\ner the lazy dog"))
-	_, err = p.boundary(part.ContentBoundary)
-	if err != nil {
-		t.Error(err)
-	}
-	all := []byte("The quick brown fox jumped ov---wololo---\ner the lazy dog")
-	//all[p.lastBoundaryPos] = 'X'
-	fmt.Println(string(all[:p.lastBoundaryPos]))
-	for c := p.next(); c != 0; c = p.next() {
-	} // drain
 	// the boundary with an additional buffer in between
 	p.inject([]byte("The quick brown fox jumped over the lazy dog"),
 		[]byte("this is the middle"),
 		[]byte("and thats the end---wololo---\n"))
 
 	_, err = p.boundary(part.ContentBoundary)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Error(err)
+	}
+
+}
+
+// todo: make sure next() advances properly
+func TestBoundarySplit(t *testing.T) {
+	p = NewMimeParser()
+	var err error
+	part := newPart()
+
+	part.ContentBoundary = "-wololo-"
+	// boundary is split over multiple slices
+	p.inject(
+		[]byte("The quick brown fox jumped ov---wolo"),
+		[]byte("lo---\ner the lazy dog"))
+	_, err = p.boundary(part.ContentBoundary)
+	if err != nil && err != io.EOF {
+		t.Error(err)
+	}
+
+	fmt.Println(string([]byte("The quick brown fox jumped ov---wolo")[:p.lastBoundaryPos]))
+
+	// boundary has a space, pointer advanced before, and is split over multiple slices
+	part.ContentBoundary = "XXXXboundary text" // 17 chars
+	p.inject(
+		[]byte("The quick brown fox jumped ov--X"),
+		[]byte("XXXboundary text\ner the lazy dog"))
+	p.next() // here the pointer is advanced before the boundary is searched
+	_, err = p.boundary(part.ContentBoundary)
+	if err != nil && err != io.EOF {
+		t.Error(err)
+		return
 	}
 
 }
@@ -416,7 +440,7 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
-	email = email3
+	email = email
 	p.inject([]byte(email))
 
 	go func() {
@@ -440,8 +464,8 @@ func TestNestedEmail(t *testing.T) {
 	}
 	fmt.Print(email)
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
-
-	//fmt.Println(email[p.parts[1].startingPosBody:p.parts[1].endingPosBody])
+	i := 0
+	fmt.Println("[" + email[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
 	//i := 2
 	//fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
 }
