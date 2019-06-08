@@ -242,7 +242,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 	if len(contentBoundary) < 1 {
 		err = errors.New("content boundary too short")
 	}
-	boundary := "\n" + doubleDash + contentBoundary
+	boundary := doubleDash + contentBoundary
 	p.boundaryMatched = 0
 	for {
 		if i := bytes.Index(p.buf[p.pos:], []byte(boundary)); i > -1 {

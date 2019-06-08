@@ -111,15 +111,6 @@ This
 	}
 	if _, err := p.boundary(h.ContentBoundary); err != nil {
 		t.Error(err)
-	} else {
-		//_ = part
-		//p.addPart(part)
-
-		//nextPart := newPart()
-		//err = p.body(part)
-		//if err != nil {
-		//	t.Error(err)
-		//}
 	}
 }
 
@@ -137,7 +128,10 @@ func TestBoundary(t *testing.T) {
 	if err != nil && err != io.EOF {
 		t.Error(err)
 	}
-	fmt.Println(string(test[:p.lastBoundaryPos]))
+	body := string(test[:p.lastBoundaryPos])
+	if body != "The quick brown fo" {
+		t.Error("p.lastBoundaryPos seems incorrect")
+	}
 
 	// at the end (with the -- postfix)
 	p.inject([]byte("The quick brown fox jumped over the lazy dog---wololo---\n"))
@@ -145,9 +139,6 @@ func TestBoundary(t *testing.T) {
 	if err != nil && err != io.EOF {
 		t.Error(err)
 	}
-
-	//for c := p.next(); c != 0; c = p.next() {
-	//} // drain
 
 	// the boundary with an additional buffer in between
 	p.inject([]byte("The quick brown fox jumped over the lazy dog"),
@@ -161,7 +152,6 @@ func TestBoundary(t *testing.T) {
 
 }
 
-// todo: make sure next() advances properly
 func TestBoundarySplit(t *testing.T) {
 	p = NewMimeParser()
 	var err error
@@ -177,7 +167,10 @@ func TestBoundarySplit(t *testing.T) {
 		t.Error(err)
 	}
 
-	fmt.Println(string([]byte("The quick brown fox jumped ov---wolo")[:p.lastBoundaryPos]))
+	body := string([]byte("The quick brown fox jumped ov---wolo")[:p.lastBoundaryPos])
+	if body != "The quick brown fox jumped ov" {
+		t.Error("p.lastBoundaryPos value seems incorrect")
+	}
 
 	// boundary has a space, pointer advanced before, and is split over multiple slices
 	part.ContentBoundary = "XXXXboundary text" // 17 chars

@@ -602,8 +602,8 @@ func (gw *BackendGateway) workDispatcher(
 				err := stream.open(msg.e)
 				if err == nil {
 					var buf []byte
+					// TODO make the buffer configurable
 					buf = make([]byte, 1024*4)
-					buf = make([]byte, 210)
 					if msg.e.Values["size"], err = io.CopyBuffer(stream, msg.r, buf); err != nil {
 						Log().WithError(err).Error("stream writing failed")
 					}
