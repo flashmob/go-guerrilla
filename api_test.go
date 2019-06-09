@@ -781,7 +781,8 @@ func TestStreamProcessor(t *testing.T) {
 
 var mime = `MIME-Version: 1.0
 X-Mailer: MailBee.NET 8.0.4.428
-Subject: test subject
+Subject: test 
+ subject
 To: kevinm@datamotion.com
 Content-Type: multipart/mixed;
        boundary="XXXXboundary text"

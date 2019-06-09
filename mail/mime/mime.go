@@ -104,6 +104,7 @@ type contentType struct {
 	superType  string
 	subType    string
 	parameters map[string]string
+	b          bytes.Buffer
 }
 
 type parserMsg struct {
@@ -128,8 +129,24 @@ var isTokenSpecial = [128]bool{
 	'=':  true,
 }
 
-func (c *contentType) String() string {
-	return fmt.Sprintf("%s/%s", c.superType, c.subType)
+func (c *contentType) params() (ret string) {
+	defer func() {
+		c.b.Reset()
+	}()
+	sp := ""
+	for k, v := range c.parameters {
+		c.b.WriteString(k + "=\"" + v + "\"" + sp)
+		if len(c.parameters) > 1 && sp == "" {
+			sp = " "
+		}
+	}
+	return c.b.String()
+}
+
+func (c *contentType) String() (ret string) {
+	ret = fmt.Sprintf("%s/%s %s", c.superType, c.subType,
+		c.params())
+	return
 }
 
 func newPart() *Part {
@@ -210,6 +227,12 @@ func (p *Parser) inject(input ...[]byte) {
 	}()
 }
 
+// Set the buffer and reset p.pos to startPos, which is typically -1
+// The reason why -1 is because peek() implementation becomes more
+// simple, as it only needs to add 1 to p.pos for all cases.
+// We don't read the buffer when we set, only when next() is called.
+// This allows us to peek in to the next buffer while still being on
+// the last element from the previous buffer
 func (p *Parser) set(input []byte) {
 	if p.pos != startPos {
 		// rewind
@@ -218,6 +241,8 @@ func (p *Parser) set(input []byte) {
 	p.buf = input
 }
 
+// skip advances the pointer n bytes. It will block if not enough bytes left in
+// the buffer, i.e. if bBytes > len(p.buf) - p.pos
 func (p *Parser) skip(nBytes int) {
 
 	for i := 0; i < nBytes; i++ {
@@ -832,13 +857,14 @@ func (p *Parser) Close() error {
 
 // Parse takes a byte stream, and feeds it to the MIME Parser, then
 // waits for the Parser to consume all input before returning.
-// The Parser will build a parse tree in p.Parts
-// The reader doesn't decode any input. All it does
+// The parser will build a parse tree in p.Parts
+// The parser doesn't decode any input. All it does
 // is collect information about where the different MIME parts
 // start and end, and other meta-data. This data can be used
-// by others later to determine how to store/display
+// later down the stack to determine how to store/display
 // the messages
-// returns error if there's a parse error
+// returns error if there's a parse error, except io.EOF when no
+// error occurred.
 func (p *Parser) Parse(buf []byte) error {
 	defer func() {
 		p.count++
@@ -846,11 +872,12 @@ func (p *Parser) Parse(buf []byte) error {
 	}()
 	p.Lock()
 
+	// Feed the new slice. Assumes that the parser is blocked now, waiting
+	// for new data, or not started yet.
 	p.set(buf)
 
 	if p.count == 0 {
-		//open
-
+		// initial step - start the mime parser
 		go func() {
 			p.next()
 			err := p.mime(nil, "")
@@ -858,6 +885,7 @@ func (p *Parser) Parse(buf []byte) error {
 			p.result <- parserMsg{err}
 		}()
 	} else {
+		// tell the parser to resume consuming
 		p.gotNewSlice <- true
 	}
 
@@ -865,7 +893,7 @@ func (p *Parser) Parse(buf []byte) error {
 	case <-p.consumed: // wait for prev buf to be consumed
 		return nil
 	case r := <-p.result:
-		// mime() has returned with a result
+		// mime() has returned with a result (it finished consuming)
 		p.reset()
 		return r.err
 	}
