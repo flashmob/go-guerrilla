@@ -61,7 +61,7 @@ func TestMimeContentType(t *testing.T) {
 		<-p.consumed
 		p.gotNewSlice <- false
 	}()
-	subject := "text/plain; charset=\"us-ascii\"; boundary=\"foo\""
+	subject := "text/plain; charset=\"us-ascii\"; moo; boundary=\"foo\""
 	p.inject([]byte(subject))
 	contentType, err := p.contentType()
 	if err != nil {
@@ -491,9 +491,11 @@ func TestNonMineEmail(t *testing.T) {
 		}
 	}
 	p.Close()
+
+	// what if we pass an empty string?
 	p.inject([]byte{' '})
-	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
-		t.Error(err)
+	if err := p.mime(nil, ""); err == nil || err == NotMime || err == io.EOF {
+		t.Error("unexpected error", err)
 	}
 
 }

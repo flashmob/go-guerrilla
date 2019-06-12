@@ -135,6 +135,10 @@ func (c *contentType) params() (ret string) {
 		c.b.Reset()
 	}()
 	for k := range c.parameters {
+		if c.parameters[k] == "" {
+			c.b.WriteString("; " + k)
+			continue
+		}
 		c.b.WriteString("; " + k + "=\"" + c.parameters[k] + "\"")
 	}
 	return c.b.String()
@@ -679,6 +683,9 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 		return "", "", err
 	}
 	if p.ch != '=' {
+		if len(attribute) > 0 {
+			return
+		}
 		return "", "", errors.New("expecting =")
 	}
 	p.next()
