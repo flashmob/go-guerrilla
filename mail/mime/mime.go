@@ -10,9 +10,10 @@ import (
 	"sync"
 )
 
-// todo
-// - content-disposition
-// - make the error available
+// - TODO support RFC 2047 provides support for non-US-ASCII character sets in RFC 822
+//   message header comments
+// - not
+//
 
 type mimepart struct {
 	/*
@@ -64,7 +65,7 @@ type Parser struct {
 	boundaryMatched       int
 	count                 uint
 	result                chan parserMsg
-	sync.Mutex
+	mux                   sync.Mutex
 	// mime variables
 
 	// Parts is the mime parts tree. The parser builds the parts as it consumes the input
@@ -133,18 +134,14 @@ func (c *contentType) params() (ret string) {
 	defer func() {
 		c.b.Reset()
 	}()
-	sp := ""
-	for k, v := range c.parameters {
-		c.b.WriteString(k + "=\"" + v + "\"" + sp)
-		if len(c.parameters) > 1 && sp == "" {
-			sp = " "
-		}
+	for k := range c.parameters {
+		c.b.WriteString("; " + k + "=\"" + c.parameters[k] + "\"")
 	}
 	return c.b.String()
 }
 
 func (c *contentType) String() (ret string) {
-	ret = fmt.Sprintf("%s/%s %s", c.superType, c.subType,
+	ret = fmt.Sprintf("%s/%s%s", c.superType, c.subType,
 		c.params())
 	return
 }
@@ -480,17 +477,6 @@ func (p *Parser) isWSP(b byte) bool {
 	return b == ' ' || b == '\t'
 }
 
-// type "/" subtype
-// *(";" parameter)
-
-// content disposition
-// The Content-Disposition Header Field (rfc2183)
-// https://stackoverflow.com/questions/48347574/do-rfc-standards-require-the-filename-value-for-mime-attachment-to-be-encapsulat
-func (p *Parser) contentDisposition() (result contentType, err error) {
-	result = contentType{}
-	return
-}
-
 func (p *Parser) contentType() (result contentType, err error) {
 	result = contentType{}
 
@@ -505,42 +491,45 @@ func (p *Parser) contentType() (result contentType, err error) {
 	if result.subType, err = p.mimeSubType(); err != nil {
 		return
 	}
-	if p.ch == ';' {
-		p.next()
-		for {
-			if p.ch == '\n' {
-				c := p.peek()
-				if p.isWSP(c) {
-					p.next() // skip \n (FWS)
-					continue
-				}
-				if c == '\n' { // end of header
-					return
-				}
-			}
-			if p.isWSP(p.ch) { // skip WSP
-				p.next()
-				continue
-			}
-			if p.ch == '(' {
-				if err = p.comment(); err != nil {
-					return
-				}
-				continue
-			}
 
-			if p.ch > 32 && p.ch < 128 && !isTokenSpecial[p.ch] {
-				if key, val, err := p.parameter(); err != nil {
-					return result, err
-				} else {
-					if result.parameters == nil {
-						result.parameters = make(map[string]string, 1)
-					}
-					result.parameters[key] = val
-				}
-			} else {
-				break
+	for {
+		if p.ch == ';' {
+			p.next()
+			continue
+		}
+		if p.ch == '\n' {
+			c := p.peek()
+			if p.isWSP(c) {
+				p.next() // skip \n (FWS)
+				continue
 			}
+			if c == '\n' { // end of header
+				return
+			}
+		}
+		if p.isWSP(p.ch) { // skip WSP
+			p.next()
+			continue
+		}
+		if p.ch == '(' {
+			if err = p.comment(); err != nil {
+				return
+			}
+			continue
+		}
+
+		if p.ch > 32 && p.ch < 128 && !isTokenSpecial[p.ch] {
+			if key, val, err := p.parameter(); err != nil {
+				return result, err
+			} else {
+				// add the new parameter
+				if result.parameters == nil {
+					result.parameters = make(map[string]string, 1)
+				}
+				result.parameters[key] = val
+			}
+		} else {
+			break
 		}
 	}
 
@@ -841,10 +830,10 @@ func (p *Parser) reset() {
 // Close tells the MIME Parser there's no more data & waits for it to return a result
 // it will return an io.EOF error if no error with parsing MIME was detected
 func (p *Parser) Close() error {
-	p.Lock()
+	p.mux.Lock()
 	defer func() {
 		p.reset()
-		p.Unlock()
+		p.mux.Unlock()
 	}()
 	if p.count == 0 {
 		// already closed
@@ -868,9 +857,9 @@ func (p *Parser) Close() error {
 func (p *Parser) Parse(buf []byte) error {
 	defer func() {
 		p.count++
-		p.Unlock()
+		p.mux.Unlock()
 	}()
-	p.Lock()
+	p.mux.Lock()
 
 	// Feed the new slice. Assumes that the parser is blocked now, waiting
 	// for new data, or not started yet.

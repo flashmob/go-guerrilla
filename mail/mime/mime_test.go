@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,17 +61,23 @@ func TestMimeContentType(t *testing.T) {
 		<-p.consumed
 		p.gotNewSlice <- false
 	}()
-	p.inject([]byte("text/plain; charset=us-ascii"))
+	subject := "text/plain; charset=\"us-ascii\"; boundary=\"foo\""
+	p.inject([]byte(subject))
 	contentType, err := p.contentType()
 	if err != nil {
 		t.Error(err)
 	}
+
 	if contentType.subType != "plain" {
 		t.Error("contentType.subType expecting 'plain', got:", contentType.subType)
 	}
 
 	if contentType.superType != "text" {
 		t.Error("contentType.subType expecting 'text', got:", contentType.superType)
+	}
+
+	if ct := contentType.String(); strings.Compare(contentType.String(), subject) != 0 {
+		t.Error("\n[" + ct + "]\ndoes not equal\n[" + subject + "]")
 	}
 }
 
@@ -482,6 +489,11 @@ func TestNonMineEmail(t *testing.T) {
 		for part := range p.Parts {
 			fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 		}
+	}
+	p.Close()
+	p.inject([]byte{' '})
+	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
+		t.Error(err)
 	}
 
 }
