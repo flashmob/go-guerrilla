@@ -897,6 +897,131 @@ Content-Disposition: attachment;
 ------_=_NextPart_001_01CBE273.65A0E7AA--
 `
 
+var mime3 = `From lara_lars@hotmail.com Mon Feb 19 22:24:21 2001
+Received: from [137.154.210.66] by hotmail.com (3.2) with ESMTP id MHotMailBC5B58230039400431D5899AD24289FA0; Mon Feb 19 22:22:29 2001
+Received: from lancelot.cit.nepean.uws.edu.au (lancelot.cit.uws.edu.au [137.154.148.30])
+        by day.uws.edu.au (8.11.1/8.11.1) with ESMTP id f1K6MN404936;
+        Tue, 20 Feb 2001 17:22:24 +1100 (EST)
+Received: from hotmail.com (law2-f35.hotmail.com [216.32.181.35])
+        by lancelot.cit.nepean.uws.edu.au (8.10.0.Beta10/8.10.0.Beta10) with ESMTP id f1K6MJb13619;
+        Tue, 20 Feb 2001 17:22:19 +1100 (EST)
+Received: from mail pickup service by hotmail.com with Microsoft SMTPSVC;
+         Mon, 19 Feb 2001 22:21:44 -0800
+Received: from 203.54.221.89 by lw2fd.hotmail.msn.com with HTTP;        Tue, 20 Feb 2001 06:21:44 GMT
+X-Originating-IP: [203.54.221.89]
+From: "lara devine" <lara_lars@hotmail.com>
+To: amalinow@cit.nepean.uws.edu.au, transmission_@hotmail.com,
+   lalexand@cit.nepean.uws.edu.au, dconroy@cit.nepean.uws.edu.au,
+   pumpkin7@bigpond.com, jwalker@cit.nepean.uws.edu.au,
+   dgoerge@cit.nepean.uws.edu.au, batty_horny@hotmail.com,
+   ikvesic@start.com.au
+Subject: Fwd: Goldfish
+Date: Tue, 20 Feb 2001 06:21:44
+Mime-Version: 1.0
+Content-Type: text/plain; format=flowed
+Message-ID: <LAW2-F35R881Np7vXee00000222@hotmail.com>
+X-OriginalArrivalTime: 20 Feb 2001 06:21:44.0718 (UTC) FILETIME=[658BDAE0:01C09B05]
+
+
+
+
+>> >Two builders (Chris and James) are seated either side of a table in a
+> > >rough
+> > >pub when a well-dressed man enters, orders beer and sits on a stool at
+> > >the bar.
+> > >The two builders start to speculate about the occupation of the suit.
+> > >
+> > >Chris: - I reckon he's an accountant.
+> > >
+> > >James: - No way - he's a stockbroker.
+> > >
+> > >Chris: - He ain't no stockbroker! A stockbroker wouldn't come in here!
+> > >
+> > >The argument repeats itself for some time until the volume of beer gets
+> > >the better of Chris and he makes for the toilet. On entering the toilet
+> > >he
+> > >sees that the suit is standing at a urinal. Curiosity and the several
+> > >beers
+> > >get the better of the builder...
+> > >
+> > >Chris: - 'scuse me.... no offence meant, but me and me mate were
+> > wondering
+> > >
+> > >  what you do for a living?
+> > >
+> > >Suit: - No offence taken! I'm a Logical Scientist by profession!
+> > >
+> > >Chris: - Oh! What's that then?
+> > >
+> > >Suit:- I'll try to explain by example... Do you have a goldfish at
+>home?
+> > >
+> > >Chris:- Er...mmm... well yeah, I do as it happens!
+> > >
+> > >Suit: - Well, it's logical to follow that you keep it in a bowl or in a
+> > >pond. Which is it?
+> > >
+> > >Chris: - It's in a pond!
+> > >
+> > >Suit: - Well then it's reasonable to suppose that you have a large
+> > >garden
+> > >then?
+> > >
+> > >Chris: - As it happens, yes I have got a big garden!
+> > >
+> > >Suit: - Well then it's logical to assume that in this town that if you
+> > >have a large garden that you have a large house?
+> > >
+> > >Chris: - As it happens I've got a five bedroom house... built it
+>myself!
+> > >
+> > >Suit: - Well given that you've built a five-bedroom house it is logical
+> > >to asume that you haven't built it just for yourself and that you are
+> > >quite
+> > >probably married?
+> > >
+> > >Chris: - Yes I am married, I live with my wife and three children!
+> > >
+> > >Suit: - Well then it is logical to assume that you are sexually active
+> > >with your wife on a regular basis?
+> > >
+> > >Chris:- Yep! Four nights a week!
+> > >
+> > >Suit: - Well then it is logical to suggest that you do not masturbate
+> > >very often?
+> > >
+> > >Chris: - Me? Never.
+> > >
+> > >Suit: - Well there you are! That's logical science at work!
+> > >
+> > >Chris:- How's that then?
+> > >
+> > >Suit: - Well from finding out that you had a goldfish, I've told you
+> > >about the size of garden you have, size of house, your family and your
+> > >sex
+> > >life!
+> > >
+> > >Chris: - I see! That's pretty impressive... thanks mate!
+> > >
+> > >Both leave the toilet and Chris returns to his mate.
+> > >
+> > >James: - I see the suit was in there. Did you ask him what he does?
+> > >
+> > >Chris: - Yep! He's a logical scientist!
+> > >
+> > >James: What's a logical Scientist?
+> > >
+> > >Chris: - I'll try and explain. Do you have a goldfish?
+> > >
+> > >James: - Nope.
+> > >
+> > >Chris: - Well then, you're a wanker.
+>
+
+_________________________________________________________________________
+Get Your Private, Free E-mail from MSN Hotmail at http://www.hotmail.com.
+`
+
 /*
 1  0  166  1514
 1.1  186  260  259

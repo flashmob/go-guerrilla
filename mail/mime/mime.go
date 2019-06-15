@@ -46,9 +46,10 @@ type mimepart struct {
 }
 
 const (
-	maxBoundaryLen = 70 + 10
-	doubleDash     = "--"
-	startPos       = -1
+	maxBoundaryLen       = 70 + 10
+	doubleDash           = "--"
+	startPos             = -1
+	headerErrorThreshold = 4
 )
 
 var NotMime = errors.New("not Mime")
@@ -59,6 +60,7 @@ type Parser struct {
 
 	buf                   []byte
 	pos                   int
+	peekOffset            int
 	ch                    byte
 	gotNewSlice, consumed chan bool
 	accept                bytes.Buffer
@@ -172,43 +174,52 @@ func (p *Parser) more() bool {
 // returns 0 if no more input can be read
 // blocks if at the end of the buffer
 func (p *Parser) next() byte {
-	// wait for a new new slice if reached the end
-	if p.pos+1 >= len(p.buf) {
-		if !p.more() {
-			p.ch = 0
-			return 0
+	for {
+		// wait for more bytes if reached the end
+		if p.pos+1 >= len(p.buf) {
+			if !p.more() {
+				p.ch = 0
+				return 0
+			}
 		}
+		if p.pos > -1 || p.msgPos != 0 {
+			// dont incr on first call to next()
+			p.msgPos++
+		}
+		p.pos++
+		if p.buf[p.pos] == '\r' {
+			// ignore \r
+			continue
+		}
+		p.ch = p.buf[p.pos]
+		if p.ch == '\n' {
+			p.msgLine++
+		}
+		return p.ch
 	}
-	if p.pos > -1 || p.msgPos != 0 {
-		// dont incr on first call to next()
-		p.msgPos++
-	}
-	p.pos++
-	p.ch = p.buf[p.pos]
-
-	if p.ch == '\n' {
-		p.msgLine++
-	}
-	return p.ch
 }
 
 // peek does not advance the pointer, but will block if there's no more
 // input in the buffer
 func (p *Parser) peek() byte {
-
-	// reached the end?
-	if p.pos+1 >= len(p.buf) {
-		if !p.more() {
-			p.ch = 0
-			return 0
+	p.peekOffset = 1
+	for {
+		// reached the end? Wait for more bytes to consume
+		if p.pos+p.peekOffset >= len(p.buf) {
+			if !p.more() {
+				p.ch = 0
+				return 0
+			}
 		}
+		// peek the next byte
+		ret := p.buf[p.pos+p.peekOffset]
+		if ret == '\r' {
+			// ignore \r
+			p.peekOffset++
+			continue
+		}
+		return ret
 	}
-
-	// peek the next byte
-	if p.pos+1 < len(p.buf) {
-		return p.buf[p.pos+1]
-	}
-	return 0
 }
 
 // inject is used for testing, to simulate a byte stream
@@ -245,10 +256,18 @@ func (p *Parser) set(input []byte) {
 // skip advances the pointer n bytes. It will block if not enough bytes left in
 // the buffer, i.e. if bBytes > len(p.buf) - p.pos
 func (p *Parser) skip(nBytes int) {
-
-	for i := 0; i < nBytes; i++ {
+	for {
+		if p.pos+nBytes < len(p.buf) {
+			p.pos += nBytes - 1
+			p.msgPos = p.msgPos + uint(nBytes) - 1
+			p.next()
+			return
+		}
+		remainder := len(p.buf) - p.pos
+		nBytes -= remainder
+		p.pos += remainder - 1
 		p.next()
-		if p.ch == 0 {
+		if nBytes < 1 {
 			return
 		}
 	}
@@ -272,10 +291,6 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 	p.boundaryMatched = 0
 	for {
 		if i := bytes.Index(p.buf[p.pos:], []byte(boundary)); i > -1 {
-			// advance the pointer to 1 char before the end of the boundary
-			// then let next() to advance the last char.
-			// in case the boundary is the tail part of buffer, calling next()
-			// will wait until we get a new buffer
 
 			p.skip(i)
 			p.lastBoundaryPos = p.msgPos // -1 - uint(len(boundary))
@@ -376,8 +391,11 @@ func (p *Parser) transportPadding() (err error) {
 }
 
 func (p *Parser) header(mh *Part) (err error) {
-	var state int
-	var name string
+	var (
+		state      int
+		name       string
+		errorCount int
+	)
 
 	defer func() {
 		p.accept.Reset()
@@ -403,6 +421,10 @@ func (p *Parser) header(mh *Part) (err error) {
 				p.next()
 				state = 1
 			} else {
+				if errorCount < headerErrorThreshold {
+					state = 2 // tolerate this error
+					continue
+				}
 				pc := p.peek()
 				err = errors.New("unexpected char:[" + string(p.ch) + "], peek:" +
 					string(pc) + ", pos:" + strconv.Itoa(int(p.msgPos)))
@@ -458,11 +480,27 @@ func (p *Parser) header(mh *Part) (err error) {
 						state = 0
 					}
 				} else {
-					err = errors.New("parse error")
+					err = errors.New("header parse error, pos:" + strconv.Itoa(p.pos))
 					return
 				}
 			}
-
+		case 2:
+			errorCount++
+			// error recovery for header lines with parse errors -
+			// ignore the line, discard anything that was scanned, scan until the end-of-line
+			// then start a new line again (back to state 0)
+			p.accept.Reset()
+			for {
+				if p.ch != '\n' {
+					p.next()
+				}
+				if p.ch == 0 {
+					return io.EOF
+				} else if p.ch == '\n' {
+					state = 0
+					break
+				}
+			}
 		}
 		if p.ch == '\n' && p.peek() == '\n' {
 			return nil
@@ -893,6 +931,13 @@ func (p *Parser) Parse(buf []byte) error {
 		p.reset()
 		return r.err
 	}
+}
+
+func (p *Parser) ParseError(err error) bool {
+	if err != nil && err != io.EOF && err != NotMime {
+		return true
+	}
+	return false
 }
 
 func NewMimeParser() *Parser {

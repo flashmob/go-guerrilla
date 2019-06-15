@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
@@ -76,14 +75,15 @@ func TestMimeContentType(t *testing.T) {
 		t.Error("contentType.subType expecting 'text', got:", contentType.superType)
 	}
 
-	if ct := contentType.String(); strings.Compare(contentType.String(), subject) != 0 {
+	if ct := contentType.String(); contentType.String() != subject {
 		t.Error("\n[" + ct + "]\ndoes not equal\n[" + subject + "]")
 	}
 }
 
 func TestEmailHeader(t *testing.T) {
 	p = NewMimeParser()
-	in := `From: Al Gore <vice-president@whitehouse.gov>
+	in := `Wong ignore me
+From: Al Gore <vice-president@whitehouse.gov>
 To: White House Transportation Coordinator <transport@whitehouse.gov>
 Subject: [Fwd: Map of Argentina with Description]
 MIME-Version: 1.0
@@ -189,6 +189,36 @@ func TestBoundarySplit(t *testing.T) {
 	if err != nil && err != io.EOF {
 		t.Error(err)
 		return
+	}
+
+}
+
+func TestSkip(t *testing.T) {
+	p = NewMimeParser()
+	p.inject(
+		[]byte("you cant touch this"),
+		[]byte("stop, hammer time"))
+
+	p.skip(3)
+
+	if p.pos != 3 {
+		t.Error("position should be 3 after skipping 3 bytes, it is:", p.pos)
+	}
+
+	p.pos = 0
+
+	// after we used next() to advance
+	p.next()
+	p.skip(3)
+	if p.pos != 4 {
+		t.Error("position should be 4 after skipping 3 bytes, it is:", p.pos)
+	}
+
+	// advance to the 2nd buffer
+	p.pos = 0
+	p.skip(19)
+	if p.pos != 0 && p.buf[0] != 's' {
+		t.Error("position should be 0 and p.buf[0] should be 's'")
 	}
 
 }
@@ -441,6 +471,7 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
 	email = email
+	//email = strings.Replace(string(email), "\n", "\r\n", -1)
 	p.inject([]byte(email))
 
 	go func() {
@@ -464,7 +495,7 @@ func TestNestedEmail(t *testing.T) {
 	}
 	fmt.Print(email)
 	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
-	i := 0
+	i := 1
 	fmt.Println("[" + email[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
 	//i := 2
 	//fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
@@ -490,7 +521,10 @@ func TestNonMineEmail(t *testing.T) {
 			fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 		}
 	}
-	p.Close()
+	err := p.Close()
+	if err != nil {
+		t.Error(err)
+	}
 
 	// what if we pass an empty string?
 	p.inject([]byte{' '})
