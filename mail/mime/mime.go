@@ -77,7 +77,6 @@ type Parser struct {
 	// "1.2" would be "1.2.1"
 	Parts           []*Part
 	msgPos          uint
-	msgLine         uint
 	lastBoundaryPos uint
 }
 
@@ -86,12 +85,11 @@ type Part struct {
 
 	Part string
 
-	StartingPos      uint // including header (after boundary, 0 at the top)
-	StartingPosBody  uint // after header \n\n
-	EndingPos        uint // redundant (same as endingPos)
-	EndingPosBody    uint // the char before the boundary marker
-	LineCount        uint
-	BodyLineCount    uint
+	StartingPos     uint // including header (after boundary, 0 at the top)
+	StartingPosBody uint // after header \n\n
+	EndingPos       uint // redundant (same as endingPos)
+	EndingPosBody   uint // the char before the boundary marker
+
 	Charset          string
 	TransferEncoding string
 	ContentBoundary  string
@@ -192,9 +190,7 @@ func (p *Parser) next() byte {
 			continue
 		}
 		p.ch = p.buf[p.pos]
-		if p.ch == '\n' {
-			p.msgLine++
-		}
+
 		return p.ch
 	}
 }
@@ -868,7 +864,6 @@ func (p *Parser) reset() {
 	p.lastBoundaryPos = 0
 	p.pos = startPos
 	p.msgPos = 0
-	p.msgLine = 0
 	p.count = 0
 	p.ch = 0
 }
