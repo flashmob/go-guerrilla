@@ -216,6 +216,7 @@ func TestSkip(t *testing.T) {
 
 	// advance to the 2nd buffer
 	p.pos = 0
+	p.msgPos = 0
 	p.skip(19)
 	if p.pos != 0 && p.buf[0] != 's' {
 		t.Error("position should be 0 and p.buf[0] should be 's'")

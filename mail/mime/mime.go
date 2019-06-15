@@ -266,6 +266,7 @@ func (p *Parser) skip(nBytes int) {
 		remainder := len(p.buf) - p.pos
 		nBytes -= remainder
 		p.pos += remainder - 1
+		p.msgPos += uint(remainder - 1)
 		p.next()
 		if nBytes < 1 {
 			return
