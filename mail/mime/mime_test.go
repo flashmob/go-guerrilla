@@ -255,16 +255,21 @@ func TestMimeContentQuotedParams(t *testing.T) {
 	if len(contentType.parameters) != 2 {
 		t.Error("expecting 2 elements in parameters")
 	} else {
-		if _, ok := contentType.parameters["charset"]; !ok {
+		m := make(map[string]string)
+		for _, e := range contentType.parameters {
+			m[e.name] = e.value
+		}
+		if _, ok := m["charset"]; !ok {
 			t.Error("charset parameter not present")
 		}
-		if b, ok := contentType.parameters["boundary"]; !ok {
+		if b, ok := m["boundary"]; !ok {
 			t.Error("charset parameter not present")
 		} else {
 			if b != "D7F------------D7FD5A0B8AB9C65CCDBFA872" {
 				t.Error("boundary should be: D7F------------D7FD5A0B8AB9C65CCDBFA872")
 			}
 		}
+
 	}
 
 }

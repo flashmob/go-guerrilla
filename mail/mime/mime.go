@@ -101,10 +101,15 @@ type Part struct {
 	ContentName         string
 }
 
+type parameter struct {
+	name  string
+	value string
+}
+
 type contentType struct {
 	superType  string
 	subType    string
-	parameters map[string]string
+	parameters []parameter
 	b          bytes.Buffer
 }
 
@@ -135,11 +140,11 @@ func (c *contentType) params() (ret string) {
 		c.b.Reset()
 	}()
 	for k := range c.parameters {
-		if c.parameters[k] == "" {
-			c.b.WriteString("; " + k)
+		if c.parameters[k].value == "" {
+			c.b.WriteString("; " + c.parameters[k].name)
 			continue
 		}
-		c.b.WriteString("; " + k + "=\"" + c.parameters[k] + "\"")
+		c.b.WriteString("; " + c.parameters[k].name + "=\"" + c.parameters[k].value + "\"")
 	}
 	return c.b.String()
 }
@@ -402,7 +407,6 @@ func (p *Parser) header(mh *Part) (err error) {
 		if val := mh.Headers.Get("Content-Disposition"); val != "" {
 			mh.ContentDisposition = val
 		}
-
 	}()
 
 	for {
@@ -451,15 +455,18 @@ func (p *Parser) header(mh *Part) (err error) {
 					return err
 				}
 				mh.ContentType = &contentType
-				if val, ok := contentType.parameters["boundary"]; ok {
-					mh.ContentBoundary = val
+				for i := range contentType.parameters {
+					if contentType.parameters[i].name == "boundary" {
+						mh.ContentBoundary = contentType.parameters[i].value
+					}
+					if contentType.parameters[i].name == "charset" {
+						mh.Charset = contentType.parameters[i].value
+					}
+					if contentType.parameters[i].name == "name" {
+						mh.ContentName = contentType.parameters[i].value
+					}
 				}
-				if val, ok := contentType.parameters["charset"]; ok {
-					mh.Charset = val
-				}
-				if val, ok := contentType.parameters["name"]; ok {
-					mh.ContentName = val
-				}
+
 				mh.Headers.Add("Content-Type", contentType.String())
 				state = 0
 			} else {
@@ -562,10 +569,7 @@ func (p *Parser) contentType() (result contentType, err error) {
 				return result, err
 			} else {
 				// add the new parameter
-				if result.parameters == nil {
-					result.parameters = make(map[string]string, 1)
-				}
-				result.parameters[key] = val
+				result.parameters = append(result.parameters, parameter{key, val})
 			}
 		} else {
 			break
