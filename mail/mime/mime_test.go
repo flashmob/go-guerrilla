@@ -224,6 +224,22 @@ func TestSkip(t *testing.T) {
 
 }
 
+func TestHeaderNormalization(t *testing.T) {
+	p = NewMimeParser()
+	p.inject([]byte("ConTent-type"))
+	p.accept.upper = true
+	for {
+		p.acceptHeaderName()
+		p.next()
+		if p.ch == 0 {
+			break
+		}
+	}
+	if p.accept.String() != "Content-Type" {
+		t.Error("header name not normalized, expecting Content-Type")
+	}
+}
+
 func TestMimeContentQuotedParams(t *testing.T) {
 	p = NewMimeParser()
 	// quoted
@@ -493,18 +509,26 @@ func TestNestedEmail(t *testing.T) {
 	if err := p.mime(nil, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
+	output := email
 	for part := range p.Parts {
-		email = replaceAtIndex(email, '#', p.Parts[part].StartingPos)
-		email = replaceAtIndex(email, '&', p.Parts[part].StartingPosBody)
-		email = replaceAtIndex(email, '*', p.Parts[part].EndingPosBody)
-		fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+		output = replaceAtIndex(output, '#', p.Parts[part].StartingPos)
+		output = replaceAtIndex(output, '&', p.Parts[part].StartingPosBody)
+		output = replaceAtIndex(output, '*', p.Parts[part].EndingPosBody)
+		fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 	}
-	fmt.Print(email)
-	//fmt.Println(strings.Index(email, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
+	fmt.Print(output)
+	//fmt.Println(strings.Index(output, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 	i := 1
-	fmt.Println("[" + email[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
+	fmt.Println("[" + output[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
 	//i := 2
-	//fmt.Println("**********{" + email[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
+	//fmt.Println("**********{" + output[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
+
+	p.Close()
+	p.inject([]byte(email))
+	if err := p.mime(nil, ""); err != nil && err != io.EOF {
+		t.Error(err)
+	}
+	p.Close()
 }
 
 func replaceAtIndex(str string, replacement rune, index uint) string {
@@ -524,7 +548,7 @@ func TestNonMineEmail(t *testing.T) {
 		t.Error(err)
 	} else {
 		for part := range p.Parts {
-			fmt.Println(p.Parts[part].Part + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+			fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 		}
 	}
 	err := p.Close()

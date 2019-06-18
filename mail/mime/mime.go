@@ -10,41 +10,6 @@ import (
 	"sync"
 )
 
-// - TODO support RFC 2047 provides support for non-US-ASCII character sets in RFC 822
-//   message header comments
-// - not
-//
-
-type mimepart struct {
-	/*
-			[starting-pos] => 0
-		    [starting-pos-body] => 270
-		    [ending-pos] => 2651
-		    [ending-pos-body] => 2651
-		    [line-count] => 72
-		    [body-line-count] => 65
-		    [charset] => us-ascii
-		    [transfer-encoding] => 8bit
-		    [content-boundary] => D7F------------D7FD5A0B8AB9C65CCDBFA872
-		    [content-type] => multipart/mixed
-		    [content-base] => /
-
-			[starting-pos] => 2023
-		    [starting-pos-body] => 2172
-		    [ending-pos] => 2561
-		    [ending-pos-body] => 2561
-		    [line-count] => 9
-		    [body-line-count] => 5
-		    [charset] => us-ascii
-		    [transfer-encoding] => base64
-		    [content-name] => map_of_Argentina.gif
-		    [content-type] => image/gif
-		    [disposition-fi1ename] => map_of_Argentina.gif
-		    [content-disposition] => in1ine
-		    [content-base] => /
-	*/
-}
-
 const (
 	maxBoundaryLen       = 70 + 10
 	doubleDash           = "--"
@@ -53,6 +18,11 @@ const (
 )
 
 var NotMime = errors.New("not Mime")
+
+type captureBuffer struct {
+	bytes.Buffer
+	upper bool
+}
 
 type Parser struct {
 
@@ -63,15 +33,14 @@ type Parser struct {
 	peekOffset            int
 	ch                    byte
 	gotNewSlice, consumed chan bool
-	accept                bytes.Buffer
+	accept                captureBuffer
 	boundaryMatched       int
 	count                 uint
 	result                chan parserMsg
 	mux                   sync.Mutex
-	// mime variables
 
 	// Parts is the mime parts tree. The parser builds the parts as it consumes the input
-	// In order to represent the tree in an array, we use Parts.part to store the name of
+	// In order to represent the tree in an array, we use Parts.Node to store the name of
 	// each node. The name of the node is the *path* of the node. The root node is always
 	// "1". The child would be "1.1", the next sibling would be "1.2", while the child of
 	// "1.2" would be "1.2.1"
@@ -83,7 +52,7 @@ type Parser struct {
 type Part struct {
 	Headers textproto.MIMEHeader
 
-	Part string
+	Node string // stores the name for the node that is a part of the resulting mime tree
 
 	StartingPos     uint // including header (after boundary, 0 at the top)
 	StartingPosBody uint // after header \n\n
@@ -162,7 +131,7 @@ func newPart() *Part {
 }
 
 func (p *Parser) addPart(mh *Part, id string) {
-	mh.Part = id
+	mh.Node = id
 	p.Parts = append(p.Parts, mh)
 }
 
@@ -356,7 +325,6 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 				}
 				p.boundaryMatched = 0
 			}
-			//_ = subject
 		}
 	}
 }
@@ -392,6 +360,19 @@ func (p *Parser) transportPadding() (err error) {
 	}
 }
 
+// acceptHeaderName build the header name in the buffer while ensuring that
+// that the case is normalized. Ie. Content-type is written as Content-Type
+func (p *Parser) acceptHeaderName() {
+	if p.accept.upper && p.ch >= 'a' && p.ch <= 'z' {
+		p.ch -= 32
+	}
+	if !p.accept.upper && p.ch >= 'A' && p.ch <= 'Z' {
+		p.ch += 32
+	}
+	p.accept.upper = p.ch == '-'
+	_ = p.accept.WriteByte(p.ch)
+}
+
 func (p *Parser) header(mh *Part) (err error) {
 	var (
 		state      int
@@ -412,10 +393,10 @@ func (p *Parser) header(mh *Part) (err error) {
 	for {
 
 		switch state {
-		case 0:
+		case 0: // header name
 			if (p.ch >= 33 && p.ch <= 126) && p.ch != ':' {
 				// capture
-				p.accept.WriteByte(p.ch)
+				p.acceptHeaderName()
 			} else if p.ch == ':' {
 				state = 1
 			} else if p.ch == ' ' && p.peek() == ':' { // tolerate a SP before the :
@@ -436,6 +417,7 @@ func (p *Parser) header(mh *Part) (err error) {
 					err = errors.New("header field too short")
 					return
 				}
+				p.accept.upper = true
 				name = p.accept.String()
 				p.accept.Reset()
 				if c := p.peek(); c == ' ' {
@@ -446,7 +428,7 @@ func (p *Parser) header(mh *Part) (err error) {
 				continue
 			}
 
-		case 1:
+		case 1: // header value
 
 			if name == "Content-Type" {
 				var err error
@@ -471,7 +453,7 @@ func (p *Parser) header(mh *Part) (err error) {
 				state = 0
 			} else {
 				if (p.ch >= 33 && p.ch <= 126) || p.isWSP(p.ch) {
-					p.accept.WriteByte(p.ch)
+					_ = p.accept.WriteByte(p.ch)
 				} else if p.ch == '\n' {
 					c := p.peek()
 
@@ -488,7 +470,7 @@ func (p *Parser) header(mh *Part) (err error) {
 					return
 				}
 			}
-		case 2:
+		case 2: // header error, discard line
 			errorCount++
 			// error recovery for header lines with parse errors -
 			// ignore the line, discard anything that was scanned, scan until the end-of-line
@@ -589,7 +571,7 @@ func (p *Parser) mimeType() (str string, err error) {
 	}()
 	if p.ch < 128 && p.ch > 32 && !isTokenSpecial[p.ch] {
 		for {
-			p.accept.WriteByte(p.ch)
+			_ = p.accept.WriteByte(p.ch)
 			p.next()
 			if !(p.ch < 128 && p.ch > 32 && !isTokenSpecial[p.ch]) {
 				return
@@ -642,7 +624,7 @@ func (p *Parser) token() (str string, err error) {
 	var once bool // must match at least 1 good char
 	for {
 		if p.ch > 32 && p.ch < 128 && !isTokenSpecial[p.ch] {
-			p.accept.WriteByte(p.ch)
+			_ = p.accept.WriteByte(p.ch)
 			once = true
 		} else if !once {
 			err = errors.New("invalid token")
@@ -688,7 +670,7 @@ func (p *Parser) quotedString() (str string, err error) {
 				break
 			}
 			if (p.ch < 127 && p.ch > 32) || p.isWSP(p.ch) {
-				p.accept.WriteByte(p.ch)
+				_ = p.accept.WriteByte(p.ch)
 			} else {
 				err = errors.New("unexpected token")
 				return
@@ -696,7 +678,7 @@ func (p *Parser) quotedString() (str string, err error) {
 		case 1:
 			// escaped (<any US-ASCII character (octets 0 - 127)>)
 			if p.ch != 0 && p.ch <= 127 {
-				p.accept.WriteByte(p.ch)
+				_ = p.accept.WriteByte(p.ch)
 				state = 0
 			} else {
 				err = errors.New("unexpected token")
@@ -870,6 +852,10 @@ func (p *Parser) reset() {
 	p.msgPos = 0
 	p.count = 0
 	p.ch = 0
+}
+
+func (p *Parser) Open() {
+	p.Parts = make([]*Part, 0)
 }
 
 // Close tells the MIME Parser there's no more data & waits for it to return a result
