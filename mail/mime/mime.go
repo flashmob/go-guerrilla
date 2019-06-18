@@ -824,8 +824,10 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 					break
 				}
 			}
-			part.EndingPosBody = p.msgPos
-			err = NotMime
+			if len(p.Parts) == 0 {
+				part.EndingPosBody = p.msgPos
+				err = NotMime
+			}
 			return
 		}
 		// after we return from the lower branches (if there were any)
