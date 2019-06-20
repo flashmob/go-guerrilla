@@ -43,6 +43,8 @@ type SQLProcessorConfig struct {
 	Table       string `json:"mail_table"`
 	Driver      string `json:"sql_driver"`
 	DSN         string `json:"sql_dsn"`
+	SQLInsert   string `json:"sql_insert,omitempty"`
+	SQLValues   string `json:"sql_values,omitempty"`
 	PrimaryHost string `json:"primary_mail_host"`
 }
 
@@ -68,18 +70,33 @@ func (s *SQLProcessor) connect() (*sql.DB, error) {
 
 // prepares the sql query with the number of rows that can be batched with it
 func (s *SQLProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
+	var sqlstr, values string
 	if rows == 0 {
 		panic("rows argument cannot be 0")
 	}
 	if s.cache[rows-1] != nil {
 		return s.cache[rows-1]
 	}
-	sqlstr := "INSERT INTO " + s.config.Table + " "
-	sqlstr += "(`date`, `to`, `from`, `subject`, `body`,  `mail`, `spam_score`, "
-	sqlstr += "`hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, "
-	sqlstr += "`return_path`, `is_tls`, `message_id`, `reply_to`, `sender`)"
-	sqlstr += " VALUES "
-	values := "(NOW(), ?, ?, ?, ? , ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)"
+	if s.config.SQLInsert != "" {
+		sqlstr = s.config.SQLInsert
+		if !strings.HasSuffix(sqlstr, " ") {
+			// Add a trailing space so we can concatinate our values string
+			// without causing a syntax error
+			sqlstr = sqlstr + " "
+		}
+	} else {
+		// Default to MySQL SQL
+		sqlstr = "INSERT INTO " + s.config.Table + " "
+		sqlstr += "(`date`, `to`, `from`, `subject`, `body`,  `mail`, `spam_score`, "
+		sqlstr += "`hash`, `content_type`, `recipient`, `has_attach`, `ip_addr`, "
+		sqlstr += "`return_path`, `is_tls`, `message_id`, `reply_to`, `sender`)"
+		sqlstr += " VALUES "
+	}
+	if s.config.SQLValues != "" {
+		values = s.config.SQLValues
+	} else {
+		values = "(NOW(), ?, ?, ?, ? , ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)"
+	}
 	// add more rows
 	comma := ""
 	for i := 0; i < rows; i++ {
