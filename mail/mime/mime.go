@@ -1,5 +1,16 @@
 package mime
 
+/*
+
+Mime is a simple MIME scanner for email-message byte streams.
+It builds a data-structure that represents a tree of all the mime parts,
+recording their headers, starting and ending positions, while processinging
+the message efficiently, slice by slice. It avoids the use of regular expressions,
+doesn't back-track or multi-scan.
+
+This package used the PECL Mailparse library as a refrence/benchmark for testing
+
+*/
 import (
 	"bytes"
 	"errors"
@@ -438,17 +449,15 @@ func (p *Parser) header(mh *Part) (err error) {
 				}
 				mh.ContentType = &contentType
 				for i := range contentType.parameters {
-					if contentType.parameters[i].name == "boundary" {
+					switch {
+					case contentType.parameters[i].name == "boundary":
 						mh.ContentBoundary = contentType.parameters[i].value
-					}
-					if contentType.parameters[i].name == "charset" {
+					case contentType.parameters[i].name == "charset":
 						mh.Charset = contentType.parameters[i].value
-					}
-					if contentType.parameters[i].name == "name" {
+					case contentType.parameters[i].name == "name":
 						mh.ContentName = contentType.parameters[i].value
 					}
 				}
-
 				mh.Headers.Add("Content-Type", contentType.String())
 				state = 0
 			} else {
@@ -571,6 +580,9 @@ func (p *Parser) mimeType() (str string, err error) {
 	}()
 	if p.ch < 128 && p.ch > 32 && !isTokenSpecial[p.ch] {
 		for {
+			if p.ch >= 'A' && p.ch <= 'Z' {
+				p.ch += 32 // lowercase
+			}
 			_ = p.accept.WriteByte(p.ch)
 			p.next()
 			if !(p.ch < 128 && p.ch > 32 && !isTokenSpecial[p.ch]) {
@@ -612,7 +624,7 @@ func (p *Parser) comment() (err error) {
 
 }
 
-func (p *Parser) token() (str string, err error) {
+func (p *Parser) token(lower bool) (str string, err error) {
 	defer func() {
 		if err == nil {
 			str = p.accept.String()
@@ -624,6 +636,9 @@ func (p *Parser) token() (str string, err error) {
 	var once bool // must match at least 1 good char
 	for {
 		if p.ch > 32 && p.ch < 128 && !isTokenSpecial[p.ch] {
+			if lower && p.ch >= 'A' && p.ch <= 'Z' {
+				p.ch += 32 // lowercase it
+			}
 			_ = p.accept.WriteByte(p.ch)
 			once = true
 		} else if !once {
@@ -700,7 +715,7 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 		p.accept.Reset()
 	}()
 
-	if attribute, err = p.token(); err != nil {
+	if attribute, err = p.token(true); err != nil {
 		return "", "", err
 	}
 	if p.ch != '=' {
@@ -716,7 +731,7 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 		}
 		return
 	} else {
-		if value, err = p.token(); err != nil {
+		if value, err = p.token(false); err != nil {
 			return
 		}
 		return
@@ -739,6 +754,12 @@ func (p *Parser) isBranch(part *Part, parent *Part) bool {
 		if parent.ContentBoundary == part.ContentBoundary {
 			return false
 		}
+	}
+	if ct.superType == "message" && ct.subType == "delivery-status" {
+		return false
+	}
+	if ct.superType == "message" && ct.subType == "disposition-notification" {
+		return false
 	}
 
 	// branch on these superTypes
@@ -777,16 +798,23 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 	count := 1
 	for {
 		part := newPart()
+		partID := strconv.Itoa(count)
+		if depth != "" {
+			partID = depth + "." + strconv.Itoa(count)
+		}
+		p.addPart(part, partID)
+		// record the start of the part
 		part.StartingPos = p.msgPos
-
 		// parse the headers
 		if p.ch >= 33 && p.ch <= 126 {
 			err = p.header(part)
 			if err != nil {
 				return err
 			}
-		} else {
-			return errors.New("parse error")
+		} else if len(p.Parts) == 0 {
+			// return an error if the first part is not a valid header
+			// (subsequent parts could have no headers)
+			return errors.New("parse error, no header")
 		}
 		if p.ch == '\n' && p.peek() == '\n' {
 			p.next()
@@ -798,13 +826,8 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 			part.ContentBoundary = parent.ContentBoundary
 		}
 
-		// record the part
+		// record the start of the message body
 		part.StartingPosBody = p.msgPos
-		partID := strconv.Itoa(count)
-		if depth != "" {
-			partID = depth + "." + strconv.Itoa(count)
-		}
-		p.addPart(part, partID)
 
 		// build the mime tree recursively
 		if p.isBranch(part, parent) {
@@ -817,16 +840,16 @@ func (p *Parser) mime(parent *Part, depth string) (err error) {
 
 		// if we didn't branch & we're still at the root (not a mime email)
 		if parent == nil {
-			for {
+			for p.ch != 0 {
 				// keep scanning until the end
 				p.next()
-				if p.ch == 0 {
-					break
-				}
+
 			}
-			if len(p.Parts) == 0 {
+			if len(p.Parts) == 1 {
 				part.EndingPosBody = p.msgPos
 				err = NotMime
+			} else {
+				err = io.EOF
 			}
 			return
 		}

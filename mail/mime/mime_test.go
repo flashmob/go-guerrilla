@@ -492,14 +492,12 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
-	email = email
+	email = email2
 	//email = strings.Replace(string(email), "\n", "\r\n", -1)
 	p.inject([]byte(email))
 
 	go func() {
 		time.Sleep(time.Second * 15)
-		//panic("here")
-		//		*moo = *moo + 6
 
 		// for debugging deadlocks
 		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
