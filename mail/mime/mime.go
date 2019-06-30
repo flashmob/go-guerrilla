@@ -196,7 +196,6 @@ func (p *Parser) peek() byte {
 		// reached the end? Wait for more bytes to consume
 		if p.pos+p.peekOffset >= len(p.buf) {
 			if !p.more() {
-				p.ch = 0
 				return 0
 			}
 		}
@@ -371,7 +370,7 @@ func (p *Parser) transportPadding() (err error) {
 			p.next()
 			p.next()
 		} else {
-			if p.ch == 0 {
+			if c == 0 {
 				err = io.EOF
 			}
 			return
@@ -826,7 +825,11 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 		p.next()
 	}
 	part.StartingPosBody = p.msgPos
+	skip := false
 	if part.ContentBoundary != "" {
+		if cb == part.ContentBoundary {
+			skip = true
+		}
 		cb = part.ContentBoundary
 	}
 
@@ -839,33 +842,39 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 	}
 
 	for {
-		count++
 		if cb != "" {
-			if end, bErr := p.boundary(cb); bErr != nil {
+			if end, bErr := p.boundary(cb); bErr != nil || end == true {
 				part.EndingPosBody = p.lastBoundaryPos
-				return bErr
-			} else if end {
-				bErr = boundaryEnd{cb}
-				part.EndingPosBody = p.lastBoundaryPos
+				if end {
+					bErr = boundaryEnd{cb}
+
+					return bErr
+				}
 				return bErr
 			}
-			part.EndingPosBody = p.lastBoundaryPos
+			part.EndingPosBody = p.msgPos
 		}
 
 		ct := part.ContentType
-		if ct != nil && (ct.superType == "multipart" || ct.superType == "message") {
+		if !skip && ct != nil && (ct.superType == "multipart" || ct.superType == "message") {
 			// start a new branch (count is 1)
-			err = p.mime(partID, 1, cb)
+			err = p.mime(partID, count, cb)
 			part.EndingPosBody = p.msgPos // good?
 			if err != nil {
 				if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
 					// we are back to the upper level, stop propagating the content-boundary 'end' error
+					count++
 					continue
 				}
+				if depth == "" {
+					part.EndingPosBody = p.lastBoundaryPos
+				}
+
 				return
 			}
 		} else {
-			// new sibling for this node (count has incremented)
+			// new sibling for this node
+			count++
 			err = p.mime(depth, count, cb)
 			return
 		}
