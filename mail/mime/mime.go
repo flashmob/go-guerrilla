@@ -28,6 +28,14 @@ const (
 	headerErrorThreshold = 4
 )
 
+type boundaryEnd struct {
+	cb string
+}
+
+func (e boundaryEnd) Error() string {
+	return e.cb
+}
+
 var NotMime = errors.New("not Mime")
 
 type captureBuffer struct {
@@ -783,7 +791,7 @@ func (p *Parser) multi(part *Part, depth string) (err error) {
 			}
 		}
 		// call back to mime() to start working on a new branch
-		err = p.mime(part, depth)
+		err = p.mime2(part, depth)
 		if err != nil {
 			return err
 		}
@@ -791,9 +799,82 @@ func (p *Parser) multi(part *Part, depth string) (err error) {
 	return
 }
 
+func (p *Parser) mime(depth string, count int, cb string) (err error) {
+
+	if count == 0 {
+		count = 1
+	}
+	part := newPart()
+
+	partID := strconv.Itoa(count)
+	if depth != "" {
+		partID = depth + "." + strconv.Itoa(count)
+	}
+	p.addPart(part, partID)
+	// record the start of the part
+	part.StartingPos = p.msgPos
+
+	// read the header
+	if p.ch >= 33 && p.ch <= 126 {
+		err = p.header(part)
+		if err != nil {
+			return err
+		}
+	}
+	if p.ch == '\n' && p.peek() == '\n' {
+		p.next()
+		p.next()
+	}
+	part.StartingPosBody = p.msgPos
+	if part.ContentBoundary != "" {
+		cb = part.ContentBoundary
+	}
+
+	if part.ContentType != nil && part.ContentType.superType == "message" {
+		err = p.mime(partID, 1, cb)
+		part.EndingPosBody = p.msgPos
+		if err != nil {
+			return
+		}
+	}
+
+	for {
+		count++
+		if cb != "" {
+			if end, bErr := p.boundary(cb); bErr != nil {
+				part.EndingPosBody = p.lastBoundaryPos
+				return bErr
+			} else if end {
+				bErr = boundaryEnd{cb}
+				part.EndingPosBody = p.lastBoundaryPos
+				return bErr
+			}
+			part.EndingPosBody = p.lastBoundaryPos
+		}
+
+		ct := part.ContentType
+		if ct != nil && (ct.superType == "multipart" || ct.superType == "message") {
+			// start a new branch (count is 1)
+			err = p.mime(partID, 1, cb)
+			part.EndingPosBody = p.msgPos // good?
+			if err != nil {
+				if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
+					// we are back to the upper level, stop propagating the content-boundary 'end' error
+					continue
+				}
+				return
+			}
+		} else {
+			// new sibling for this node (count has incremented)
+			err = p.mime(depth, count, cb)
+			return
+		}
+	}
+}
+
 // mime scans the mime content and builds the mime-part tree in
 // p.Parts on-the-fly, as more bytes get fed in.
-func (p *Parser) mime(parent *Part, depth string) (err error) {
+func (p *Parser) mime2(parent *Part, depth string) (err error) {
 
 	count := 1
 	for {
@@ -925,7 +1006,7 @@ func (p *Parser) Parse(buf []byte) error {
 		// initial step - start the mime parser
 		go func() {
 			p.next()
-			err := p.mime(nil, "")
+			err := p.mime("", 1, "")
 			fmt.Println("mine() ret", err)
 			p.result <- parserMsg{err}
 		}()

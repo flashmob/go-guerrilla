@@ -490,6 +490,18 @@ TmV4dFBhcnRfMDAwX0FFNkJfNzI1RTA5QUYuODhCN0Y5MzQtLQ0K
 --XXXXboundary text--
 `
 
+/*
+1  0  121  1763
+1.1  207  302  628
+1.1.1  343  428  445
+1.1.2  485  569  586
+1.2  668  730  1763
+1.2.1  730  959  1763
+1.2.1.1  1045  1140  1501
+1.2.1.1.1  1181  1281  1303
+1.2.1.1.2  1343  1442  1459
+1.2.1.2  1541  1703  1721
+*/
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
 	email = email2
@@ -504,29 +516,30 @@ func TestNestedEmail(t *testing.T) {
 		//os.Exit(1)
 	}()
 
-	if err := p.mime(nil, ""); err != nil && err != io.EOF {
+	if err := p.mime("", 1, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
 	output := email
 	for part := range p.Parts {
-		output = replaceAtIndex(output, '#', p.Parts[part].StartingPos)
-		output = replaceAtIndex(output, '&', p.Parts[part].StartingPosBody)
-		output = replaceAtIndex(output, '*', p.Parts[part].EndingPosBody)
+		//output = replaceAtIndex(output, '#', p.Parts[part].StartingPos)
+		//output = replaceAtIndex(output, '&', p.Parts[part].StartingPosBody)
+		//output = replaceAtIndex(output, '*', p.Parts[part].EndingPosBody)
 		fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 	}
 	fmt.Print(output)
 	//fmt.Println(strings.Index(output, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 	i := 1
-	fmt.Println("[" + output[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
+	_ = i
+	//fmt.Println("[" + output[p.Parts[i].StartingPosBody:p.Parts[i].EndingPosBody] + "]")
 	//i := 2
 	//fmt.Println("**********{" + output[p.parts[i].startingPosBody:p.parts[i].endingPosBody] + "}**********")
 
-	p.Close()
-	p.inject([]byte(email))
-	if err := p.mime(nil, ""); err != nil && err != io.EOF {
-		t.Error(err)
-	}
-	p.Close()
+	//p.Close()
+	//p.inject([]byte(email))
+	//if err := p.mime("", 1, ""); err != nil && err != io.EOF {
+	//	t.Error(err)
+	//}
+	//p.Close()
 }
 
 func replaceAtIndex(str string, replacement rune, index uint) string {
@@ -542,7 +555,7 @@ This is not a an MIME email
 func TestNonMineEmail(t *testing.T) {
 	p = NewMimeParser()
 	p.inject([]byte(email4))
-	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
+	if err := p.mime("", 1, ""); err != nil && err != NotMime && err != io.EOF {
 		t.Error(err)
 	} else {
 		for part := range p.Parts {
@@ -556,7 +569,7 @@ func TestNonMineEmail(t *testing.T) {
 
 	// what if we pass an empty string?
 	p.inject([]byte{' '})
-	if err := p.mime(nil, ""); err == nil || err == NotMime || err == io.EOF {
+	if err := p.mime("", 1, ""); err == nil || err == NotMime || err == io.EOF {
 		t.Error("unexpected error", err)
 	}
 
