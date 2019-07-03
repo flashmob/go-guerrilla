@@ -800,6 +800,9 @@ func (p *Parser) multi(part *Part, depth string) (err error) {
 
 func (p *Parser) mime(depth string, count int, cb string) (err error) {
 
+	defer func() {
+		fmt.Println("i quit")
+	}()
 	if count == 0 {
 		count = 1
 	}
@@ -819,6 +822,8 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 		if err != nil {
 			return err
 		}
+	} else if depth == "" {
+		return errors.New("parse error, no header")
 	}
 	if p.ch == '\n' && p.peek() == '\n' {
 		p.next()
@@ -828,12 +833,15 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 	skip := false
 	if part.ContentBoundary != "" {
 		if cb == part.ContentBoundary {
+			// tolerate some messages that have identical multipart content-boundary
 			skip = true
 		}
 		cb = part.ContentBoundary
 	}
+	ct := part.ContentType
+	if part.ContentType != nil && ct.superType == "message" &&
+		ct.subType == "rfc822" {
 
-	if part.ContentType != nil && part.ContentType.superType == "message" {
 		err = p.mime(partID, 1, cb)
 		part.EndingPosBody = p.msgPos
 		if err != nil {
@@ -853,12 +861,21 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 				return bErr
 			}
 			part.EndingPosBody = p.msgPos
+		} else {
+			for p.ch != 0 {
+				// keep scanning until the end
+				p.next()
+			}
+			part.EndingPosBody = p.msgPos
+			err = NotMime
+			return
 		}
 
-		ct := part.ContentType
-		if !skip && ct != nil && (ct.superType == "multipart" || ct.superType == "message") {
+		if !skip && ct != nil &&
+			(ct.superType == "multipart" || (ct.superType == "message" && ct.subType == "rfc822")) {
 			// start a new branch (count is 1)
 			err = p.mime(partID, count, cb)
+
 			part.EndingPosBody = p.msgPos // good?
 			if err != nil {
 				if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
@@ -872,10 +889,19 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 
 				return
 			}
+
 		} else {
 			// new sibling for this node
 			count++
 			err = p.mime(depth, count, cb)
+
+			if err == nil {
+				return
+			}
+			if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
+				// we are back to the upper level, stop propagating the content-boundary 'end' error
+				continue
+			}
 			return
 		}
 	}
@@ -982,12 +1008,27 @@ func (p *Parser) Close() error {
 		p.mux.Unlock()
 	}()
 	if p.count == 0 {
-		// already closed
 		return nil
 	}
-	p.gotNewSlice <- false
-	r := <-p.result
-	return r.err
+	for {
+		select {
+		// we need to repeat sending a false signal because peek() / next() could be
+		// called a few times before a result is returned
+		case p.gotNewSlice <- false:
+			select {
+
+			case <-p.consumed: // more() was called, there's nothing to consume
+
+			case r := <-p.result:
+				return r.err
+			}
+		case r := <-p.result:
+
+			return r.err
+		}
+
+	}
+
 }
 
 // Parse takes a byte stream, and feeds it to the MIME Parser, then
@@ -1002,7 +1043,7 @@ func (p *Parser) Close() error {
 // error occurred.
 func (p *Parser) Parse(buf []byte) error {
 	defer func() {
-		p.count++
+
 		p.mux.Unlock()
 	}()
 	p.mux.Lock()
@@ -1016,13 +1057,19 @@ func (p *Parser) Parse(buf []byte) error {
 		go func() {
 			p.next()
 			err := p.mime("", 1, "")
+			//err := p.mime2(nil, "")
+			if _, ok := err.(boundaryEnd); ok {
+				err = nil
+			}
 			fmt.Println("mine() ret", err)
+
 			p.result <- parserMsg{err}
 		}()
 	} else {
 		// tell the parser to resume consuming
 		p.gotNewSlice <- true
 	}
+	p.count++
 
 	select {
 	case <-p.consumed: // wait for prev buf to be consumed
