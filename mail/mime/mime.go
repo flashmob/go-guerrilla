@@ -798,7 +798,93 @@ func (p *Parser) multi(part *Part, depth string) (err error) {
 	return
 }
 
-func (p *Parser) mime(depth string, count int, cb string) (err error) {
+func (p *Parser) mime(depth string, count int, part *Part) (err error) {
+
+	if count == 0 {
+		count = 1
+	}
+	count = 1
+	first := part == nil
+	if first {
+		part = newPart()
+		p.addPart(part, "1")
+	}
+
+	// read the header
+	if p.ch >= 33 && p.ch <= 126 {
+		err = p.header(part)
+		if err != nil {
+			return err
+		}
+	} else if first {
+		return errors.New("parse error, no header")
+	}
+	if p.ch == '\n' && p.peek() == '\n' {
+		p.next()
+		p.next()
+	}
+	ct := part.ContentType
+	if ct != nil && ct.superType == "message" && ct.subType == "rfc822" {
+
+		var subPart *Part
+		subPart = newPart()
+		subPartId := part.Node + "." + strconv.Itoa(count)
+		subPart.StartingPos = p.msgPos
+		count++
+		p.addPart(subPart, subPartId)
+		err = p.mime(subPartId, count, subPart)
+		return
+	}
+	if ct != nil && ct.superType == "multipart" && part.ContentBoundary != "" {
+		var subPart *Part
+		subPart = newPart()
+		for {
+			subPartId := part.Node + "." + strconv.Itoa(count)
+			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
+				err = bErr
+				if subPart.StartingPos == 0 {
+					subPart.StartingPos = p.msgPos
+				} else {
+					//fmt.Println("["+string(p.buf[subPart.StartingPos:p.msgPos])+"]")
+					subPart, count = p.split(subPart, count)
+				}
+				return
+			} else if end {
+				return
+			} else {
+				if subPart.StartingPos == 0 {
+					subPart.StartingPos = p.msgPos
+					count++
+					p.addPart(subPart, subPartId)
+					subPartId = part.Node + "." + strconv.Itoa(count)
+				} else {
+					//fmt.Println("["+string(p.buf[subPart.StartingPos:p.msgPos])+"]")
+					subPart, count = p.split(subPart, count)
+					//subPart.Node = subPartId
+					p.addPart(subPart, subPartId)
+					err = p.mime(subPartId, count, subPart)
+					if err != nil {
+						return
+					}
+				}
+			}
+		}
+	}
+	part.EndingPosBody = p.lastBoundaryPos
+	return
+
+}
+
+func (p *Parser) split(subPart *Part, count int) (*Part, int) {
+	subPart.EndingPos = p.msgPos
+	subPart = nil
+	count++
+	subPart = newPart()
+	subPart.StartingPos = p.msgPos
+	return subPart, count
+}
+
+func (p *Parser) mime_new(depth string, count int, cb string) (err error) {
 
 	defer func() {
 		fmt.Println("i quit")
@@ -842,7 +928,7 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 	if part.ContentType != nil && ct.superType == "message" &&
 		ct.subType == "rfc822" {
 
-		err = p.mime(partID, 1, cb)
+		err = p.mime_new(partID, 1, cb)
 		part.EndingPosBody = p.msgPos
 		if err != nil {
 			return
@@ -874,7 +960,7 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 		if !skip && ct != nil &&
 			(ct.superType == "multipart" || (ct.superType == "message" && ct.subType == "rfc822")) {
 			// start a new branch (count is 1)
-			err = p.mime(partID, count, cb)
+			err = p.mime_new(partID, count, cb)
 
 			part.EndingPosBody = p.msgPos // good?
 			if err != nil {
@@ -893,7 +979,7 @@ func (p *Parser) mime(depth string, count int, cb string) (err error) {
 		} else {
 			// new sibling for this node
 			count++
-			err = p.mime(depth, count, cb)
+			err = p.mime_new(depth, count, cb)
 
 			if err == nil {
 				return
@@ -1056,7 +1142,7 @@ func (p *Parser) Parse(buf []byte) error {
 		// initial step - start the mime parser
 		go func() {
 			p.next()
-			err := p.mime("", 1, "")
+			err := p.mime("", 1, nil)
 			//err := p.mime2(nil, "")
 			if _, ok := err.(boundaryEnd); ok {
 				err = nil
