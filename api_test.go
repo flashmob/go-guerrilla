@@ -1058,7 +1058,7 @@ func TestStreamMimeProcessor(t *testing.T) {
 	}()
 
 	// change \n to \r\n
-	mime = strings.Replace(mime, "\n", "\r\n", -1)
+	mime = strings.Replace(mime2, "\n", "\r\n", -1)
 	// lets have a talk with the server
 	if err := talkToServer("127.0.0.1:2525", mime); err != nil {
 		t.Error(err)

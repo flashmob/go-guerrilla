@@ -524,7 +524,7 @@ email 2
 */
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
-	email = email
+	email = email2
 	//email = strings.Replace(string(email), "\n", "\r\n", -1)
 	p.inject([]byte(email))
 
@@ -536,7 +536,7 @@ func TestNestedEmail(t *testing.T) {
 		//os.Exit(1)
 	}()
 
-	if err := p.mime("", 1, nil); err != nil && err != io.EOF {
+	if err := p.mime(nil, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
 	output := email
@@ -575,7 +575,7 @@ This is not a an MIME email
 func TestNonMineEmail(t *testing.T) {
 	p = NewMimeParser()
 	p.inject([]byte(email4))
-	if err := p.mime("", 1, nil); err != nil && err != NotMime && err != io.EOF {
+	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
 		t.Error(err)
 	} else {
 		for part := range p.Parts {
@@ -589,7 +589,7 @@ func TestNonMineEmail(t *testing.T) {
 
 	// what if we pass an empty string?
 	p.inject([]byte{' '})
-	if err := p.mime("", 1, nil); err == nil || err == NotMime || err == io.EOF {
+	if err := p.mime(nil, ""); err == nil || err == NotMime || err == io.EOF {
 		t.Error("unexpected error", err)
 	}
 

@@ -4,11 +4,9 @@ package mime
 
 Mime is a simple MIME scanner for email-message byte streams.
 It builds a data-structure that represents a tree of all the mime parts,
-recording their headers, starting and ending positions, while processinging
+recording their headers, starting and ending positions, while processioning
 the message efficiently, slice by slice. It avoids the use of regular expressions,
 doesn't back-track or multi-scan.
-
-This package used the PECL Mailparse library as a refrence/benchmark for testing
 
 */
 import (
@@ -745,166 +743,21 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 	}
 }
 
-// isBranch determines if we should branch this part, when building
-// the mime tree
-func (p *Parser) isBranch(part *Part, parent *Part) bool {
-	ct := part.ContentType
-	if ct == nil {
-		return false
-	}
-	if part.ContentBoundary == "" {
-		return false
-	}
+// mime scans the mime content and builds the mime-part tree in
+// p.Parts on-the-fly, as more bytes get fed in.
+func (p *Parser) mime(part *Part, cb string) (err error) {
 
-	// tolerate some incorrect messages that re-use the identical content-boundary
-	if parent != nil && ct.superType != "message" {
-		if parent.ContentBoundary == part.ContentBoundary {
-			return false
-		}
-	}
-	if ct.superType == "message" && ct.subType == "delivery-status" {
-		return false
-	}
-	if ct.superType == "message" && ct.subType == "disposition-notification" {
-		return false
-	}
-
-	// branch on these superTypes
-	if ct.superType == "multipart" ||
-		ct.superType == "message" {
-		return true
-	}
-	return false
-}
-
-// multi finds the boundary and call back to mime() itself
-func (p *Parser) multi(part *Part, depth string) (err error) {
-	if part.ContentType != nil {
-		// scan until the start of the boundary
-		if part.ContentType.superType == "multipart" {
-			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
-				return bErr
-			} else if end {
-				part.EndingPosBody = p.lastBoundaryPos
-				return
-			}
-		}
-		// call back to mime() to start working on a new branch
-		err = p.mime2(part, depth)
-		if err != nil {
-			return err
-		}
-	}
-	return
-}
-
-func (p *Parser) mime(depth string, count int, part *Part) (err error) {
-
-	if count == 0 {
-		count = 1
-	}
-	count = 1
-	first := part == nil
-	if first {
+	count := 1
+	root := part == nil
+	if root {
 		part = newPart()
 		p.addPart(part, "1")
-	}
-
-	// read the header
-	if p.ch >= 33 && p.ch <= 126 {
-		err = p.header(part)
-		if err != nil {
-			return err
-		}
-	} else if first {
-		return errors.New("parse error, no header")
-	}
-	if p.ch == '\n' && p.peek() == '\n' {
-		p.next()
-		p.next()
-	}
-	ct := part.ContentType
-	if ct != nil && ct.superType == "message" && ct.subType == "rfc822" {
-
-		var subPart *Part
-		subPart = newPart()
-		subPartId := part.Node + "." + strconv.Itoa(count)
-		subPart.StartingPos = p.msgPos
-		count++
-		p.addPart(subPart, subPartId)
-		err = p.mime(subPartId, count, subPart)
-		return
-	}
-	if ct != nil && ct.superType == "multipart" && part.ContentBoundary != "" {
-		var subPart *Part
-		subPart = newPart()
-		for {
-			subPartId := part.Node + "." + strconv.Itoa(count)
-			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
-				err = bErr
-				if subPart.StartingPos == 0 {
-					subPart.StartingPos = p.msgPos
-				} else {
-					//fmt.Println("["+string(p.buf[subPart.StartingPos:p.msgPos])+"]")
-					subPart, count = p.split(subPart, count)
-				}
-				return
-			} else if end {
-				return
-			} else {
-				if subPart.StartingPos == 0 {
-					subPart.StartingPos = p.msgPos
-					count++
-					p.addPart(subPart, subPartId)
-					err = p.mime(subPartId, count, subPart)
-					if err != nil {
-						return
-					}
-					subPartId = part.Node + "." + strconv.Itoa(count)
-				} else {
-					//fmt.Println("["+string(p.buf[subPart.StartingPos:p.msgPos])+"]")
-					subPart, count = p.split(subPart, count)
-					//subPart.Node = subPartId
-					p.addPart(subPart, subPartId)
-					err = p.mime(subPartId, count, subPart)
-					if err != nil {
-						return
-					}
-				}
+		defer func() {
+			if part != nil {
+				part.EndingPosBody = p.lastBoundaryPos
 			}
-		}
+		}()
 	}
-	part.EndingPosBody = p.lastBoundaryPos
-	return
-
-}
-
-func (p *Parser) split(subPart *Part, count int) (*Part, int) {
-	subPart.EndingPos = p.msgPos
-	subPart = nil
-	count++
-	subPart = newPart()
-	subPart.StartingPos = p.msgPos
-	return subPart, count
-}
-
-func (p *Parser) mime_new(depth string, count int, cb string) (err error) {
-
-	defer func() {
-		fmt.Println("i quit")
-	}()
-	if count == 0 {
-		count = 1
-	}
-	part := newPart()
-
-	partID := strconv.Itoa(count)
-	if depth != "" {
-		partID = depth + "." + strconv.Itoa(count)
-	}
-	p.addPart(part, partID)
-	// record the start of the part
-	part.StartingPos = p.msgPos
 
 	// read the header
 	if p.ch >= 33 && p.ch <= 126 {
@@ -912,7 +765,7 @@ func (p *Parser) mime_new(depth string, count int, cb string) (err error) {
 		if err != nil {
 			return err
 		}
-	} else if depth == "" {
+	} else if root {
 		return errors.New("parse error, no header")
 	}
 	if p.ch == '\n' && p.peek() == '\n' {
@@ -920,161 +773,74 @@ func (p *Parser) mime_new(depth string, count int, cb string) (err error) {
 		p.next()
 	}
 	part.StartingPosBody = p.msgPos
-	skip := false
-	if part.ContentBoundary != "" {
-		if cb == part.ContentBoundary {
-			// tolerate some messages that have identical multipart content-boundary
-			skip = true
-		}
-		cb = part.ContentBoundary
-	}
 	ct := part.ContentType
-	if part.ContentType != nil && ct.superType == "message" &&
-		ct.subType == "rfc822" {
-
-		err = p.mime_new(partID, 1, cb)
+	if ct != nil && ct.superType == "message" && ct.subType == "rfc822" {
+		var subPart *Part
+		subPart = newPart()
+		subPartId := part.Node + "." + strconv.Itoa(count)
+		subPart.StartingPos = p.msgPos
+		count++
+		p.addPart(subPart, subPartId)
+		err = p.mime(subPart, part.ContentBoundary)
+		subPart.EndingPosBody = p.msgPos
 		part.EndingPosBody = p.msgPos
-		if err != nil {
-			return
-		}
+		return
 	}
-
-	for {
-		if cb != "" {
-			if end, bErr := p.boundary(cb); bErr != nil || end == true {
-				part.EndingPosBody = p.lastBoundaryPos
-				if end {
-					bErr = boundaryEnd{cb}
-
-					return bErr
+	if ct != nil && ct.superType == "multipart" &&
+		part.ContentBoundary != "" &&
+		part.ContentBoundary != cb /* content-boundary must be different to previous */ {
+		var subPart *Part
+		subPart = newPart()
+		for {
+			subPartId := part.Node + "." + strconv.Itoa(count)
+			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
+				// there was an error with parsing the boundary
+				err = bErr
+				if subPart.StartingPos == 0 {
+					subPart.StartingPos = p.msgPos
+				} else {
+					subPart.EndingPos = p.msgPos
+					subPart.EndingPosBody = p.lastBoundaryPos
+					subPart, count = p.split(subPart, count)
 				}
-				return bErr
-			}
-			part.EndingPosBody = p.msgPos
-		} else {
-			for p.ch != 0 {
-				// keep scanning until the end
-				p.next()
-			}
-			part.EndingPosBody = p.msgPos
-			err = NotMime
-			return
-		}
-
-		if !skip && ct != nil &&
-			(ct.superType == "multipart" || (ct.superType == "message" && ct.subType == "rfc822")) {
-			// start a new branch (count is 1)
-			err = p.mime_new(partID, count, cb)
-
-			part.EndingPosBody = p.msgPos // good?
-			if err != nil {
-				if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
-					// we are back to the upper level, stop propagating the content-boundary 'end' error
+				return
+			} else if end {
+				// reached the terminating boundary (ends with double dash --)
+				subPart.EndingPosBody = p.lastBoundaryPos
+				break
+			} else {
+				// process the part boundary
+				if subPart.StartingPos == 0 {
+					subPart.StartingPos = p.msgPos
 					count++
-					continue
+					p.addPart(subPart, subPartId)
+					err = p.mime(subPart, part.ContentBoundary)
+					if err != nil {
+						return
+					}
+					subPartId = part.Node + "." + strconv.Itoa(count)
+				} else {
+					subPart.EndingPosBody = p.lastBoundaryPos
+					subPart, count = p.split(subPart, count)
+					p.addPart(subPart, subPartId)
+					err = p.mime(subPart, part.ContentBoundary)
+					if err != nil {
+						return
+					}
 				}
-				if depth == "" {
-					part.EndingPosBody = p.lastBoundaryPos
-				}
-
-				return
 			}
-
-		} else {
-			// new sibling for this node
-			count++
-			err = p.mime_new(depth, count, cb)
-
-			if err == nil {
-				return
-			}
-			if v, ok := err.(boundaryEnd); ok && v.Error() != cb {
-				// we are back to the upper level, stop propagating the content-boundary 'end' error
-				continue
-			}
-			return
 		}
 	}
+	return
+
 }
 
-// mime scans the mime content and builds the mime-part tree in
-// p.Parts on-the-fly, as more bytes get fed in.
-func (p *Parser) mime2(parent *Part, depth string) (err error) {
-
-	count := 1
-	for {
-		part := newPart()
-		partID := strconv.Itoa(count)
-		if depth != "" {
-			partID = depth + "." + strconv.Itoa(count)
-		}
-		p.addPart(part, partID)
-		// record the start of the part
-		part.StartingPos = p.msgPos
-		// parse the headers
-		if p.ch >= 33 && p.ch <= 126 {
-			err = p.header(part)
-			if err != nil {
-				return err
-			}
-		} else if len(p.Parts) == 0 {
-			// return an error if the first part is not a valid header
-			// (subsequent parts could have no headers)
-			return errors.New("parse error, no header")
-		}
-		if p.ch == '\n' && p.peek() == '\n' {
-			p.next()
-			p.next()
-		}
-
-		// inherit the content boundary from parent if not present
-		if part.ContentBoundary == "" && parent != nil {
-			part.ContentBoundary = parent.ContentBoundary
-		}
-
-		// record the start of the message body
-		part.StartingPosBody = p.msgPos
-
-		// build the mime tree recursively
-		if p.isBranch(part, parent) {
-			err = p.multi(part, partID)
-			part.EndingPosBody = p.lastBoundaryPos
-			if err != nil {
-				break
-			}
-		}
-
-		// if we didn't branch & we're still at the root (not a mime email)
-		if parent == nil {
-			for p.ch != 0 {
-				// keep scanning until the end
-				p.next()
-
-			}
-			if len(p.Parts) == 1 {
-				part.EndingPosBody = p.msgPos
-				err = NotMime
-			} else {
-				err = io.EOF
-			}
-			return
-		}
-		// after we return from the lower branches (if there were any)
-		// we walk each of the siblings of the parent
-
-		if end, bErr := p.boundary(parent.ContentBoundary); bErr != nil {
-			part.EndingPosBody = p.lastBoundaryPos
-			return bErr
-		} else if end {
-			// the last sibling
-			part.EndingPosBody = p.lastBoundaryPos
-			return
-		}
-		part.EndingPosBody = p.lastBoundaryPos
-		count++
-	}
-
-	return
+func (p *Parser) split(subPart *Part, count int) (*Part, int) {
+	subPart = nil
+	count++
+	subPart = newPart()
+	subPart.StartingPos = p.msgPos
+	return subPart, count
 }
 
 func (p *Parser) reset() {
@@ -1146,8 +912,7 @@ func (p *Parser) Parse(buf []byte) error {
 		// initial step - start the mime parser
 		go func() {
 			p.next()
-			err := p.mime("", 1, nil)
-			//err := p.mime2(nil, "")
+			err := p.mime(nil, "")
 			if _, ok := err.(boundaryEnd); ok {
 				err = nil
 			}
