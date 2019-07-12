@@ -524,7 +524,7 @@ email 2
 */
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
-	email = email2
+	email = email
 	//email = strings.Replace(string(email), "\n", "\r\n", -1)
 	p.inject([]byte(email))
 

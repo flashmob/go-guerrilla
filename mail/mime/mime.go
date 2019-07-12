@@ -856,6 +856,10 @@ func (p *Parser) mime(depth string, count int, part *Part) (err error) {
 					subPart.StartingPos = p.msgPos
 					count++
 					p.addPart(subPart, subPartId)
+					err = p.mime(subPartId, count, subPart)
+					if err != nil {
+						return
+					}
 					subPartId = part.Node + "." + strconv.Itoa(count)
 				} else {
 					//fmt.Println("["+string(p.buf[subPart.StartingPos:p.msgPos])+"]")
