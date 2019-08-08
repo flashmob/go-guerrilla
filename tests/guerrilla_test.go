@@ -935,7 +935,8 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			const ok = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -944,7 +945,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -953,7 +954,7 @@ func TestNestedMailCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -961,12 +962,10 @@ func TestNestedMailCmd(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 }
 
@@ -1002,12 +1001,10 @@ func TestCommandLineMaxLength(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -1179,7 +1176,6 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 			t.Error(err.Error(), config.Servers[0].ListenInterface)
 			t.FailNow()
 		} else {
-
 			response, err := Command(
 				conn,
 				bufin,

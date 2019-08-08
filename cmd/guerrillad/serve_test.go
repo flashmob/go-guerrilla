@@ -177,7 +177,7 @@ var configJsonC = `
 `
 
 // adds 127.0.0.1:4655, a secure server
-var configJsonD = `
+var configJsonDs = `
 {
     "log_file" : "../../tests/testlog",
     "log_level" : "debug",
@@ -291,7 +291,7 @@ var configJsonE = `
 `
 
 const testPauseDuration = time.Millisecond * 1010
-const configJsonD = "configJsonD.json"
+const configJsonDcon = "configJsonD.json"
 
 // reload config
 func sigHup() {
@@ -935,7 +935,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	if err := ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
+	if err := ioutil.WriteFile(configJsonDcon, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -946,7 +946,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error(err)
 	}
 	cmd := &cobra.Command{}
-	configPath = configJsonD
+	configPath = configJsonDcon
 
 	go func() {
 		serve(cmd, []string{})
@@ -1044,7 +1044,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	if err := ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
+	if err := ioutil.WriteFile(configJsonDcon, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
