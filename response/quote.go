@@ -156,5 +156,5 @@ var quotes = struct {
 // GetQuote returns a random quote from The big Lebowski
 func GetQuote() string {
 	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("%s", quotes.m[rand.Intn(len(quotes.m))])
+	return quotes.m[rand.Intn(len(quotes.m))]
 }

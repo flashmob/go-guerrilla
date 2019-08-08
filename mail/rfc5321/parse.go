@@ -149,11 +149,11 @@ func (s *Parser) RcptTo(input []byte) (err error) {
 func (s *Parser) parameters() ([][]string, error) {
 	params := make([][]string, 0)
 	for {
-		if result, err := s.param(); err != nil {
+		result, err := s.param()
+		if err != nil {
 			return params, err
-		} else {
-			params = append(params, result)
 		}
+		params = append(params, result)
 		if p := s.next(); p != ' ' {
 			return params, nil
 		}
@@ -341,9 +341,8 @@ func (s *Parser) mailbox() error {
 	}
 	if p := s.peek(); p == '[' {
 		return s.addressLiteral()
-	} else {
-		return s.domain()
 	}
+	return s.domain()
 }
 
 // "[" ( IPv4-address-literal /

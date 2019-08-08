@@ -454,9 +454,6 @@ func talkToServer(address string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
 	_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
 	if err != nil {
 		return err

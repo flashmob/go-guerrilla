@@ -3,9 +3,10 @@ package backends
 import (
 	"bytes"
 	"compress/zlib"
-	"github.com/flashmob/go-guerrilla/mail"
 	"io"
 	"sync"
+
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 // ----------------------------------------------------------------------------------
@@ -99,9 +100,8 @@ func Compressor() Decorator {
 				e.Values["zlib-compressor"] = compressor
 				// continue to the next Processor in the decorator stack
 				return p.Process(e, task)
-			} else {
-				return p.Process(e, task)
 			}
+			return p.Process(e, task)
 		})
 	}
 }

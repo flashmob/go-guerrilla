@@ -186,8 +186,8 @@ func (e *Envelope) ResetTransaction() {
 }
 
 // Seed is called when used with a new connection, once it's accepted
-func (e *Envelope) Reseed(RemoteIP string, clientID uint64) {
-	e.RemoteIP = RemoteIP
+func (e *Envelope) Reseed(remoteIP string, clientID uint64) {
+	e.RemoteIP = remoteIP
 	e.QueuedId = queuedID(clientID)
 	e.Helo = ""
 	e.TLS = false

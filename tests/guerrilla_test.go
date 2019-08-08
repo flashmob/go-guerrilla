@@ -16,8 +16,9 @@ package test
 
 import (
 	"encoding/json"
-	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"testing"
+
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 
 	"time"
 
@@ -64,9 +65,6 @@ func init() {
 	} else {
 		logger, _ = log.GetLogger(config.LogFile, "debug")
 		initErr = setupCerts(config)
-		if err != nil {
-			return
-		}
 		backend, _ := getBackend(config.BackendConfig, logger)
 		app, initErr = guerrilla.New(&config.AppConfig, backend, logger)
 	}
@@ -249,7 +247,7 @@ func TestGreeting(t *testing.T) {
 			// handle error
 			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)); err != nil {
 			t.Error(err)
 		}
 		greeting, err := bufio.NewReader(conn).ReadString('\n')
@@ -276,7 +274,7 @@ func TestGreeting(t *testing.T) {
 			t.Error(err, "Cannot dial server (TLS)", config.Servers[1].ListenInterface)
 			t.FailNow()
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)); err != nil {
 			t.Error(err)
 		}
 		greeting, err = bufio.NewReader(conn).ReadString('\n')
@@ -450,15 +448,16 @@ func TestRFC2832LimitLocalPart(t *testing.T) {
 			}
 		}
 
-		_ = conn.Close()
+		err = conn.Close()
+		if err != nil {
+			t.Error("failed to close connection", err.Error())
+		}
 		app.Shutdown()
 
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -503,12 +502,10 @@ func TestRFC2821LimitPath(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 }
 
@@ -552,12 +549,10 @@ func TestRFC2821LimitDomain(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -1044,6 +1039,9 @@ func TestDataMaxLength(t *testing.T) {
 				bufin,
 				fmt.Sprintf("Subject:test\r\n\r\nHello %s\r\n.\r\n",
 					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
+			if err != nil {
+				t.Error("command failed", err.Error())
+			}
 
 			//expected := "500 Line too long"
 			expected := "451 4.3.0 Error: maximum DATA size exceeded"

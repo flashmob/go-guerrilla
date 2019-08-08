@@ -330,15 +330,14 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 	if db, err := sql.Open(g.config.Driver, g.config.DSN); err != nil {
 		Log().Error("cannot open database", err, "]")
 		return nil, err
-	} else {
-		// do we have access?
-		_, err = db.Query("SELECT mail_id FROM " + g.config.Table + " LIMIT 1")
-		if err != nil {
-			Log().Error("cannot select table:", err)
-			return nil, err
-		}
-		return db, nil
 	}
+	// do we have access?
+	_, err = db.Query("SELECT mail_id FROM " + g.config.Table + " LIMIT 1")
+	if err != nil {
+		Log().Error("cannot select table:", err)
+		return nil, err
+	}
+	return db, nil
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
@@ -486,9 +485,9 @@ func GuerrillaDbRedis() Decorator {
 				feeders[rand.Intn(len(feeders))] <- vals
 				return p.Process(e, task)
 
-			} else {
-				return p.Process(e, task)
 			}
+			return p.Process(e, task)
+
 		})
 	}
 }

@@ -41,7 +41,7 @@ type RedisProcessor struct {
 }
 
 func (r *RedisProcessor) redisConnection(redisInterface string) (err error) {
-	if r.isConnected == false {
+	if !r.isConnected {
 		r.conn, err = RedisDialer("tcp", redisInterface)
 		if err != nil {
 			// handle error

@@ -20,7 +20,7 @@ import (
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/tests"
+	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
 )
@@ -177,7 +177,7 @@ var configJsonC = `
 `
 
 // adds 127.0.0.1:4655, a secure server
-var configJsonDs = `
+var configJsonD = `
 {
     "log_file" : "../../tests/testlog",
     "log_level" : "debug",
@@ -508,6 +508,9 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
+	if err != nil {
+		t.Error("Failed to create new backend", err)
+	}
 	app, err := guerrilla.New(oldconf, backend, mainlog)
 	if err != nil {
 		t.Error("Failed to create new app", err)
@@ -892,7 +895,6 @@ func TestServerStopEvent(t *testing.T) {
 
 // just a utility for debugging when using the debugger, skipped by default
 func TestDebug(t *testing.T) {
-
 	t.SkipNow()
 	conf := guerrilla.ServerConfig{ListenInterface: "127.0.0.1:2526"}
 	if conn, buffin, err := test.Connect(conf, 20); err != nil {
@@ -902,16 +904,17 @@ func TestDebug(t *testing.T) {
 			expect := "250 mai1.guerrillamail.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
-			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
-					expect := "250 2.1.5 OK"
-					if strings.Index(result, expect) != 0 {
-						t.Error("Expected:", expect, "but got:", result)
-					}
+			} else if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
+				expect := "250 2.1.5 OK"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected:", expect, "but got:", result)
 				}
 			}
 		}
-		_ = conn.Close()
+		err = conn.Close()
+		if err != nil {
+			t.Error("could not close connection", err)
+		}
 	}
 }
 
@@ -964,12 +967,10 @@ func TestAllowedHostsEvent(t *testing.T) {
 			expect := "250 secure.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
-			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
-					expect := "454 4.1.1 Error: Relay access denied: grr.la"
-					if strings.Index(result, expect) != 0 {
-						t.Error("Expected:", expect, "but got:", result)
-					}
+			} else if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
+				expect := "454 4.1.1 Error: Relay access denied: grr.la"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected:", expect, "but got:", result)
 				}
 			}
 		}
@@ -1003,12 +1004,10 @@ func TestAllowedHostsEvent(t *testing.T) {
 			expect := "250 secure.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
-			} else {
-				if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
-					expect := "250 2.1.5 OK"
-					if strings.Index(result, expect) != 0 {
-						t.Error("Expected:", expect, "but got:", result)
-					}
+			} else if result, err = test.Command(conn, buffin, "RCPT TO:<test@grr.la>"); err == nil {
+				expect := "250 2.1.5 OK"
+				if strings.Index(result, expect) != 0 {
+					t.Error("Expected:", expect, "but got:", result)
 				}
 			}
 		}

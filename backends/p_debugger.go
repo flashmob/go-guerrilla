@@ -56,14 +56,12 @@ func Debugger() Decorator {
 					if config.SleepSec == 1 {
 						panic("panic on purpose")
 					}
-
 				}
 
 				// continue to the next Processor in the decorator stack
 				return p.Process(e, task)
-			} else {
-				return p.Process(e, task)
 			}
+			return p.Process(e, task)
 		})
 	}
 }

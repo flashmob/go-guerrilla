@@ -52,7 +52,7 @@ func pemBlockForKey(priv interface{}) (*pem.Block, error) {
 	case *ecdsa.PrivateKey:
 		b, err := x509.MarshalECPrivateKey(k)
 		if err != nil {
-			err = errors.New(fmt.Sprintf("Unable to marshal ECDSA private key: %v", err))
+			err = fmt.Errorf("unable to marshal ECDSA private key: %s", err)
 		}
 		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}, err
 	default:
@@ -81,7 +81,7 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 	case "P521":
 		priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 	default:
-		err = errors.New(fmt.Sprintf("Unrecognized elliptic curve: %q", ecdsaCurve))
+		err = fmt.Errorf("unrecognized elliptic curve: %s", ecdsaCurve)
 	}
 	if err != nil {
 		log.Fatalf("failed to generate private key: %s", err)
@@ -94,7 +94,7 @@ func GenerateCert(host string, validFrom string, validFor time.Duration, isCA bo
 	} else {
 		notBefore, err = time.Parse("Jan 2 15:04:05 2006", validFrom)
 		if err != nil {
-			err = errors.New(fmt.Sprintf("Failed to parse creation date: %s\n", err))
+			err = fmt.Errorf("failed to parse creation date", err)
 			return
 		}
 	}
