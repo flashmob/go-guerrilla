@@ -589,7 +589,8 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected := "250 2.1.0 OK"
+			const ok = "250 2.1.0 OK"
+			expected := ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -599,7 +600,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -609,7 +610,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -619,7 +620,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -629,7 +630,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -639,7 +640,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -649,7 +650,8 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.4 Invalid address"
+			const notOk = "501 5.5.4 Invalid address"
+			expected = notOk
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -659,7 +661,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -669,7 +671,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.4 Invalid address"
+			expected = notOk
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -679,7 +681,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -689,7 +691,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.4 Invalid address"
+			expected = notOk
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -699,7 +701,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -709,7 +711,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.4 Invalid address"
+			expected = notOk
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -719,7 +721,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -729,7 +731,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "501 5.5.4 Invalid address"
+			expected = notOk
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -739,7 +741,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -761,7 +763,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -771,7 +773,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -781,7 +783,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -791,7 +793,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}
@@ -801,7 +803,7 @@ func TestMailFromCmd(t *testing.T) {
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
-			expected = "250 2.1.0 OK"
+			expected = ok
 			if strings.Index(response, expected) != 0 {
 				t.Error("Server did not respond with", expected, ", it said:"+response)
 			}

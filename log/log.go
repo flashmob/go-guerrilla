@@ -107,11 +107,9 @@ func GetLogger(dest string, level string) (Logger, error) {
 	key := loggerKey{dest, level}
 	if loggers.cache == nil {
 		loggers.cache = make(loggerCache, 1)
-	} else {
-		if l, ok := loggers.cache[key]; ok {
-			// return the one we found in the cache
-			return l, nil
-		}
+	} else if l, ok := loggers.cache[key]; ok {
+		// return the one we found in the cache
+		return l, nil
 	}
 	o := parseOutputOption(dest)
 	logrus, err := newLogrus(o, level)

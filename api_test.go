@@ -312,11 +312,12 @@ func TestSetConfig(t *testing.T) {
 }
 
 func TestSetConfigError(t *testing.T) {
+	testLogName := "tests/testlog"
 
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := os.Truncate(testLogName, 0); err != nil {
 		t.Error(err)
 	}
-	cfg := AppConfig{LogFile: "tests/testlog"}
+	cfg := AppConfig{LogFile: testLogName}
 	sc := ServerConfig{
 		ListenInterface: "127.0.0.1:2526",
 		IsEnabled:       true,
@@ -327,8 +328,8 @@ func TestSetConfigError(t *testing.T) {
 	// lets add a new server with bad TLS
 	sc.ListenInterface = "127.0.0.1:2527"
 	sc.TLS.StartTLSOn = true
-	sc.TLS.PublicKeyFile = "tests/testlog"  // totally wrong :->
-	sc.TLS.PrivateKeyFile = "tests/testlog" // totally wrong :->
+	sc.TLS.PublicKeyFile = testLogName  // totally wrong :->
+	sc.TLS.PrivateKeyFile = testLogName // totally wrong :->
 
 	cfg.Servers = append(cfg.Servers, sc)
 

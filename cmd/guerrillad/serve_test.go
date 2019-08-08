@@ -291,6 +291,7 @@ var configJsonE = `
 `
 
 const testPauseDuration = time.Millisecond * 1010
+const configJsonD = "configJsonD.json"
 
 // reload config
 func sigHup() {
@@ -934,7 +935,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	if err := ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+	if err := ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -945,7 +946,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error(err)
 	}
 	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
+	configPath = configJsonD
 
 	go func() {
 		serve(cmd, []string{})
@@ -980,7 +981,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	newConf := conf
 	newConf.AllowedHosts = append(newConf.AllowedHosts, "grr.la")
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1043,7 +1044,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("could not get logger,", err)
 		t.FailNow()
 	}
-	if err := ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+	if err := ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -1053,7 +1054,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.FailNow()
 	}
 	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
+	configPath = configJsonD
 
 	go func() {
 		serve(cmd, []string{})
@@ -1176,7 +1177,7 @@ func TestBadTLSStart(t *testing.T) {
 			t.Error("could not delete ../../tests/mail2.guerrillamail.com.key.pem", err)
 		}
 		// next run the server
-		if err = ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 			t.Error(err)
 		}
 		conf := &guerrilla.AppConfig{}                        // blank one
@@ -1184,7 +1185,7 @@ func TestBadTLSStart(t *testing.T) {
 			t.Error(err)
 		}
 		cmd := &cobra.Command{}
-		configPath = "configJsonD.json"
+		configPath = configJsonD
 		var serveWG sync.WaitGroup
 
 		serveWG.Add(1)
@@ -1232,7 +1233,7 @@ func TestBadTLSReload(t *testing.T) {
 		t.FailNow()
 	}
 	// start the server by emulating the serve command
-	if err = ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+	if err = ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -1242,7 +1243,7 @@ func TestBadTLSReload(t *testing.T) {
 		t.FailNow()
 	}
 	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
+	configPath = configJsonD
 
 	go func() {
 		serve(cmd, []string{})
@@ -1277,7 +1278,7 @@ func TestBadTLSReload(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1330,7 +1331,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 		t.FailNow()
 	}
 	// start the server by emulating the serve command
-	if err = ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+	if err = ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 	}
 	conf := &guerrilla.AppConfig{}                        // blank one
@@ -1338,7 +1339,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 		t.Error(err)
 	}
 	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
+	configPath = configJsonD
 
 	go func() {
 		serve(cmd, []string{})
@@ -1353,7 +1354,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[0].Timeout = 1
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1422,7 +1423,7 @@ func TestDebugLevelChange(t *testing.T) {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	} // start the server by emulating the serve command
-	if err = ioutil.WriteFile("configJsonD.json", []byte(configJsonD), 0644); err != nil {
+	if err = ioutil.WriteFile(configJsonD, []byte(configJsonD), 0644); err != nil {
 		t.Error(err)
 	}
 	conf := &guerrilla.AppConfig{}                        // blank one
@@ -1431,7 +1432,7 @@ func TestDebugLevelChange(t *testing.T) {
 	}
 	conf.LogLevel = "debug"
 	cmd := &cobra.Command{}
-	configPath = "configJsonD.json"
+	configPath = configJsonD
 
 	go func() {
 		serve(cmd, []string{})
@@ -1456,7 +1457,7 @@ func TestDebugLevelChange(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 	newConf.LogLevel = log.InfoLevel.String()
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
 			t.Error(err)
 		}
 	} else {

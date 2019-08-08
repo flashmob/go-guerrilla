@@ -23,18 +23,15 @@ const (
 
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
-	NullPath  bool
-	LocalPart string
-	Domain    string
-
-	ADL        []string
+	accept     bytes.Buffer
+	buf        []byte
 	PathParams [][]string
-
-	pos int
-	ch  byte
-
-	buf    []byte
-	accept bytes.Buffer
+	ADL        []string
+	LocalPart  string
+	Domain     string
+	pos        int
+	NullPath   bool
+	ch         byte
 }
 
 func NewParser(buf []byte) *Parser {

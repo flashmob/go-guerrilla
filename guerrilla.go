@@ -102,6 +102,9 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 
 	g.state = daemonStateNew
 	err := g.makeServers()
+	if err != nil {
+		return g, err
+	}
 
 	// start backend for processing email
 	err = g.backend().Start()
