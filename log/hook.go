@@ -2,12 +2,13 @@ package log
 
 import (
 	"bufio"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // custom logrus hook
@@ -143,7 +144,8 @@ func (hook *LogrusHook) openCreate(dest string) (err error) {
 func (hook *LogrusHook) Fire(entry *log.Entry) error {
 	hookMu.Lock()
 	defer hookMu.Unlock()
-	if line, err := entry.String(); err == nil {
+	line, err := entry.String()
+	if err == nil {
 		r := strings.NewReader(line)
 		if _, err = io.Copy(hook.w, r); err != nil {
 			return err
@@ -156,10 +158,8 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 				err = hook.fd.Sync()
 			}
 		}
-		return err
 	}
 	return err
-
 }
 
 // Levels implements the logrus Hook interface

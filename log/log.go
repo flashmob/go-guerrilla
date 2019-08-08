@@ -1,12 +1,13 @@
 package log
 
 import (
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // The following are taken from logrus
@@ -128,7 +129,8 @@ func GetLogger(dest string, level string) (Logger, error) {
 	// we'll use the hook to output instead
 	logrus.Out = ioutil.Discard
 	// setup the hook
-	if h, err := NewLogrusHook(dest); err != nil {
+	h, err := NewLogrusHook(dest)
+	if err != nil {
 		// revert back to stderr
 		logrus.Out = os.Stderr
 		return l, err

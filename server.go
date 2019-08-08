@@ -447,14 +447,13 @@ func (s *server) handleClient(client *client) {
 				if toks := bytes.Split(input[8:], []byte{' '}); len(toks) > 0 {
 					for i := range toks {
 						if vals := bytes.Split(toks[i], []byte{'='}); len(vals) == 2 {
-							if bytes.Compare(vals[1], []byte("[UNAVAILABLE]")) == 0 {
-								// skip
+							if bytes.Equal(vals[1], []byte("[UNAVAILABLE]")) {
 								continue
 							}
-							if bytes.Compare(vals[0], []byte("ADDR")) == 0 {
+							if bytes.Equal(vals[0], []byte("ADDR")) {
 								client.RemoteIP = string(vals[1])
 							}
-							if bytes.Compare(vals[0], []byte("HELO")) == 0 {
+							if bytes.Equal(vals[0], []byte("HELO")) {
 								client.Helo = string(vals[1])
 							}
 						}

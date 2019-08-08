@@ -802,12 +802,10 @@ func TestMailFromCmd(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -877,12 +875,10 @@ func TestHeloEhlo(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -1052,12 +1048,10 @@ func TestDataMaxLength(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -1146,13 +1140,12 @@ func TestDataCommand(t *testing.T) {
 
 		}
 		_ = conn.Close()
+
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 }
 
@@ -1182,12 +1175,10 @@ func TestFuzz86f25b86b09897aed8f6c2aa5b5ee1557358a6de(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 }
 
@@ -1275,11 +1266,9 @@ func TestFuzz21c56f89989d19c3bbbd81b288b2dae9e6dd2150(t *testing.T) {
 		}
 		_ = conn.Close()
 		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 }

@@ -397,12 +397,12 @@ func (s *Parser) snum() error {
 		if state == 0 {
 			if !(c >= 48 && c <= 57) {
 				return errors.New("parse error")
-			} else {
-				num.WriteByte(s.ch)
-				s.accept.WriteByte(s.ch)
-				state = 1
-				continue
 			}
+			num.WriteByte(s.ch)
+			s.accept.WriteByte(s.ch)
+			state = 1
+			continue
+
 		}
 		if state == 1 {
 			if !(c >= 48 && c <= 57) {
@@ -410,13 +410,11 @@ func (s *Parser) snum() error {
 					return err
 				} else if v >= 0 && v <= 255 {
 					return nil
-				} else {
-					return errors.New("invalid ipv4")
 				}
-			} else {
-				num.WriteByte(s.ch)
-				s.accept.WriteByte(s.ch)
+				return errors.New("invalid ipv4")
 			}
+			num.WriteByte(s.ch)
+			s.accept.WriteByte(s.ch)
 		}
 	}
 	return errors.New("too many digits")
@@ -436,9 +434,9 @@ func (s *Parser) ipv6AddressLiteral() error {
 				return nil
 			}
 			return errors.New("invalid ipv6")
-		} else {
-			ip.WriteByte(c)
 		}
+		ip.WriteByte(c)
+
 	}
 }
 
@@ -453,9 +451,8 @@ func (s *Parser) localPart() error {
 	p := s.peek()
 	if p == '"' {
 		return s.quotedString()
-	} else {
-		return s.dotString()
 	}
+	return s.dotString()
 }
 
 // DQUOTE *QcontentSMTP DQUOTE
@@ -466,10 +463,8 @@ func (s *Parser) quotedString() error {
 		}
 		if s.ch != '"' {
 			return errors.New("quoted string not closed")
-		} else {
-			// accept the "
-			s.next()
 		}
+		s.next()
 	}
 	return nil
 }
@@ -500,9 +495,8 @@ func (s *Parser) QcontentSMTP() error {
 				s.accept.WriteByte(ch)
 				state = 0
 				continue
-			} else {
-				return errors.New("non-printable character found")
 			}
+			return errors.New("non-printable character found")
 		}
 	}
 }
@@ -528,18 +522,16 @@ func (s *Parser) atom() error {
 		if state == 0 {
 			if !s.isAtext(s.next()) {
 				return errors.New("parse error")
-			} else {
-				s.accept.WriteByte(s.ch)
-				state = 1
-				continue
 			}
+			s.accept.WriteByte(s.ch)
+			state = 1
+			continue
 		}
 		if state == 1 {
 			if !s.isAtext(s.next()) {
 				return nil
-			} else {
-				s.accept.WriteByte(s.ch)
 			}
+			s.accept.WriteByte(s.ch)
 		}
 	}
 }

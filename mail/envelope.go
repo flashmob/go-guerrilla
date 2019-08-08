@@ -259,7 +259,7 @@ func MimeHeaderDecode(str string) string {
 // Envelopes have their own pool
 
 type Pool struct {
-	// envelopes that are ready to be borrowed
+	// envelopes clientIDthat are ready to be borrowed
 	pool chan *Envelope
 	// semaphore to control number of maximum borrowed envelopes
 	sem chan bool

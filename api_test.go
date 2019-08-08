@@ -206,7 +206,7 @@ func TestSMTPLoadFile(t *testing.T) {
 		t.Error("d.Config.LogFile != tests/go-guerrilla.pid")
 	}
 
-	err := ioutil.WriteFile("goguerrilla.conf.api", []byte(json2), 0644)
+	err = ioutil.WriteFile("goguerrilla.conf.api", []byte(json2), 0644)
 	if err != nil {
 		t.Error("could not write guerrilla.conf.api", err)
 		return

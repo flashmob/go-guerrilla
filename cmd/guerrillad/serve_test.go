@@ -474,8 +474,7 @@ func cleanTestArtifacts(t *testing.T) {
 // make sure that we get all the config change events
 func TestCmdConfigChangeEvents(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -562,8 +561,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -637,8 +635,7 @@ func TestServe(t *testing.T) {
 // then SIGHUP (to reload config & trigger config update events),
 // then connect to it & HELO.
 func TestServerAddEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -719,8 +716,7 @@ func TestServerAddEvent(t *testing.T) {
 // then SIGHUP (to reload config & trigger config update events),
 // then connect to 127.0.0.1:2228 & HELO.
 func TestServerStartEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -799,8 +795,7 @@ func TestServerStartEvent(t *testing.T) {
 // then connect to 127.0.0.1:2228 - it should not connect
 
 func TestServerStopEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -926,8 +921,7 @@ func TestDebug(t *testing.T) {
 // connect to 127.0.0.1:4655 & HELO & try RCPT TO, grr.la should work
 
 func TestAllowedHostsEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -1031,8 +1025,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 // should get a new tls event & able to STARTTLS with no problem
 
 func TestTLSConfigEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
@@ -1073,25 +1066,24 @@ func TestTLSConfigEvent(t *testing.T) {
 				expect := "250 mail.test.com Hello"
 				if strings.Index(result, expect) != 0 {
 					t.Error("Expected", expect, "but got", result)
-				} else {
-					if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
-						expect := "220 2.0.0 Ready to start TLS"
-						if strings.Index(result, expect) != 0 {
-							t.Error("Expected:", expect, "but got:", result)
+				} else if result, err = test.Command(conn, buffin, "STARTTLS"); err == nil {
+					expect := "220 2.0.0 Ready to start TLS"
+					if strings.Index(result, expect) != 0 {
+						t.Error("Expected:", expect, "but got:", result)
+					} else {
+						tlsConn := tls.Client(conn, &tls.Config{
+							InsecureSkipVerify: true,
+							ServerName:         "127.0.0.1",
+						})
+						if err := tlsConn.Handshake(); err != nil {
+							t.Error("Failed to handshake", conf.Servers[0].ListenInterface)
 						} else {
-							tlsConn := tls.Client(conn, &tls.Config{
-								InsecureSkipVerify: true,
-								ServerName:         "127.0.0.1",
-							})
-							if err := tlsConn.Handshake(); err != nil {
-								t.Error("Failed to handshake", conf.Servers[0].ListenInterface)
-							} else {
-								conn = tlsConn
-								mainlog.Info("TLS Handshake succeeded")
-							}
+							conn = tlsConn
+							mainlog.Info("TLS Handshake succeeded")
 						}
 					}
 				}
+
 			}
 			_ = conn.Close()
 		}
@@ -1158,8 +1150,7 @@ func TestTLSConfigEvent(t *testing.T) {
 // Testing starting a server with a bad TLS config
 // It should not start, return exit code 1
 func TestBadTLSStart(t *testing.T) {
-	var err error
-	mainlog, err = getTestLog()
+	_, err := getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
 		t.FailNow()
@@ -1218,8 +1209,7 @@ func TestBadTLSStart(t *testing.T) {
 // Test config reload with a bad TLS config
 // It should ignore the config reload, keep running with old settings
 func TestBadTLSReload(t *testing.T) {
-	var err error
-	mainlog, err = getTestLog()
+	_, err := getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
 		t.FailNow()
@@ -1254,12 +1244,10 @@ func TestBadTLSReload(t *testing.T) {
 
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
-			expect := "250 mail.test.com Hello"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
+	} else if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		expect := "250 mail.test.com Hello"
+		if strings.Index(result, expect) != 0 {
+			t.Error("Expected", expect, "but got", result)
 		}
 	}
 	// write some trash data
@@ -1277,7 +1265,7 @@ func TestBadTLSReload(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile(configJsonD, jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1317,8 +1305,7 @@ func TestBadTLSReload(t *testing.T) {
 // Start with configJsonD.json
 
 func TestSetTimeoutEvent(t *testing.T) {
-	var err error
-	mainlog, err = getTestLog()
+	_, err := getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
 		t.FailNow()
@@ -1410,8 +1397,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 // Start in log_level = debug
 // Load config & start server
 func TestDebugLevelChange(t *testing.T) {
-	var err error
-	mainlog, err = getTestLog()
+	_, err := getTestLog()
 	if err != nil {
 		t.Error("could not get logger,", err)
 		t.FailNow()
@@ -1442,12 +1428,10 @@ func TestDebugLevelChange(t *testing.T) {
 
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
-			expect := "250 mail.test.com Hello"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
+	} else if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		expect := "250 mail.test.com Hello"
+		if strings.Index(result, expect) != 0 {
+			t.Error("Expected", expect, "but got", result)
 		}
 		_ = conn.Close()
 	}
@@ -1455,8 +1439,8 @@ func TestDebugLevelChange(t *testing.T) {
 
 	newConf := conf // copy the cmdConfg
 	newConf.LogLevel = log.InfoLevel.String()
-	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile(configJsonD, []byte(jsonbytes), 0644); err != nil {
+	if jsonBytes, err := json.Marshal(newConf); err == nil {
+		if err = ioutil.WriteFile(configJsonD, jsonBytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1473,12 +1457,10 @@ func TestDebugLevelChange(t *testing.T) {
 	// connect again, this time we should see info
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "NOOP"); err == nil {
-			expect := "200 2.0.0 OK"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
+	} else if result, err := test.Command(conn, buffin, "NOOP"); err == nil {
+		expect := "200 2.0.0 OK"
+		if strings.Index(result, expect) != 0 {
+			t.Error("Expected", expect, "but got", result)
 		}
 		_ = conn.Close()
 	}
@@ -1495,8 +1477,7 @@ func TestDebugLevelChange(t *testing.T) {
 
 // When reloading with a bad backend config, it should revert to old backend config
 func TestBadBackendReload(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()

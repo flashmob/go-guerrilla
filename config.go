@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 // AppConfig is the holder of the configuration of the app
@@ -215,10 +216,9 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 			delete(oldServers, iface)
 			// so we know the server exists in both old & new configs
 			newServer.emitChangeEvents(oldServer, app)
-		} else {
-			// start new server
-			app.Publish(EventConfigServerNew, newServer)
 		}
+		// start new server
+		app.Publish(EventConfigServerNew, newServer)
 
 	}
 	// remove any servers that don't exist anymore
@@ -263,11 +263,11 @@ func (c *AppConfig) setDefaults() error {
 		c.LogLevel = "debug"
 	}
 	if len(c.AllowedHosts) == 0 {
-		if h, err := os.Hostname(); err != nil {
+		h, err := os.Hostname()
+		if err != nil {
 			return err
-		} else {
-			c.AllowedHosts = append(c.AllowedHosts, h)
 		}
+		c.AllowedHosts = append(c.AllowedHosts, h)
 	}
 	h, err := os.Hostname()
 	if err != nil {
@@ -283,32 +283,31 @@ func (c *AppConfig) setDefaults() error {
 		sc.Timeout = defaultTimeout
 		sc.MaxSize = defaultMaxSize
 		c.Servers = append(c.Servers, sc)
-	} else {
-		// make sure each server has defaults correctly configured
-		for i := range c.Servers {
-			if c.Servers[i].Hostname == "" {
-				c.Servers[i].Hostname = h
-			}
-			if c.Servers[i].MaxClients == 0 {
-				c.Servers[i].MaxClients = defaultMaxClients
-			}
-			if c.Servers[i].Timeout == 0 {
-				c.Servers[i].Timeout = defaultTimeout
-			}
-			if c.Servers[i].MaxSize == 0 {
-				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
-			}
-			if c.Servers[i].ListenInterface == "" {
-				return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
-			}
-			if c.Servers[i].LogFile == "" {
-				c.Servers[i].LogFile = c.LogFile
-			}
-			// validate the server config
-			err = c.Servers[i].Validate()
-			if err != nil {
-				return err
-			}
+	}
+	// make sure each server has defaults correctly configured
+	for i := range c.Servers {
+		if c.Servers[i].Hostname == "" {
+			c.Servers[i].Hostname = h
+		}
+		if c.Servers[i].MaxClients == 0 {
+			c.Servers[i].MaxClients = defaultMaxClients
+		}
+		if c.Servers[i].Timeout == 0 {
+			c.Servers[i].Timeout = defaultTimeout
+		}
+		if c.Servers[i].MaxSize == 0 {
+			c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
+		}
+		if c.Servers[i].ListenInterface == "" {
+			return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
+		}
+		if c.Servers[i].LogFile == "" {
+			c.Servers[i].LogFile = c.LogFile
+		}
+		// validate the server config
+		err = c.Servers[i].Validate()
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -330,24 +329,23 @@ func (c *AppConfig) setBackendDefaults() error {
 			"save_process":       "HeadersParser|Header|Debugger",
 			"primary_mail_host":  h,
 		}
-	} else {
-		if _, ok := c.BackendConfig["save_process"]; !ok {
-			c.BackendConfig["save_process"] = "HeadersParser|Header|Debugger"
+	}
+	if _, ok := c.BackendConfig["save_process"]; !ok {
+		c.BackendConfig["save_process"] = "HeadersParser|Header|Debugger"
+	}
+	if _, ok := c.BackendConfig["primary_mail_host"]; !ok {
+		h, err := os.Hostname()
+		if err != nil {
+			return err
 		}
-		if _, ok := c.BackendConfig["primary_mail_host"]; !ok {
-			h, err := os.Hostname()
-			if err != nil {
-				return err
-			}
-			c.BackendConfig["primary_mail_host"] = h
-		}
-		if _, ok := c.BackendConfig["save_workers_size"]; !ok {
-			c.BackendConfig["save_workers_size"] = 1
-		}
+		c.BackendConfig["primary_mail_host"] = h
+	}
+	if _, ok := c.BackendConfig["save_workers_size"]; !ok {
+		c.BackendConfig["save_workers_size"] = 1
+	}
 
-		if _, ok := c.BackendConfig["log_received_mails"]; !ok {
-			c.BackendConfig["log_received_mails"] = false
-		}
+	if _, ok := c.BackendConfig["log_received_mails"]; !ok {
+		c.BackendConfig["log_received_mails"] = false
 	}
 	return nil
 }
@@ -383,10 +381,9 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	// log file change?
 	if _, ok := changes["LogFile"]; ok {
 		app.Publish(EventConfigServerLogFile, sc)
-	} else {
-		// since config file has not changed, we reload it
-		app.Publish(EventConfigServerLogReopen, sc)
 	}
+	// since config file has not changed, we reload it
+	app.Publish(EventConfigServerLogReopen, sc)
 	// timeout changed
 	if _, ok := changes["Timeout"]; ok {
 		app.Publish(EventConfigServerTimeout, sc)
