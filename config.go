@@ -183,7 +183,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 // Emits any configuration change events onto the event bus.
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has backend changed?
-	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
+	if !reflect.DeepEqual(c.BackendConfig, (*oldConfig).BackendConfig) {
 		app.Publish(EventConfigBackendConfig, c)
 	}
 	// has config changed, general check
@@ -361,8 +361,8 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 		*sc,
 	)
 	tlsChanges := getChanges(
-		(*oldServer).TLS,
-		(*sc).TLS,
+		oldServer.TLS,
+		sc.TLS,
 	)
 
 	if len(changes) > 0 || len(tlsChanges) > 0 {

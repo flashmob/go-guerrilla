@@ -196,7 +196,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
-					sum = sum + len(str)
+					sum += len(str)
 				}
 			}
 			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)

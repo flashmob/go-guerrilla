@@ -348,12 +348,10 @@ func TestShutDown(t *testing.T) {
 
 		_ = conn.Close()
 
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 	// assuming server has shutdown by now
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
@@ -405,12 +403,10 @@ func TestRFC2821LimitRecipients(t *testing.T) {
 		_ = conn.Close()
 		app.Shutdown()
 
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	} else if startErrors := app.Start(); startErrors != nil {
+		t.Error(startErrors)
+		app.Shutdown()
+		t.FailNow()
 	}
 
 }
@@ -858,13 +854,13 @@ func TestHeloEhlo(t *testing.T) {
 			// This is tricky as it is a multiline response
 			var fullresp string
 			response, err = Command(conn, bufin, "EHLO localtester")
-			fullresp = fullresp + response
+			fullresp += response
 			if err != nil {
 				t.Error("command failed", err.Error())
 			}
 			for err == nil {
 				response, err = bufin.ReadString('\n')
-				fullresp = fullresp + response
+				fullresp += response
 				if strings.HasPrefix(response, "250 ") { // Last response has a whitespace and no "-"
 					break // bail
 				}

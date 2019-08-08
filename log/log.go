@@ -132,11 +132,9 @@ func GetLogger(dest string, level string) (Logger, error) {
 		// revert back to stderr
 		logrus.Out = os.Stderr
 		return l, err
-	} else {
-		logrus.Hooks.Add(h)
-		l.h = h
 	}
-
+	logrus.Hooks.Add(h)
+	l.h = h
 	return l, nil
 
 }

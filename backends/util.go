@@ -13,7 +13,7 @@ import (
 
 // First capturing group is header name, second is header value.
 // Accounts for folding headers.
-var headerRegex, _ = regexp.Compile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
+var headerRegex = regexp.MustCompile(`^([\S ]+):([\S ]+(?:\r\n\s[\S ]+)?)`)
 
 // ParseHeaders is deprecated, see mail.Envelope.ParseHeaders instead
 func ParseHeaders(mailData string) map[string]string {

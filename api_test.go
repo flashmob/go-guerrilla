@@ -196,36 +196,36 @@ func TestSMTPLoadFile(t *testing.T) {
 	if err != nil {
 		t.Error("start error", err)
 		return
-	} else {
-		time.Sleep(time.Second * 2)
-		if d.Config.LogFile != "./tests/testlog" {
-			t.Error("d.Config.LogFile != \"./tests/testlog\"")
-		}
-
-		if d.Config.PidFile != "tests/go-guerrilla.pid" {
-			t.Error("d.Config.LogFile != tests/go-guerrilla.pid")
-		}
-
-		err := ioutil.WriteFile("goguerrilla.conf.api", []byte(json2), 0644)
-		if err != nil {
-			t.Error("could not write guerrilla.conf.api", err)
-			return
-		}
-
-		if err = d.ReloadConfigFile("goguerrilla.conf.api"); err != nil {
-			t.Error(err)
-		}
-
-		if d.Config.LogFile != "./tests/testlog2" {
-			t.Error("d.Config.LogFile != \"./tests/testlog\"")
-		}
-
-		if d.Config.PidFile != "tests/go-guerrilla2.pid" {
-			t.Error("d.Config.LogFile != \"go-guerrilla.pid\"")
-		}
-
-		d.Shutdown()
 	}
+	time.Sleep(time.Second * 2)
+	if d.Config.LogFile != "./tests/testlog" {
+		t.Error("d.Config.LogFile != \"./tests/testlog\"")
+	}
+
+	if d.Config.PidFile != "tests/go-guerrilla.pid" {
+		t.Error("d.Config.LogFile != tests/go-guerrilla.pid")
+	}
+
+	err := ioutil.WriteFile("goguerrilla.conf.api", []byte(json2), 0644)
+	if err != nil {
+		t.Error("could not write guerrilla.conf.api", err)
+		return
+	}
+
+	if err = d.ReloadConfigFile("goguerrilla.conf.api"); err != nil {
+		t.Error(err)
+	}
+
+	if d.Config.LogFile != "./tests/testlog2" {
+		t.Error("d.Config.LogFile != \"./tests/testlog\"")
+	}
+
+	if d.Config.PidFile != "tests/go-guerrilla2.pid" {
+		t.Error("d.Config.LogFile != \"go-guerrilla.pid\"")
+	}
+
+	d.Shutdown()
+
 }
 
 func TestReopenLog(t *testing.T) {

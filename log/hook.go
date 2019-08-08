@@ -157,9 +157,9 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 			}
 		}
 		return err
-	} else {
-		return err
 	}
+	return err
+
 }
 
 // Levels implements the logrus Hook interface
@@ -180,9 +180,8 @@ func (hook *LogrusHook) Reopen() error {
 		if _, err := os.Stat(hook.fname); err != nil {
 			// The file doesn't exist, create a new one.
 			return hook.openCreate(hook.fname)
-		} else {
-			return hook.openAppend(hook.fname)
 		}
+		return hook.openAppend(hook.fname)
 	}
 	return err
 

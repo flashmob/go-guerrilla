@@ -370,9 +370,8 @@ func (gw *BackendGateway) Start() error {
 		}
 		gw.State = BackendStateRunning
 		return nil
-	} else {
-		return errors.New(fmt.Sprintf("cannot start backend because it's in %s state", gw.State))
 	}
+	return errors.New(fmt.Sprintf("cannot start backend because it's in %s state", gw.State))
 }
 
 // workersSize gets the number of workers to use for saving email by reading the save_workers_size config value

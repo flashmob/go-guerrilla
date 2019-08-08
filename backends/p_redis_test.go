@@ -49,10 +49,8 @@ func TestRedisGeneric(t *testing.T) {
 	if b, err := ioutil.ReadFile("./test_redis.log"); err != nil {
 		t.Error(err)
 		return
-	} else {
-		if strings.Index(string(b), "SETEX") == -1 {
-			t.Error("Log did not contain SETEX, the log was: ", string(b))
-		}
+	} else if strings.Index(string(b), "SETEX") == -1 {
+		t.Error("Log did not contain SETEX, the log was: ", string(b))
 	}
 
 	if err := os.Remove("./test_redis.log"); err != nil {
