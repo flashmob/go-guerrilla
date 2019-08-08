@@ -77,7 +77,7 @@ func (r *result) String() string {
 	return r.Buffer.String()
 }
 
-// Parses the SMTP code from the first 3 characters of the SMTP message.
+// Code: Parses the SMTP code from the first 3 characters of the SMTP message.
 // Returns 554 if code cannot be parsed.
 func (r *result) Code() int {
 	trimmed := strings.TrimSpace(r.String())
@@ -117,14 +117,14 @@ type processorShutdowner interface {
 type InitializeWith func(backendConfig BackendConfig) error
 type ShutdownWith func() error
 
-// Satisfy ProcessorInitializer interface
+// Initialize: Satisfy ProcessorInitializer interface
 // So we can now pass an anonymous function that implements ProcessorInitializer
 func (i InitializeWith) Initialize(backendConfig BackendConfig) error {
 	// delegate to the anonymous function
 	return i(backendConfig)
 }
 
-// satisfy ProcessorShutdowner interface, same concept as InitializeWith type
+// Shutdown: satisfy ProcessorShutdowner interface, same concept as InitializeWith type
 func (s ShutdownWith) Shutdown() error {
 	// delegate
 	return s()
@@ -132,7 +132,7 @@ func (s ShutdownWith) Shutdown() error {
 
 type Errors []error
 
-// implement the Error interface
+// Error: implement the Error interface
 func (e Errors) Error() string {
 	if len(e) == 1 {
 		return e[0].Error()
@@ -156,7 +156,7 @@ type service struct {
 	mainlog atomic.Value
 }
 
-// Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
+// Log gets loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
 func Log() log.Logger {
 	if v, ok := Svc.mainlog.Load().(log.Logger); ok {
 		return v

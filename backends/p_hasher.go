@@ -28,7 +28,7 @@ func init() {
 	}
 }
 
-// The hasher decorator computes a hash of the email for each recipient
+// Hasher: The hasher decorator computes a hash of the email for each recipient
 // It appends the hashes to envelope's Hashes slice.
 func Hasher() Decorator {
 	return func(p Processor) Processor {

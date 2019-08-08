@@ -154,7 +154,7 @@ const defaultTimeout = 30
 const defaultInterface = "127.0.0.1:2525"
 const defaultMaxSize = int64(10 << 20) // 10 Mebibytes
 
-// Unmarshalls json data into AppConfig struct and any other initialization of the struct
+// Load: Unmarshalls json data into AppConfig struct and any other initialization of the struct
 // also does validation, returns error if validation failed or something went wrong
 func (c *AppConfig) Load(jsonBytes []byte) error {
 	err := json.Unmarshal(jsonBytes, c)
@@ -184,7 +184,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 	return nil
 }
 
-// Emits any configuration change events onto the event bus.
+// EmitChangeEvents: Emits any configuration change events onto the event bus.
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has backend changed?
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
@@ -231,7 +231,7 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	}
 }
 
-// EmitLogReopen emits log reopen events using existing config
+// EmitLogReopenEvents: emits log reopen events using existing config
 func (c *AppConfig) EmitLogReopenEvents(app Guerrilla) {
 	app.Publish(EventConfigLogReopen, c)
 	for _, sc := range c.getServers() {

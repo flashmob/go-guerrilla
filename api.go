@@ -35,7 +35,7 @@ func (d *Daemon) AddProcessor(name string, pc backends.ProcessorConstructor) {
 	backends.Svc.AddProcessor(name, pc)
 }
 
-// Starts the daemon, initializing d.Config, d.Logger and d.Backend with defaults
+// Start starts the daemon, initializing d.Config, d.Logger and d.Backend with defaults
 // can only be called once through the lifetime of the program
 func (d *Daemon) Start() (err error) {
 	if d.g == nil {
@@ -77,7 +77,7 @@ func (d *Daemon) Start() (err error) {
 	return err
 }
 
-// Shuts down the daemon, including servers and backend.
+// Shutdown: Shuts down the daemon, including servers and backend.
 // Do not call Start on it again, use a new server.
 func (d *Daemon) Shutdown() {
 	if d.g != nil {
@@ -120,7 +120,7 @@ func (d *Daemon) SetConfig(c AppConfig) error {
 	return nil
 }
 
-// Reload a config using the passed in AppConfig and emit config change events
+// ReloadConfig: Reload a config using the passed in AppConfig and emit config change events
 func (d *Daemon) ReloadConfig(c AppConfig) error {
 	oldConfig := *d.Config
 	err := d.SetConfig(c)
@@ -134,7 +134,7 @@ func (d *Daemon) ReloadConfig(c AppConfig) error {
 	return nil
 }
 
-// Reload a config from a file and emit config change events
+// ReloadConfigFile: Reload a config from a file and emit config change events
 func (d *Daemon) ReloadConfigFile(path string) error {
 	ac, err := d.LoadConfig(path)
 	if err != nil {
@@ -169,7 +169,7 @@ func (d *Daemon) Subscribe(topic Event, fn interface{}) error {
 	return d.g.Subscribe(topic, fn)
 }
 
-// for publishing config change events
+// Publish: for publishing config change events
 func (d *Daemon) Publish(topic Event, args ...interface{}) {
 	if d.g == nil {
 		return
@@ -177,7 +177,7 @@ func (d *Daemon) Publish(topic Event, args ...interface{}) {
 	d.g.Publish(topic, args...)
 }
 
-// for unsubscribing from config change events
+// Unsubscribe: for unsubscribing from config change events
 func (d *Daemon) Unsubscribe(topic Event, handler interface{}) error {
 	if d.g == nil {
 		for i := range d.subs {

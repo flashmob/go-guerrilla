@@ -150,7 +150,7 @@ func (e *Envelope) Len() int {
 	return len(e.DeliveryHeader) + e.Data.Len()
 }
 
-// Returns a new reader for reading the email contents, including the delivery headers
+// NewReader returns a new reader for reading the email contents, including the delivery headers
 func (e *Envelope) NewReader() io.Reader {
 	return io.MultiReader(
 		strings.NewReader(e.DeliveryHeader),
@@ -185,7 +185,7 @@ func (e *Envelope) ResetTransaction() {
 	e.Values = make(map[string]interface{})
 }
 
-// Seed is called when used with a new connection, once it's accepted
+// Reseed: Seed is called when used with a new connection, once it's accepted
 func (e *Envelope) Reseed(RemoteIP string, clientID uint64) {
 	e.RemoteIP = RemoteIP
 	e.QueuedId = queuedID(clientID)
@@ -198,14 +198,14 @@ func (e *Envelope) PushRcpt(addr Address) {
 	e.RcptTo = append(e.RcptTo, addr)
 }
 
-// Pop removes the last email address that was pushed to the envelope
+// PopRcpt: Pop removes the last email address that was pushed to the envelope
 func (e *Envelope) PopRcpt() Address {
 	ret := e.RcptTo[len(e.RcptTo)-1]
 	e.RcptTo = e.RcptTo[:len(e.RcptTo)-1]
 	return ret
 }
 
-// Converts 7 bit encoded mime header strings to UTF-8
+// MimeHeaderDecode: Converts 7 bit encoded mime header strings to UTF-8
 func MimeHeaderDecode(str string) string {
 	state := 0
 	var buf bytes.Buffer

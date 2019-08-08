@@ -478,7 +478,7 @@ func (s *Parser) quotedString() error {
 	return nil
 }
 
-// qtextSMTP / quoted-pairSMTP
+// QcontentSMTP: qtextSMTP / quoted-pairSMTP
 // quoted-pairSMTP = %d92 %d32-126
 // qtextSMTP = %d32-33 / %d35-91 / %d93-126
 func (s *Parser) QcontentSMTP() error {
