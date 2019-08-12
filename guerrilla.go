@@ -132,6 +132,7 @@ func (g *guerrilla) makeServers() error {
 			errs = append(errs, err)
 			continue
 		} else {
+			sc := sc // pin!
 			server, err := newServer(&sc, g.backend(), g.mainlog())
 			if err != nil {
 				g.mainlog().WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
