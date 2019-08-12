@@ -235,6 +235,6 @@ func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 	return address, err
 }
 
-func (s *server) rcptTo(in []byte) (address mail.Address, err error) {
+func (s *server) rcptTo() (address mail.Address, err error) {
 	return address, err
 }
