@@ -405,10 +405,10 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 // Loads in timestamps for the ssl keys
 func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 	var statErr = func(iface string, err error) error {
-		return fmt.Errorf()
-				"could not stat key for server [%s], %s",
-				iface,
-				err.Error())
+		return fmt.Errorf(
+			"could not stat key for server [%s], %s",
+			iface,
+			err.Error())
 	}
 	if sc.TLS.PrivateKeyFile == "" {
 		sc.TLS._privateKeyFileMtime = time.Now().Unix()
@@ -443,8 +443,7 @@ func (sc *ServerConfig) Validate() error {
 			errs = append(errs, errors.New("PrivateKeyFile is empty"))
 		}
 		if _, err := tls.LoadX509KeyPair(sc.TLS.PublicKeyFile, sc.TLS.PrivateKeyFile); err != nil {
-			errs = append(errs,
-				fmt.Errorf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)
+			errs = append(errs, fmt.Errorf("cannot use TLS config for [%s], %v", sc.ListenInterface, err))
 		}
 	}
 	if len(errs) > 0 {

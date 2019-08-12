@@ -130,17 +130,17 @@ func GetLogger(dest string, level string) (Logger, error) {
 	// we'll use the hook to output instead
 	logrus.Out = ioutil.Discard
 	// setup the hook
-	if h, err := NewLogrusHook(dest); err != nil {
+	h, err := NewLogrusHook(dest)
+	if err != nil {
 		// revert back to stderr
 		logrus.Out = os.Stderr
 		return l, err
-	} else {
-		logrus.Hooks.Add(h)
-		l.h = h
 	}
 
-	return l, nil
+	logrus.Hooks.Add(h)
+	l.h = h
 
+	return l, nil
 }
 
 func newLogrus(o OutputOption, level string) (*log.Logger, error) {
