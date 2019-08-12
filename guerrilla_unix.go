@@ -11,5 +11,5 @@ func getFileLimit() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return uint64(rLimit.Max), nil
+	return rLimit.Max, nil
 }

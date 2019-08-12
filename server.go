@@ -466,7 +466,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailNestedMailCmd)
 					break
 				}
-				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
+				client.MailFrom, err = client.parsePath(input[10:], client.parser.MailFrom)
 				if err != nil {
 					s.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
 					client.sendResponse(err)
@@ -482,7 +482,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.ErrorTooManyRecipients)
 					break
 				}
-				to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
+				to, err := client.parsePath(input[8:], client.parser.RcptTo)
 				if err != nil {
 					s.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
 					client.sendResponse(err.Error())
@@ -541,7 +541,7 @@ func (s *server) handleClient(client *client) {
 
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
-			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
+			client.bufin.setLimit(sc.MaxSize + 1024000) // This a hard limit.
 
 			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
 			if n > sc.MaxSize {

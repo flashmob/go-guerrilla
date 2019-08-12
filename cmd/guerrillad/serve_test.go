@@ -20,7 +20,7 @@ import (
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/tests"
+	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
 )
@@ -672,7 +672,7 @@ func TestServerAddEvent(t *testing.T) {
 	newConf := conf                                      // copy the cmdConfg
 	newConf.Servers = append(newConf.Servers, newServer) // add the new server
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err := ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
+		if err := ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	}
@@ -749,7 +749,7 @@ func TestServerStartEvent(t *testing.T) {
 	newConf.Servers[1].IsEnabled = true
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		//fmt.Println(string(jsonbytes))
-		if err = ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -830,7 +830,7 @@ func TestServerStopEvent(t *testing.T) {
 	newConf.Servers[1].IsEnabled = true // enable 2nd server
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
 		//fmt.Println(string(jsonbytes))
-		if err = ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -863,7 +863,7 @@ func TestServerStopEvent(t *testing.T) {
 	newerConf.Servers[1].IsEnabled = false
 	if jsonbytes, err := json.Marshal(newerConf); err == nil {
 		//fmt.Println(string(jsonbytes))
-		if err = ioutil.WriteFile("configJsonA.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -980,7 +980,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	newConf := conf
 	newConf.AllowedHosts = append(newConf.AllowedHosts, "grr.la")
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonD.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1277,7 +1277,7 @@ func TestBadTLSReload(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonD.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1353,7 +1353,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 	newConf.Servers[0].Timeout = 1
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonD.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {
@@ -1456,7 +1456,7 @@ func TestDebugLevelChange(t *testing.T) {
 	newConf := conf // copy the cmdConfg
 	newConf.LogLevel = log.InfoLevel.String()
 	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err = ioutil.WriteFile("configJsonD.json", []byte(jsonbytes), 0644); err != nil {
+		if err = ioutil.WriteFile("configJsonD.json", jsonbytes, 0644); err != nil {
 			t.Error(err)
 		}
 	} else {

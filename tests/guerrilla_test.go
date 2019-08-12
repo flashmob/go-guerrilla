@@ -249,7 +249,7 @@ func TestGreeting(t *testing.T) {
 			// handle error
 			t.Error("Cannot dial server", config.Servers[0].ListenInterface)
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)); err != nil {
 			t.Error(err)
 		}
 		greeting, err := bufio.NewReader(conn).ReadString('\n')
@@ -276,7 +276,7 @@ func TestGreeting(t *testing.T) {
 			t.Error(err, "Cannot dial server (TLS)", config.Servers[1].ListenInterface)
 			t.FailNow()
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(time.Millisecond * 500))); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)); err != nil {
 			t.Error(err)
 		}
 		greeting, err = bufio.NewReader(conn).ReadString('\n')
