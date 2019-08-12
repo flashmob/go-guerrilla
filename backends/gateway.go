@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"runtime/debug"
+	"strings"
+
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
-	"runtime/debug"
-	"strings"
 )
 
 var ErrProcessorNotFound error
@@ -266,7 +267,7 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 		if makeFunc, ok := processors[name]; ok {
 			decorators = append(decorators, makeFunc())
 		} else {
-			ErrProcessorNotFound = errors.New(fmt.Sprintf("processor [%s] not found", name))
+			ErrProcessorNotFound = fmt.Errorf("processor [%s] not found", name)
 			return nil, ErrProcessorNotFound
 		}
 	}
@@ -371,7 +372,7 @@ func (gw *BackendGateway) Start() error {
 		gw.State = BackendStateRunning
 		return nil
 	} else {
-		return errors.New(fmt.Sprintf("cannot start backend because it's in %s state", gw.State))
+		return fmt.Errorf("cannot start backend because it's in %s state", gw.State)
 	}
 }
 
@@ -441,9 +442,6 @@ func (gw *BackendGateway) workDispatcher(
 			state = dispatcherStatePanic
 			return
 		}
-		// state is dispatcherStateStopped if it reached here
-		return
-
 	}()
 	state = dispatcherStateIdle
 	Log().Infof("processing worker started (#%d)", workerId)

@@ -257,10 +257,10 @@ func TestReopenLog(t *testing.T) {
 		t.Error("could not read logfile")
 		return
 	}
-	if strings.Index(string(b), "re-opened log file") < 0 {
+	if !strings.Contains(string(b), "re-opened log file") {
 		t.Error("Server log did not re-opened, expecting \"re-opened log file\"")
 	}
-	if strings.Index(string(b), "re-opened main log file") < 0 {
+	if !strings.Contains(string(b), "re-opened main log file") {
 		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
 	}
 }
@@ -305,7 +305,7 @@ func TestSetConfig(t *testing.T) {
 	}
 	//fmt.Println(string(b))
 	// has 127.0.0.1:2527 started?
-	if strings.Index(string(b), "127.0.0.1:2527") < 0 {
+	if !strings.Contains(string(b), "127.0.0.1:2527") {
 		t.Error("expecting 127.0.0.1:2527 to start")
 	}
 
@@ -409,18 +409,18 @@ func TestSetAddProcessor(t *testing.T) {
 		return
 	}
 	// lets check for fingerprints
-	if strings.Index(string(b), "another funky recipient") < 0 {
+	if !strings.Contains(string(b), "another funky recipient") {
 		t.Error("did not log: another funky recipient")
 	}
 
-	if strings.Index(string(b), "Another funky email!") < 0 {
+	if !strings.Contains(string(b), "Another funky email!") {
 		t.Error("Did not log: Another funky email!")
 	}
 
-	if strings.Index(string(b), "Funky logger is up & down to funk") < 0 {
+	if !strings.Contains(string(b), "Funky logger is up & down to funk") {
 		t.Error("Did not log: Funky logger is up & down to funk")
 	}
-	if strings.Index(string(b), "The funk has been stopped!") < 0 {
+	if !strings.Contains(string(b), "The funk has been stopped!") {
 		t.Error("Did not log:The funk has been stopped!")
 	}
 
@@ -576,7 +576,7 @@ func TestPubSubAPI(t *testing.T) {
 		return
 	}
 	// lets interrogate the log
-	if strings.Index(string(b), "number1") < 0 {
+	if !strings.Contains(string(b), "number1") {
 		t.Error("it lools like d.ReloadConfig(cfg) did not fire EventConfigPidFile, pidEvHandler not called")
 	}
 
@@ -609,7 +609,7 @@ func TestAPILog(t *testing.T) {
 		return
 	}
 	// lets interrogate the log
-	if strings.Index(string(b), "logtest1") < 0 {
+	if !strings.Contains(string(b), "logtest1") {
 		t.Error("hai was not found in the log, it should have been in tests/testlog")
 	}
 }
@@ -700,11 +700,11 @@ func TestCustomBackendResult(t *testing.T) {
 		return
 	}
 	// lets check for fingerprints
-	if strings.Index(string(b), "451 4.3.0 Error") < 0 {
+	if !strings.Contains(string(b), "451 4.3.0 Error") {
 		t.Error("did not log: 451 4.3.0 Error")
 	}
 
-	if strings.Index(string(b), "system shock") < 0 {
+	if !strings.Contains(string(b), "system shock") {
 		t.Error("did not log: system shock")
 	}
 

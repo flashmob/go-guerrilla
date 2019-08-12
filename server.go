@@ -214,7 +214,7 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	s.hosts.table = make(map[string]bool, len(allowedHosts))
 	s.hosts.wildcards = nil
 	for _, h := range allowedHosts {
-		if strings.Index(h, "*") != -1 {
+		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
@@ -447,14 +447,14 @@ func (s *server) handleClient(client *client) {
 				if toks := bytes.Split(input[8:], []byte{' '}); len(toks) > 0 {
 					for i := range toks {
 						if vals := bytes.Split(toks[i], []byte{'='}); len(vals) == 2 {
-							if bytes.Compare(vals[1], []byte("[UNAVAILABLE]")) == 0 {
+							if bytes.Equal(vals[1], []byte("[UNAVAILABLE]")) {
 								// skip
 								continue
 							}
-							if bytes.Compare(vals[0], []byte("ADDR")) == 0 {
+							if bytes.Equal(vals[0], []byte("ADDR")) {
 								client.RemoteIP = string(vals[1])
 							}
-							if bytes.Compare(vals[0], []byte("HELO")) == 0 {
+							if bytes.Equal(vals[0], []byte("HELO")) {
 								client.Helo = string(vals[1])
 							}
 						}

@@ -276,7 +276,7 @@ func TestConfigChangeEvents(t *testing.T) {
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
 		func(e Event) {
-			if strings.Index(e.String(), "config_change") != -1 {
+			if strings.Contains(e.String(), "config_change") {
 				f := func(c *AppConfig) {
 					expectedEvents[e] = true
 				}

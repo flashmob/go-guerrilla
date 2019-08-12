@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 // AppConfig is the holder of the configuration of the app
@@ -299,7 +300,7 @@ func (c *AppConfig) setDefaults() error {
 				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
 			}
 			if c.Servers[i].ListenInterface == "" {
-				return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
+				return fmt.Errorf("Listen interface not specified for server at index %d", i)
 			}
 			if c.Servers[i].LogFile == "" {
 				c.Servers[i].LogFile = c.LogFile
@@ -404,11 +405,10 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 // Loads in timestamps for the ssl keys
 func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 	var statErr = func(iface string, err error) error {
-		return errors.New(
-			fmt.Sprintf(
+		return fmt.Errorf()
 				"could not stat key for server [%s], %s",
 				iface,
-				err.Error()))
+				err.Error())
 	}
 	if sc.TLS.PrivateKeyFile == "" {
 		sc.TLS._privateKeyFileMtime = time.Now().Unix()
@@ -444,7 +444,7 @@ func (sc *ServerConfig) Validate() error {
 		}
 		if _, err := tls.LoadX509KeyPair(sc.TLS.PublicKeyFile, sc.TLS.PrivateKeyFile); err != nil {
 			errs = append(errs,
-				errors.New(fmt.Sprintf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)))
+				fmt.Errorf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)
 		}
 	}
 	if len(errs) > 0 {
@@ -500,7 +500,7 @@ func getChanges(a interface{}, b interface{}) map[string]interface{} {
 // only able to convert int, bool, slice-of-strings and string; not recursive
 // slices are marshal'd to json for convenient comparison later
 func structtomap(obj interface{}) map[string]interface{} {
-	ret := make(map[string]interface{}, 0)
+	ret := make(map[string]interface{})
 	v := reflect.ValueOf(obj)
 	t := v.Type()
 	for index := 0; index < v.NumField(); index++ {
