@@ -442,6 +442,8 @@ func (gw *BackendGateway) workDispatcher(
 			state = dispatcherStatePanic
 			return
 		}
+		// state is dispatcherStateStopped if it reached here
+
 	}()
 	state = dispatcherStateIdle
 	Log().Infof("processing worker started (#%d)", workerId)
