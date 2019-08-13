@@ -55,7 +55,7 @@ func MysqlChunksaver() *StreamDecorator {
 			sd.Close = func() error {
 				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
 					for _, v := range *parts {
-						fmt.Println(v.Part + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
+						fmt.Println(v.Node + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
 					}
 				}
 				chunkBuffer.Reset()
