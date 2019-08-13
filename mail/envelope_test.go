@@ -1,6 +1,8 @@
 package mail
 
 import (
+	"bufio"
+	"bytes"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -52,7 +54,18 @@ func TestEnvelope(t *testing.T) {
 	if to.String() != "test@example.com" {
 		t.Error("to does not equal test@example.com, it was:", to.String())
 	}
-	e.Data.WriteString("Subject: Test\n\nThis is a test nbnb nbnb hgghgh nnnbnb nbnbnb nbnbn.")
+	// we feed the input through the NewMineDotReader, it will parse the headers while reading the input
+	// the input has a single line header and ends with a line with a single .
+	in := "Subject: =?utf-8?B?55So5oi34oCcRXBpZGVtaW9sb2d5IGluIG51cnNpbmcgYW5kIGg=?=\n\nThis is a test nbnb nbnb hgghgh nnnbnb nbnbnb nbnbn.\n.\n"
+	mdr := NewMimeDotReader(bufio.NewReader(bytes.NewBufferString(in)), 1)
+	i, err := io.Copy(&e.Data, mdr)
+	if err != nil && err != io.EOF {
+		t.Error(err, "cannot copy buffer", i, err)
+	}
+	// pass the parsed headers to the envelope
+	if p := mdr.Parts(); p != nil && len(p) > 0 {
+		e.Header = p[0].Headers
+	}
 
 	addHead := "Delivered-To: " + to.String() + "\n"
 	addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\n"
@@ -64,12 +77,13 @@ func TestEnvelope(t *testing.T) {
 	if len(data) != e.Len() {
 		t.Error("e.Len() is incorrect, it shown ", e.Len(), " but we wanted ", len(data))
 	}
+
 	if err := e.ParseHeaders(); err != nil && err != io.EOF {
 		t.Error("cannot parse headers:", err)
 		return
 	}
-	if e.Subject != "Test" {
-		t.Error("Subject expecting: Test, got:", e.Subject)
+	if e.Subject != "用户“Epidemiology in nursing and h" {
+		t.Error("Subject expecting: 用户“Epidemiology in nursing and h, got:", e.Subject)
 	}
 
 }

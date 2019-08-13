@@ -1,9 +1,12 @@
 package backends
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +74,7 @@ func TestStartProcessStop(t *testing.T) {
 		t.Fail()
 	}
 	if gateway.State != BackendStateRunning {
-		t.Error("gateway.State is not in rinning state, got ", gateway.State)
+		t.Error("gateway.State is not in running state, got ", gateway.State)
 	}
 	// can we place an envelope on the conveyor channel?
 
@@ -83,7 +86,16 @@ func TestStartProcessStop(t *testing.T) {
 		TLS:      true,
 	}
 	e.PushRcpt(mail.Address{User: "test", Host: "example.com"})
-	e.Data.WriteString("Subject:Test\n\nThis is a test.")
+	//e.Data.WriteString("Subject:Test\n\nThis is a test.")
+	in := "Subject: Test\n\nThis is a test.\n.\n"
+	mdr := mail.NewMimeDotReader(bufio.NewReader(bytes.NewBufferString(in)), 1)
+	i, err := io.Copy(&e.Data, mdr)
+	if err != nil && err != io.EOF {
+		t.Error(err, "cannot copy buffer", i, err)
+	}
+	if p := mdr.Parts(); p != nil && len(p) > 0 {
+		e.Header = p[0].Headers
+	}
 	notify := make(chan *notifyMsg)
 
 	gateway.conveyor <- &workerMsg{e, notify, TaskSaveMail, nil}

@@ -553,10 +553,14 @@ func (s *server) handleClient(client *client) {
 				res, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
 
 			} else {
-				// or buffer the entire message
-				n, err = client.Data.ReadFrom(client.smtpReader.DotReader())
+				// or buffer the entire message (parse headers & mime structure as we go along)
+				n, err = client.Data.ReadFrom(client.smtpReader)
 				if n > sc.MaxSize {
 					err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
+				} else {
+					if p := client.smtpReader.Parts(); p != nil && len(p) > 0 {
+						client.Envelope.Header = p[0].Headers
+					}
 				}
 			}
 

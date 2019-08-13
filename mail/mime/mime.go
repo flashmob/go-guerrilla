@@ -20,50 +20,61 @@ import (
 )
 
 const (
-	maxBoundaryLen       = 70 + 10
-	doubleDash           = "--"
-	startPos             = -1
+	// maxBoundaryLen limits the length of the content-boundary.
+	// Technically the limit is 79, but here we are more liberal
+	maxBoundaryLen = 70 + 10
+
+	// doubleDash is the prefix for a content-boundary string. It is also added
+	// as a postfix to a content-boundary string to signal the end of content parts.
+	doubleDash = "--"
+
+	// startPos assigns the pos property when the buffer is set.
+	// The reason why -1 is because peek() implementation becomes simpler
+	startPos = -1
+
+	// headerErrorThreshold how many errors in the header
 	headerErrorThreshold = 4
+
+	// MaxNodes limits the number of items in the Parts array. Effectively limiting
+	// the number of nested calls the parser may make.
+	MaxNodes = 512
 )
 
-type boundaryEnd struct {
-	cb string
-}
-
-func (e boundaryEnd) Error() string {
-	return e.cb
-}
-
 var NotMime = errors.New("not Mime")
+var MaxNodesErr = errors.New("too many mime part nodes")
 
 type captureBuffer struct {
 	bytes.Buffer
-	upper bool
+	upper bool // flag used by acceptHeaderName(), if true, the next accepted chr will be uppercase'd
 }
 
 type Parser struct {
 
 	// related to the state of the parser
 
-	buf                   []byte
-	pos                   int
-	peekOffset            int
-	ch                    byte
-	gotNewSlice, consumed chan bool
-	accept                captureBuffer
-	boundaryMatched       int
-	count                 uint
-	result                chan parserMsg
-	mux                   sync.Mutex
+	buf                   []byte         // input buffer
+	pos                   int            // position in the input buffer
+	peekOffset            int            // peek() ignores \r so we must keep count of how many \r were ignored
+	ch                    byte           // value of byte at current pos in buf[]. At EOF, ch == 0
+	gotNewSlice, consumed chan bool      // flags that control the synchronisation of reads
+	accept                captureBuffer  // input is captured in to this buffer to build strings
+	boundaryMatched       int            // an offset. Used in cases where the boundary string is split over multiple buffers
+	count                 uint           // counts how many times Parse() was called
+	result                chan parserMsg // used to pass the parsing result back to the main goroutine
+	mux                   sync.Mutex     // ensure calls to Parse() and Close() are synchronized
 
 	// Parts is the mime parts tree. The parser builds the parts as it consumes the input
 	// In order to represent the tree in an array, we use Parts.Node to store the name of
 	// each node. The name of the node is the *path* of the node. The root node is always
 	// "1". The child would be "1.1", the next sibling would be "1.2", while the child of
 	// "1.2" would be "1.2.1"
-	Parts           []*Part
-	msgPos          uint
-	lastBoundaryPos uint
+	Parts []*Part
+
+	msgPos uint // global position in the message
+
+	lastBoundaryPos uint // the last msgPos where a boundary was detected
+
+	maxNodes int // the desired number of maximum nodes the parser is limited to
 }
 
 type Part struct {
@@ -254,7 +265,9 @@ func (p *Parser) skip(nBytes int) {
 		p.pos += remainder - 1
 		p.msgPos += uint(remainder - 1)
 		p.next()
-		if nBytes < 1 {
+		if p.ch == 0 {
+			return
+		} else if nBytes < 1 {
 			return
 		}
 	}
@@ -376,7 +389,7 @@ func (p *Parser) transportPadding() (err error) {
 	}
 }
 
-// acceptHeaderName build the header name in the buffer while ensuring that
+// acceptHeaderName builds the header name in the buffer while ensuring that
 // that the case is normalized. Ie. Content-type is written as Content-Type
 func (p *Parser) acceptHeaderName() {
 	if p.accept.upper && p.ch >= 'a' && p.ch <= 'z' {
@@ -457,6 +470,9 @@ func (p *Parser) header(mh *Part) (err error) {
 					switch {
 					case contentType.parameters[i].name == "boundary":
 						mh.ContentBoundary = contentType.parameters[i].value
+						if len(mh.ContentBoundary) >= maxBoundaryLen {
+							return errors.New("boundary exceeded max length")
+						}
 					case contentType.parameters[i].name == "charset":
 						mh.Charset = contentType.parameters[i].value
 					case contentType.parameters[i].name == "name":
@@ -746,15 +762,36 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 // mime scans the mime content and builds the mime-part tree in
 // p.Parts on-the-fly, as more bytes get fed in.
 func (p *Parser) mime(part *Part, cb string) (err error) {
-
+	if len(p.Parts) >= p.maxNodes {
+		for {
+			// skip until the end of the stream (we've stopped parsing due to max nodes)
+			p.skip(len(p.buf) + 1)
+			if p.ch == 0 {
+				break
+			}
+		}
+		if p.maxNodes == 1 {
+			// in this case, only one header item, so assume the end of message is
+			// the ending position of the header
+			p.Parts[0].EndingPos = p.msgPos
+			p.Parts[0].EndingPosBody = p.msgPos
+		} else {
+			err = MaxNodesErr
+		}
+		return
+	}
 	count := 1
 	root := part == nil
 	if root {
 		part = newPart()
 		p.addPart(part, "1")
 		defer func() {
-			if part != nil {
+			if err != MaxNodesErr {
 				part.EndingPosBody = p.lastBoundaryPos
+			} else {
+				// remove the unfinished node (edge case)
+				var parts []*Part
+				p.Parts = append(parts, p.Parts[:p.maxNodes]...)
 			}
 		}()
 	}
@@ -851,6 +888,7 @@ func (p *Parser) reset() {
 	p.ch = 0
 }
 
+// Open prepares the parser for accepting input
 func (p *Parser) Open() {
 	p.Parts = make([]*Part, 0)
 }
@@ -913,11 +951,6 @@ func (p *Parser) Parse(buf []byte) error {
 		go func() {
 			p.next()
 			err := p.mime(nil, "")
-			if _, ok := err.(boundaryEnd); ok {
-				err = nil
-			}
-			fmt.Println("mine() ret", err)
-
 			p.result <- parserMsg{err}
 		}()
 	} else {
@@ -936,17 +969,28 @@ func (p *Parser) Parse(buf []byte) error {
 	}
 }
 
+// ParseError returns true if the type of error was a parse error
+// Returns false if it was an io.EOF or the email was not mime, or exceeded maximum nodes
 func (p *Parser) ParseError(err error) bool {
-	if err != nil && err != io.EOF && err != NotMime {
+	if err != nil && err != io.EOF && err != NotMime && err != MaxNodesErr {
 		return true
 	}
 	return false
 }
 
+// NewMimeParser returns a mime parser. See MaxNodes for how many nodes it's limited to
 func NewMimeParser() *Parser {
 	p := new(Parser)
 	p.consumed = make(chan bool)
 	p.gotNewSlice = make(chan bool)
 	p.result = make(chan parserMsg, 1)
+	p.maxNodes = MaxNodes
+	return p
+}
+
+// NewMimeParser returns a mime parser with a custom MaxNodes value
+func NewMimeParserLimited(maxNodes int) *Parser {
+	p := NewMimeParser()
+	p.maxNodes = maxNodes
 	return p
 }

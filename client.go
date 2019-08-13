@@ -11,7 +11,6 @@ import (
 	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"github.com/flashmob/go-guerrilla/response"
 	"net"
-	"net/textproto"
 	"sync"
 	"time"
 )
@@ -47,7 +46,7 @@ type client struct {
 	conn       net.Conn
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
-	smtpReader *textproto.Reader
+	smtpReader *mail.MimeDotReader
 	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
@@ -70,7 +69,7 @@ func NewClient(conn net.Conn, clientID uint64, logger log.Logger, envelope *mail
 	}
 
 	// used for reading the DATA state
-	c.smtpReader = textproto.NewReader(c.bufin.Reader)
+	c.smtpReader = mail.NewMimeDotReader(c.bufin.Reader, 1)
 	return c
 }
 

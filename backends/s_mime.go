@@ -65,8 +65,8 @@ func StreamMimeAnalyzer() *StreamDecorator {
 				}()
 
 				if parseErr == nil {
-					err := parser.Close()
-					return err
+					_ = parser.Close()
+					return nil
 				} else {
 					return parseErr
 				}
@@ -74,9 +74,7 @@ func StreamMimeAnalyzer() *StreamDecorator {
 
 			return StreamProcessWith(func(p []byte) (int, error) {
 				_ = envelope
-				if len(envelope.Header) > 0 {
 
-				}
 				if _, ok := envelope.Values["MimeParts"]; !ok {
 					envelope.Values["MimeParts"] = &parser.Parts
 				}

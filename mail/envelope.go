@@ -1,7 +1,6 @@
 package mail
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/md5"
 	"errors"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	mimelib "github.com/flashmob/go-guerrilla/mail/mime"
 )
 
 // A WordDecoder decodes MIME headers containing RFC 2047 encoded-words.
@@ -26,8 +27,6 @@ func init() {
 	// use the default decoder, without Gnu inconv. Import the mail/inconv package to use iconv.
 	Dec = mime.WordDecoder{}
 }
-
-const maxHeaderChunk = 1 + (4 << 10) // 4KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
@@ -113,36 +112,28 @@ func queuedID(clientID uint64) string {
 	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
 }
 
+func (e *Envelope) setHeaders(p []*mimelib.Part) {
+	if p != nil && len(p) > 0 {
+		e.Header = p[0].Headers
+	}
+}
+
 // ParseHeaders parses the headers into Header field of the Envelope struct.
 // Data buffer must be full before calling.
 // It assumes that at most 30kb of email data can be a header
 // Decoding of encoding to UTF is only done on the Subject, where the result is assigned to the Subject field
 func (e *Envelope) ParseHeaders() error {
-	var err error
-	if e.Header != nil {
-		return errors.New("headers already parsed")
+	if e.Header == nil {
+		return errors.New("headers not parsed")
 	}
-	buf := e.Data.Bytes()
-	// find where the header ends, assuming that over 30 kb would be max
-	if len(buf) > maxHeaderChunk {
-		buf = buf[:maxHeaderChunk]
+	if len(e.Header) == 0 {
+		return errors.New("header not found")
 	}
-
-	headerEnd := bytes.Index(buf, []byte{'\n', '\n'}) // the first two new-lines chars are the End Of Header
-	if headerEnd > -1 {
-		header := buf[0:headerEnd]
-		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
-		e.Header, err = headerReader.ReadMIMEHeader()
-		if err != nil {
-			// decode the subject
-			if subject, ok := e.Header["Subject"]; ok {
-				e.Subject = MimeHeaderDecode(subject[0])
-			}
-		}
-	} else {
-		err = errors.New("header not found")
+	// decode the subject
+	if subject, ok := e.Header["Subject"]; ok {
+		e.Subject = MimeHeaderDecode(subject[0])
 	}
-	return err
+	return nil
 }
 
 // Len returns the number of bytes that would be in the reader returned by NewReader()

@@ -127,6 +127,10 @@ const (
 	// default timeout for validating rcpt to, if 'gw_val_rcpt_timeout' not present in config
 	validateRcptTimeout = time.Second * 5
 	defaultProcessor    = "Debugger"
+
+	// streamBufferSize sets the size of the buffer for the streaming processors,
+	// can be configured using `stream_buffer_size`
+	streamBufferSize = 4096
 )
 
 func (s backendState) String() string {
@@ -473,7 +477,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 		gw.conveyor = make(chan *workerMsg, workersSize)
 	}
 
-	size := 4096 // 4096
+	size := streamBufferSize
 	if gw.gwConfig.StreamBufferSize > 0 {
 		size = gw.gwConfig.StreamBufferSize
 	}

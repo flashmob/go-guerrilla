@@ -779,7 +779,7 @@ func TestStreamProcessor(t *testing.T) {
 
 }
 
-var mime = `MIME-Version: 1.0
+var mime0 = `MIME-Version: 1.0
 X-Mailer: MailBee.NET 8.0.4.428
 Subject: test 
  subject
@@ -1058,9 +1058,9 @@ func TestStreamMimeProcessor(t *testing.T) {
 	}()
 
 	// change \n to \r\n
-	mime = strings.Replace(mime2, "\n", "\r\n", -1)
+	mime0 = strings.Replace(mime2, "\n", "\r\n", -1)
 	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525", mime); err != nil {
+	if err := talkToServer("127.0.0.1:2525", mime0); err != nil {
 		t.Error(err)
 	}
 
