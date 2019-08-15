@@ -11,8 +11,6 @@ const (
 
 func lastWords(message string, err error) {
 	fmt.Println(message, err.Error())
-	return
-	// panic(err)
 }
 
 func sendMail(i int) {

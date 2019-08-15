@@ -214,7 +214,7 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	s.hosts.table = make(map[string]bool, len(allowedHosts))
 	s.hosts.wildcards = nil
 	for _, h := range allowedHosts {
-		if strings.Index(h, "*") != -1 {
+		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
@@ -447,14 +447,14 @@ func (s *server) handleClient(client *client) {
 				if toks := bytes.Split(input[8:], []byte{' '}); len(toks) > 0 {
 					for i := range toks {
 						if vals := bytes.Split(toks[i], []byte{'='}); len(vals) == 2 {
-							if bytes.Compare(vals[1], []byte("[UNAVAILABLE]")) == 0 {
+							if bytes.Equal(vals[1], []byte("[UNAVAILABLE]")) {
 								// skip
 								continue
 							}
-							if bytes.Compare(vals[0], []byte("ADDR")) == 0 {
+							if bytes.Equal(vals[0], []byte("ADDR")) {
 								client.RemoteIP = string(vals[1])
 							}
-							if bytes.Compare(vals[0], []byte("HELO")) == 0 {
+							if bytes.Equal(vals[0], []byte("HELO")) {
 								client.Helo = string(vals[1])
 							}
 						}
@@ -466,7 +466,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailNestedMailCmd)
 					break
 				}
-				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
+				client.MailFrom, err = client.parsePath(input[10:], client.parser.MailFrom)
 				if err != nil {
 					s.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
 					client.sendResponse(err)
@@ -482,7 +482,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.ErrorTooManyRecipients)
 					break
 				}
-				to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
+				to, err := client.parsePath(input[8:], client.parser.RcptTo)
 				if err != nil {
 					s.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
 					client.sendResponse(err.Error())
@@ -541,7 +541,7 @@ func (s *server) handleClient(client *client) {
 
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
-			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
+			client.bufin.setLimit(sc.MaxSize + 1024000) // This a hard limit.
 
 			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
 			if n > sc.MaxSize {

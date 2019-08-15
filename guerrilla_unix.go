@@ -11,5 +11,6 @@ func getFileLimit() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	//unnecessary type conversions to uint64 is needed for FreeBSD
 	return uint64(rLimit.Max), nil
 }

@@ -13,14 +13,15 @@ var (
 
 func init() {
 	// If version, commit, or build time are not set, make that clear.
+	const unknown = "unknown"
 	if Version == "" {
-		Version = "unknown"
+		Version = unknown
 	}
 	if Commit == "" {
-		Commit = "unknown"
+		Commit = unknown
 	}
 	if BuildTime == "" {
-		BuildTime = "unknown"
+		BuildTime = unknown
 	}
 
 	StartTime = time.Now()

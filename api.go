@@ -127,10 +127,10 @@ func (d *Daemon) ReloadConfig(c AppConfig) error {
 	if err != nil {
 		d.Log().WithError(err).Error("Error while reloading config")
 		return err
-	} else {
-		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
-		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
+	d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+	d.Config.EmitChangeEvents(&oldConfig, d.g)
+
 	return nil
 }
 
