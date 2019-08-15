@@ -35,6 +35,11 @@ const (
 	// headerErrorThreshold how many errors in the header
 	headerErrorThreshold = 4
 
+	multipart         = "multipart"
+	contentTypeHeader = "Content-Type"
+	dot               = "."
+	first             = "1"
+
 	// MaxNodes limits the number of items in the Parts array. Effectively limiting
 	// the number of nested calls the parser may make.
 	MaxNodes = 512
@@ -57,10 +62,10 @@ type Parser struct {
 	peekOffset            int            // peek() ignores \r so we must keep count of how many \r were ignored
 	ch                    byte           // value of byte at current pos in buf[]. At EOF, ch == 0
 	gotNewSlice, consumed chan bool      // flags that control the synchronisation of reads
-	accept                captureBuffer  // input is captured in to this buffer to build strings
+	accept                captureBuffer  // input is captured to this buffer to build strings
 	boundaryMatched       int            // an offset. Used in cases where the boundary string is split over multiple buffers
 	count                 uint           // counts how many times Parse() was called
-	result                chan parserMsg // used to pass the parsing result back to the main goroutine
+	result                chan parserMsg // used to pass the result back to the main goroutine
 	mux                   sync.Mutex     // ensure calls to Parse() and Close() are synchronized
 
 	// Parts is the mime parts tree. The parser builds the parts as it consumes the input
@@ -78,24 +83,36 @@ type Parser struct {
 }
 
 type Part struct {
+
+	// Headers contain the header names and values in a map data-structure
 	Headers textproto.MIMEHeader
 
-	Node string // stores the name for the node that is a part of the resulting mime tree
-
-	StartingPos     uint // including header (after boundary, 0 at the top)
-	StartingPosBody uint // after header \n\n
-	EndingPos       uint // redundant (same as endingPos)
-	EndingPosBody   uint // the char before the boundary marker
-
-	Charset          string
+	// Node stores the name for the node that is a part of the resulting mime tree
+	Node string
+	// StartingPos is the starting position, including header (after boundary, 0 at the top)
+	StartingPos uint
+	// StartingPosBody is the starting position of the body, after header \n\n
+	StartingPosBody uint
+	// EndingPos is the ending position for the part
+	EndingPos uint
+	// EndingPosBody is thr ending position for the body. Typically identical to EndingPos
+	EndingPosBody uint
+	// Charset holds the character-set the part is encoded in, eg. us-ascii
+	Charset string
+	// TransferEncoding holds the transfer encoding that was used to pack the message eg. base64
 	TransferEncoding string
-	ContentBoundary  string
-	ContentType      *contentType
-	ContentBase      string
-
+	// ContentBoundary holds the unique string that was used to delimit multi-parts, eg. --someboundary123
+	ContentBoundary string
+	// ContentType holds the mime content type, eg text/html
+	ContentType *contentType
+	// ContentBase is typically a url
+	ContentBase string
+	// DispositionFi1eName what file-nme to use for the part, eg. image.jpeg
 	DispositionFi1eName string
-	ContentDisposition  string
-	ContentName         string
+	// ContentDisposition describes how to display the part, eg. attachment
+	ContentDisposition string
+	// ContentName as name implies
+	ContentName string
 }
 
 type parameter struct {
@@ -146,6 +163,7 @@ func (c *contentType) params() (ret string) {
 	return c.b.String()
 }
 
+// String returns the contentType type as a string
 func (c *contentType) String() (ret string) {
 	ret = fmt.Sprintf("%s/%s%s", c.superType, c.subType,
 		c.params())
@@ -293,7 +311,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 		if i := bytes.Index(p.buf[p.pos:], []byte(boundary)); i > -1 {
 
 			p.skip(i)
-			p.lastBoundaryPos = p.msgPos // -1 - uint(len(boundary))
+			p.lastBoundaryPos = p.msgPos
 			p.skip(len(boundary))
 
 			if end, err = p.boundaryEnd(); err != nil {
@@ -459,7 +477,7 @@ func (p *Parser) header(mh *Part) (err error) {
 
 		case 1: // header value
 
-			if name == "Content-Type" {
+			if name == contentTypeHeader {
 				var err error
 				contentType, err := p.contentType()
 				if err != nil {
@@ -479,7 +497,7 @@ func (p *Parser) header(mh *Part) (err error) {
 						mh.ContentName = contentType.parameters[i].value
 					}
 				}
-				mh.Headers.Add("Content-Type", contentType.String())
+				mh.Headers.Add(contentTypeHeader, contentType.String())
 				state = 0
 			} else {
 				if (p.ch >= 33 && p.ch <= 126) || p.isWSP(p.ch) {
@@ -784,7 +802,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 	root := part == nil
 	if root {
 		part = newPart()
-		p.addPart(part, "1")
+		p.addPart(part, first)
 		defer func() {
 			if err != MaxNodesErr {
 				part.EndingPosBody = p.lastBoundaryPos
@@ -814,7 +832,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 	if ct != nil && ct.superType == "message" && ct.subType == "rfc822" {
 		var subPart *Part
 		subPart = newPart()
-		subPartId := part.Node + "." + strconv.Itoa(count)
+		subPartId := part.Node + dot + strconv.Itoa(count)
 		subPart.StartingPos = p.msgPos
 		count++
 		p.addPart(subPart, subPartId)
@@ -823,13 +841,13 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 		part.EndingPosBody = p.msgPos
 		return
 	}
-	if ct != nil && ct.superType == "multipart" &&
+	if ct != nil && ct.superType == multipart &&
 		part.ContentBoundary != "" &&
 		part.ContentBoundary != cb /* content-boundary must be different to previous */ {
 		var subPart *Part
 		subPart = newPart()
 		for {
-			subPartId := part.Node + "." + strconv.Itoa(count)
+			subPartId := part.Node + dot + strconv.Itoa(count)
 			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
 				// there was an error with parsing the boundary
 				err = bErr
@@ -855,7 +873,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 					if err != nil {
 						return
 					}
-					subPartId = part.Node + "." + strconv.Itoa(count)
+					subPartId = part.Node + dot + strconv.Itoa(count)
 				} else {
 					subPart.EndingPosBody = p.lastBoundaryPos
 					subPart, count = p.split(subPart, count)
@@ -937,7 +955,6 @@ func (p *Parser) Close() error {
 // error occurred.
 func (p *Parser) Parse(buf []byte) error {
 	defer func() {
-
 		p.mux.Unlock()
 	}()
 	p.mux.Lock()
