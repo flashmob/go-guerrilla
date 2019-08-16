@@ -47,15 +47,15 @@ func init() {
 }
 
 type SQLProcessorConfig struct {
-	Table       string `json:"mail_table"`
-	Driver      string `json:"sql_driver"`
-	DSN         string `json:"sql_dsn"`
-	SQLInsert   string `json:"sql_insert,omitempty"`
-	SQLValues   string `json:"sql_values,omitempty"`
-	PrimaryHost string `json:"primary_mail_host"`
-	MaxOpenConns       int `json:"sql_max_open_conns,omitempty"`
-	MaxIdleConns       int `json:"sql_max_idle_conns,omitempty"`
-	MaxConnLifetimeSec int `json:"sql_max_conn_lifetime_sec,omitempty"`
+	Table              string `json:"mail_table"`
+	Driver             string `json:"sql_driver"`
+	DSN                string `json:"sql_dsn"`
+	SQLInsert          string `json:"sql_insert,omitempty"`
+	SQLValues          string `json:"sql_values,omitempty"`
+	PrimaryHost        string `json:"primary_mail_host"`
+	MaxOpenConns       int    `json:"sql_max_open_conns,omitempty"`
+	MaxIdleConns       int    `json:"sql_max_idle_conns,omitempty"`
+	MaxConnLifetimeSec int    `json:"sql_max_conn_lifetime_sec,omitempty"`
 }
 
 type SQLProcessor struct {
