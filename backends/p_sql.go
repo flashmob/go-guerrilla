@@ -30,7 +30,7 @@ import (
 //               : to the database. The default is 0 (unlimited)
 //               : sql_max_idle_conns - sets the maximum number of connections in the
 //               : idle connection pool. The default is 2
-//               : sql_max_conn_lifetime_sec - sets the maximum amount of time
+//               : sql_max_conn_lifetime - sets the maximum amount of time
 //               : a connection may be reused
 // --------------:-------------------------------------------------------------------
 // Input         : e.Data
