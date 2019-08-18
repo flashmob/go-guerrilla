@@ -47,15 +47,15 @@ func init() {
 }
 
 type SQLProcessorConfig struct {
-	Table              string `json:"mail_table"`
-	Driver             string `json:"sql_driver"`
-	DSN                string `json:"sql_dsn"`
-	SQLInsert          string `json:"sql_insert,omitempty"`
-	SQLValues          string `json:"sql_values,omitempty"`
-	PrimaryHost        string `json:"primary_mail_host"`
-	MaxOpenConns       int    `json:"sql_max_open_conns,omitempty"`
-	MaxIdleConns       int    `json:"sql_max_idle_conns,omitempty"`
-	MaxConnLifetimeSec int    `json:"sql_max_conn_lifetime_sec,omitempty"`
+	Table           string `json:"mail_table"`
+	Driver          string `json:"sql_driver"`
+	DSN             string `json:"sql_dsn"`
+	SQLInsert       string `json:"sql_insert,omitempty"`
+	SQLValues       string `json:"sql_values,omitempty"`
+	PrimaryHost     string `json:"primary_mail_host"`
+	MaxConnLifetime string `json:"sql_max_conn_lifetime,omitempty"`
+	MaxOpenConns    int    `json:"sql_max_open_conns,omitempty"`
+	MaxIdleConns    int    `json:"sql_max_idle_conns,omitempty"`
 }
 
 type SQLProcessor struct {
@@ -77,8 +77,12 @@ func (s *SQLProcessor) connect() (*sql.DB, error) {
 	if s.config.MaxIdleConns != 0 {
 		db.SetMaxIdleConns(s.config.MaxIdleConns)
 	}
-	if s.config.MaxConnLifetimeSec != 0 {
-		db.SetConnMaxLifetime(time.Second * time.Duration(s.config.MaxConnLifetimeSec))
+	if s.config.MaxConnLifetime != "" {
+		t, err := time.ParseDuration(s.config.MaxConnLifetime)
+		if err != nil {
+			return nil, err
+		}
+		db.SetConnMaxLifetime(t)
 	}
 
 	// do we have permission to access the table?
