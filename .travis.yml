@@ -4,14 +4,16 @@ go:
   - 1.9
   - 1.10.x
   - 1.11.x
+  - 1.12.x
   - master
 
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+
 install:
-  - export GO15VENDOREXPERIMENT=1
   - go get -u github.com/golang/dep/cmd/dep
-    # Add Godeps dependencies to GOPATH and PATH
-  - export GOPATH="${TRAVIS_BUILD_DIR}/Godeps/_workspace:$GOPATH"
-  - export PATH="${TRAVIS_BUILD_DIR}/Godeps/_workspace/bin:$PATH"
 
 script:
   - ./.travis.gofmt.sh
