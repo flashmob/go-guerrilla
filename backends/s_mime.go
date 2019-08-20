@@ -16,7 +16,7 @@ import (
 // --------------:-------------------------------------------------------------------
 // Input         :
 // ----------------------------------------------------------------------------------
-// Output        :
+// Output        : MimeParts (of type *[]*mime.Part) stored in the envelope.Values map
 // ----------------------------------------------------------------------------------
 
 func init() {
@@ -78,6 +78,7 @@ func StreamMimeAnalyzer() *StreamDecorator {
 				if _, ok := envelope.Values["MimeParts"]; !ok {
 					envelope.Values["MimeParts"] = &parser.Parts
 				}
+
 				if parseErr == nil {
 					parseErr = parser.Parse(p)
 					if parseErr != nil {

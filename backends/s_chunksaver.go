@@ -9,9 +9,26 @@ import (
 )
 
 func init() {
-	streamers["MysqlChunksaver"] = func() *StreamDecorator {
-		return MysqlChunksaver()
+	streamers["chunksaver"] = func() *StreamDecorator {
+		return Chunksaver()
 	}
+}
+
+type partsInfo struct {
+	Count     uint32 // number of parts
+	TextPart  int    // id of the main text part to display
+	HTMLPart  int    // id of the main html part to display (if any)
+	HasAttach bool
+	Parts     []chunkedParts
+}
+
+type chunkedParts struct {
+	PartId             string
+	ChunkHash          [][32]byte // sequence of hashes the data is stored at
+	ContentType        string
+	Charset            string
+	TransferEncoding   string
+	ContentDisposition string
 }
 
 /**
@@ -24,7 +41,7 @@ func init() {
  * - if didn't receive first chunk for more than x bytes, save normally
  *
  */
-func MysqlChunksaver() *StreamDecorator {
+func Chunksaver() *StreamDecorator {
 
 	sd := &StreamDecorator{}
 	sd.p =

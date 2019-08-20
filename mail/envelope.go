@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	mimelib "github.com/flashmob/go-guerrilla/mail/mime"
 )
 
 // A WordDecoder decodes MIME headers containing RFC 2047 encoded-words.
@@ -110,12 +108,6 @@ func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
 
 func queuedID(clientID uint64) string {
 	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
-}
-
-func (e *Envelope) setHeaders(p []*mimelib.Part) {
-	if p != nil && len(p) > 0 {
-		e.Header = p[0].Headers
-	}
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
