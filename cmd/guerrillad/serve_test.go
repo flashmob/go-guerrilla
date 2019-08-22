@@ -549,7 +549,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		if val == false {
 			t.Error("Did not fire config change event:", event)
 			t.FailNow()
-			break
 		}
 	}
 

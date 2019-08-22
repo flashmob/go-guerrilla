@@ -98,9 +98,9 @@ func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*serve
 	server.mainlogStore.Store(mainlog)
 	server.backendStore.Store(b)
 	if sc.LogFile == "" {
-		// none set, use the same log file as mainlog
+		// none set, use the mainlog for the server log
+		server.logStore.Store(mainlog)
 		server.log().Info("server [" + sc.ListenInterface + "] did not configure a separate log file, so using the main log")
-		server.mainlogStore.Store(mainlog)
 	} else {
 		// set level to same level as mainlog level
 		if l, logOpenError := log.GetLogger(sc.LogFile, server.mainlog().GetLevel()); logOpenError != nil {
@@ -628,13 +628,15 @@ func (s *server) loadLog(value *atomic.Value) log.Logger {
 		return l
 	}
 	out := log.OutputStderr.String()
+	level := log.InfoLevel.String()
 	if value == &s.logStore {
-		sc := s.configStore.Load().(ServerConfig)
-		if sc.LogFile != "" {
+		if sc, ok := s.configStore.Load().(ServerConfig); ok && sc.LogFile != "" {
 			out = sc.LogFile
 		}
+		level = s.mainlog().GetLevel()
 	}
-	l, err := log.GetLogger(out, log.InfoLevel.String())
+
+	l, err := log.GetLogger(out, level)
 	if err == nil {
 		value.Store(l)
 	}

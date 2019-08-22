@@ -562,6 +562,7 @@ func talkToServer(address string) (err error) {
 
 // Test hot config reload
 // Here we forgot to add FunkyLogger so backend will fail to init
+// it will log to stderr at the beginning, but then change to tests/testlog
 
 func TestReloadConfig(t *testing.T) {
 	if err := os.Truncate("tests/testlog", 0); err != nil {

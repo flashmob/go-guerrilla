@@ -64,7 +64,7 @@ func init() {
 	} else {
 		logger, _ = log.GetLogger(config.LogFile, "debug")
 		initErr = setupCerts(config)
-		if err != nil {
+		if initErr != nil {
 			return
 		}
 		backend, _ := getBackend(config.BackendConfig, logger)
@@ -196,7 +196,6 @@ func TestStart(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		//fmt.Println(logOutput)
 		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:4654"); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:4654")
 		}
