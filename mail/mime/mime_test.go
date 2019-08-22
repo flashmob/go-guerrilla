@@ -539,14 +539,14 @@ func TestNestedEmail(t *testing.T) {
 	if err := p.mime(nil, ""); err != nil && err != io.EOF {
 		t.Error(err)
 	}
-	output := email
+	//output := email
 	for part := range p.Parts {
 		//output = replaceAtIndex(output, '#', p.Parts[part].StartingPos)
 		//output = replaceAtIndex(output, '&', p.Parts[part].StartingPosBody)
 		//output = replaceAtIndex(output, '*', p.Parts[part].EndingPosBody)
 		fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
 	}
-	fmt.Print(output)
+	//fmt.Print(output)
 	//fmt.Println(strings.Index(output, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))
 	i := 1
 	_ = i
