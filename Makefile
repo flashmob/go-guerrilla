@@ -14,18 +14,18 @@ help:
 	@echo "  test         to run unittests"
 
 clean:
-	rm -f guerrillad vendor
+	rm -f guerrillad
 
 vendor:
 	dep ensure
 
-guerrillad: vendor
+guerrillad:
 	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
-guerrilladrace: vendor
+guerrilladrace:
 	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
 
-test: vendor
+test:
 	$(GO_VARS) $(GO) test -v .
 	$(GO_VARS) $(GO) test -v ./tests
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad
@@ -33,7 +33,7 @@ test: vendor
 	$(GO_VARS) $(GO) test -v ./backends
 	$(GO_VARS) $(GO) test -v ./mail
 
-testrace: vendor
+testrace:
 	$(GO_VARS) $(GO) test -v . -race
 	$(GO_VARS) $(GO) test -v ./tests -race
 	$(GO_VARS) $(GO) test -v ./cmd/guerrillad -race

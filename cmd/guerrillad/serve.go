@@ -46,7 +46,7 @@ func init() {
 	// log to stderr on startup
 	var err error
 	mainlog, err = log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
-	if err != nil {
+	if err != nil && mainlog != nil {
 		mainlog.WithError(err).Errorf("Failed creating a logger to %s", log.OutputStderr)
 	}
 	cfgFile := "goguerrilla.conf" // deprecated default name

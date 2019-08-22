@@ -370,7 +370,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 				}
 			}
 		}
-		if err != nil && err != io.EOF {
+		if err != io.EOF {
 			return found, err
 		}
 
@@ -549,7 +549,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		if val == false {
 			t.Error("Did not fire config change event:", event)
 			t.FailNow()
-			break
 		}
 	}
 
