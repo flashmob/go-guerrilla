@@ -370,7 +370,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 				}
 			}
 		}
-		if err != nil && err != io.EOF {
+		if err != io.EOF {
 			return found, err
 		}
 

@@ -86,8 +86,8 @@ func (c command) match(in []byte) bool {
 	return bytes.Index(in, []byte(c)) == 0
 }
 
-// Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
+// Creates and returns a new ready-to-run Server from a ServerConfig configuration
+func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*server, error) {
 	server := &server{
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan bool, 1),
@@ -95,20 +95,21 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		state:           ServerStateNew,
 		envelopePool:    mail.NewPool(sc.MaxClients),
 	}
-	server.logStore.Store(l)
-	server.backendStore.Store(b)
-	logFile := sc.LogFile
-	if logFile == "" {
-		// none set, use the same log file as mainlog
-		logFile = server.mainlog().GetLogDest()
-	}
-	// set level to same level as mainlog level
-	mainlog, logOpenError := log.GetLogger(logFile, server.mainlog().GetLevel())
 	server.mainlogStore.Store(mainlog)
-	if logOpenError != nil {
-		server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+	server.backendStore.Store(b)
+	if sc.LogFile == "" {
+		// none set, use the same log file as mainlog
+		server.log().Info("server [" + sc.ListenInterface + "] did not configure a separate log file, so using the main log")
+		server.mainlogStore.Store(mainlog)
+	} else {
+		// set level to same level as mainlog level
+		if l, logOpenError := log.GetLogger(sc.LogFile, server.mainlog().GetLevel()); logOpenError != nil {
+			server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+			return server, logOpenError
+		} else {
+			server.logStore.Store(l)
+		}
 	}
-
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
 	if err := server.configureSSL(); err != nil {
@@ -615,23 +616,27 @@ func (s *server) handleClient(client *client) {
 }
 
 func (s *server) log() log.Logger {
-	if l, ok := s.logStore.Load().(log.Logger); ok {
-		return l
-	}
-	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
-	if err == nil {
-		s.logStore.Store(l)
-	}
-	return l
+	return s.loadLog(&s.logStore)
 }
 
 func (s *server) mainlog() log.Logger {
-	if l, ok := s.mainlogStore.Load().(log.Logger); ok {
+	return s.loadLog(&s.mainlogStore)
+}
+
+func (s *server) loadLog(value *atomic.Value) log.Logger {
+	if l, ok := value.Load().(log.Logger); ok {
 		return l
 	}
-	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
+	out := log.OutputStderr.String()
+	if value == &s.logStore {
+		sc := s.configStore.Load().(ServerConfig)
+		if sc.LogFile != "" {
+			out = sc.LogFile
+		}
+	}
+	l, err := log.GetLogger(out, log.InfoLevel.String())
 	if err == nil {
-		s.mainlogStore.Store(l)
+		value.Store(l)
 	}
 	return l
 }

@@ -300,7 +300,7 @@ func (c *AppConfig) setDefaults() error {
 				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
 			}
 			if c.Servers[i].ListenInterface == "" {
-				return fmt.Errorf("Listen interface not specified for server at index %d", i)
+				return fmt.Errorf("listen interface not specified for server at index %d", i)
 			}
 			if c.Servers[i].LogFile == "" {
 				c.Servers[i].LogFile = c.LogFile

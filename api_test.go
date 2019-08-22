@@ -228,6 +228,7 @@ func TestSMTPLoadFile(t *testing.T) {
 	}
 }
 
+// test re-opening the main log
 func TestReopenLog(t *testing.T) {
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
@@ -263,6 +264,72 @@ func TestReopenLog(t *testing.T) {
 	if !strings.Contains(string(b), "re-opened main log file") {
 		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
 	}
+}
+
+const testServerLog = "tests/testlog-server.log"
+
+// test re-opening the individual server log
+func TestReopenServerLog(t *testing.T) {
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+
+	defer func() {
+		if _, err := os.Stat(testServerLog); err == nil {
+			if err = os.Remove(testServerLog); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+
+	cfg := &AppConfig{LogFile: "tests/testlog", LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
+	sc := ServerConfig{
+		ListenInterface: "127.0.0.1:2526",
+		IsEnabled:       true,
+		LogFile:         testServerLog,
+	}
+	cfg.Servers = append(cfg.Servers, sc)
+	d := Daemon{Config: cfg}
+
+	err := d.Start()
+	if err != nil {
+		t.Error("start error", err)
+	} else {
+		if err := talkToServer("127.0.0.1:2526"); err != nil {
+			t.Error(err)
+		}
+		if err = d.ReopenLogs(); err != nil {
+			t.Error(err)
+		}
+		time.Sleep(time.Second * 2)
+		if err := talkToServer("127.0.0.1:2526"); err != nil {
+			t.Error(err)
+		}
+		d.Shutdown()
+	}
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	if !strings.Contains(string(b), "re-opened log file") {
+		t.Error("Server log did not re-opened, expecting \"re-opened log file\"")
+	}
+	if !strings.Contains(string(b), "re-opened main log file") {
+		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
+	}
+
+	b, err = ioutil.ReadFile(testServerLog)
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+
+	if !strings.Contains(string(b), "Handle client") {
+		t.Error("server log does not contain \"handle client\"")
+	}
+
 }
 
 func TestSetConfig(t *testing.T) {
@@ -450,9 +517,6 @@ func talkToServer(address string) (err error) {
 		return err
 	}
 	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
 	if err != nil {
 		return err
 	}
