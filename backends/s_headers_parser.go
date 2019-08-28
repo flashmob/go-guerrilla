@@ -10,7 +10,7 @@ import (
 // ----------------------------------------------------------------------------------
 // Description   : Populates the envelope.Header value
 //-----------------------------------------------------------------------------------
-// Requires      : "mime" stream stream processor to be enabled before it
+// Requires      : "mimeanalyzer" stream processor to be enabled before it
 // ----------------------------------------------------------------------------------
 // Config Options: None
 // --------------:-------------------------------------------------------------------

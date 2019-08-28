@@ -392,7 +392,6 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	var decorators []*StreamDecorator
 	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
 	if len(cfg) == 0 {
-
 		return streamer{NoopStreamProcessor{}, decorators}, nil
 	}
 	items := strings.Split(cfg, "|")

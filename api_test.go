@@ -445,7 +445,7 @@ func talkToServer(address string, body string) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n")
 	if err != nil {
 		return err
 	}
@@ -504,6 +504,12 @@ func talkToServer(address string, body string) (err error) {
 	if err != nil {
 		return err
 	}
+
+	_, err = fmt.Fprint(conn, "QUIT\r\n")
+	if err != nil {
+		return err
+	}
+
 	_ = str
 	return nil
 }
@@ -1049,9 +1055,6 @@ func TestStreamMimeProcessor(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Second * 15)
-		//panic("here")
-		//		*moo = *moo + 6
-
 		// for debugging deadlocks
 		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 		//os.Exit(1)
@@ -1079,6 +1082,138 @@ func TestStreamMimeProcessor(t *testing.T) {
 
 	if strings.Index(string(b), "Error") != -1 {
 		t.Error("There was an error", string(b))
+	}
+
+}
+
+var email = `From:  Al Gore <vice-president@whitehouse.gov>
+To:  White House Transportation Coordinator <transport@whitehouse.gov>
+Subject: [Fwd: Map of Argentina with Description]
+MIME-Version: 1.0
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed; s=ncr424; d=reliancegeneral.co.in;
+ h=List-Unsubscribe:MIME-Version:From:To:Reply-To:Date:Subject:Content-Type:Content-Transfer-Encoding:Message-ID; i=prospects@prospects.reliancegeneral.co.in;
+ bh=F4UQPGEkpmh54C7v3DL8mm2db1QhZU4gRHR1jDqffG8=;
+ b=MVltcq6/I9b218a370fuNFLNinR9zQcdBSmzttFkZ7TvV2mOsGrzrwORT8PKYq4KNJNOLBahswXf
+   GwaMjDKT/5TXzegdX/L3f/X4bMAEO1einn+nUkVGLK4zVQus+KGqm4oP7uVXjqp70PWXScyWWkbT
+   1PGUwRfPd/HTJG5IUqs=
+Content-Type: multipart/mixed;
+ boundary="D7F------------D7FD5A0B8AB9C65CCDBFA872"
+
+This is a multi-part message in MIME format.
+--D7F------------D7FD5A0B8AB9C65CCDBFA872
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Fred,
+
+Fire up Air Force One!  We're going South!
+
+Thanks,
+Al
+--D7F------------D7FD5A0B8AB9C65CCDBFA872
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+
+Return-Path: <president@whitehouse.gov>
+Received: from mailhost.whitehouse.gov ([192.168.51.200])
+ by heartbeat.whitehouse.gov (8.8.8/8.8.8) with ESMTP id SAA22453
+ for <vice-president@heartbeat.whitehouse.gov>;
+ Mon, 13 Aug 1998 l8:14:23 +1000
+Received: from the_big_box.whitehouse.gov ([192.168.51.50])
+ by mailhost.whitehouse.gov (8.8.8/8.8.7) with ESMTP id RAA20366
+ for vice-president@whitehouse.gov; Mon, 13 Aug 1998 17:42:41 +1000
+ Date: Mon, 13 Aug 1998 17:42:41 +1000
+Message-Id: <199804130742.RAA20366@mai1host.whitehouse.gov>
+From: Bill Clinton <president@whitehouse.gov>
+To: A1 (The Enforcer) Gore <vice-president@whitehouse.gov>
+Subject:  Map of Argentina with Description
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="DC8------------DC8638F443D87A7F0726DEF7"
+
+This is a multi-part message in MIME format.
+--DC8------------DC8638F443D87A7F0726DEF7
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Hi A1,
+
+I finally figured out this MIME thing.  Pretty cool.  I'll send you
+some sax music in .au files next week!
+
+Anyway, the attached image is really too small to get a good look at
+Argentina.  Try this for a much better map:
+
+http://www.1one1yp1anet.com/dest/sam/graphics/map-arg.htm
+
+Then again, shouldn't the CIA have something like that?
+
+Bill
+--DC8------------DC8638F443D87A7F0726DEF7
+Content-Type: image/gif; name="map_of_Argentina.gif"
+Content-Transfer-Encoding: base64
+Content-Disposition: in1ine; fi1ename="map_of_Argentina.gif"
+
+R01GOD1hJQA1AKIAAP/////78P/omn19fQAAAAAAAAAAAAAAACwAAAAAJQA1AAAD7Qi63P5w
+wEmjBCLrnQnhYCgM1wh+pkgqqeC9XrutmBm7hAK3tP31gFcAiFKVQrGFR6kscnonTe7FAAad
+GugmRu3CmiBt57fsVq3Y0VFKnpYdxPC6M7Ze4crnnHum4oN6LFJ1bn5NXTN7OF5fQkN5WYow
+BEN2dkGQGWJtSzqGTICJgnQuTJN/WJsojad9qXMuhIWdjXKjY4tenjo6tjVssk2gaWq3uGNX
+U6ZGxseyk8SasGw3J9GRzdTQky1iHNvcPNNI4TLeKdfMvy0vMqLrItvuxfDW8ubjueDtJufz
+7itICBxISKDBgwgTKjyYAAA7
+--DC8------------DC8638F443D87A7F0726DEF7--
+
+--D7F------------D7FD5A0B8AB9C65CCDBFA872--
+
+`
+
+func TestStreamChunkSaver(t *testing.T) {
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+
+	go func() {
+		time.Sleep(time.Second * 15)
+		// for debugging deadlocks
+		//pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+		//os.Exit(1)
+	}()
+
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"stream_save_process":   "mimeanalyzer|chunksaver",
+			"chunksaver_chunk_size": 1024 * 32,
+			"stream_buffer_size":    1024 * 16,
+		},
+	}
+
+	d := Daemon{Config: cfg}
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+
+	// change \n to \r\n
+	email = strings.Replace(email, "\n", "\r\n", -1)
+	// lets have a talk with the server
+	if err := talkToServer("127.0.0.1:2525", email); err != nil {
+		t.Error(err)
+	}
+	time.Sleep(time.Second * 1)
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+	fmt.Println(string(b))
+
+	// lets check for fingerprints
+	if strings.Index(string(b), "Debug stream") < 0 {
+		//	t.Error("did not log: Debug stream")
 	}
 
 }

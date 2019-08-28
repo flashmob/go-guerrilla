@@ -406,7 +406,7 @@ func TestGatewayTimeout(t *testing.T) {
 		// perform 2 transactions
 		// both should panic.
 		for i := 0; i < 2; i++ {
-			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n"); err != nil {
 				t.Error(err)
 			}
 			if str, err = in.ReadString('\n'); err != nil {
@@ -496,7 +496,7 @@ func TestGatewayPanic(t *testing.T) {
 		// sure that the client waits until processing finishes, and the
 		// timeout event is captured.
 		for i := 0; i < 2; i++ {
-			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n"); err != nil {
 				t.Error(err)
 			}
 			if _, err = in.ReadString('\n'); err != nil {

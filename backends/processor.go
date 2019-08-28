@@ -68,7 +68,7 @@ func (f StreamProcessWith) Write(p []byte) (n int, err error) {
 type DefaultStreamProcessor struct{}
 
 func (w DefaultStreamProcessor) Write(p []byte) (n int, err error) {
-	return 0, nil
+	return len(p), nil
 }
 
 type NoopStreamProcessor struct{ DefaultStreamProcessor }

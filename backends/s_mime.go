@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/mime"
-	"strconv"
 )
 
 // ----------------------------------------------------------------------------------
@@ -54,15 +53,17 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			}
 
 			sd.Close = func() error {
-
-				defer func() {
-					// todo remove debugging
-					if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
-						for _, v := range *parts {
-							fmt.Println(v.Node + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
+				/*
+					defer func() {
+						// todo remove, for debugging only
+						if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
+							for _, v := range *parts {
+								fmt.Println(v.Node + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
+							}
 						}
-					}
-				}()
+					}()
+
+				*/
 
 				if parseErr == nil {
 					_ = parser.Close()

@@ -357,7 +357,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 					// advance the pointer
 					p.skip(len(boundary) - p.boundaryMatched)
 
-					p.lastBoundaryPos = p.msgPos - uint(len(boundary)) // -1
+					p.lastBoundaryPos = p.msgPos - uint(len(boundary))
 					end, err = p.boundaryEnd()
 					if err != nil {
 						return
@@ -593,7 +593,6 @@ func (p *Parser) contentType() (result contentType, err error) {
 			}
 			continue
 		}
-
 		if p.ch > 32 && p.ch < 128 && !isTokenSpecial[p.ch] {
 			if key, val, err := p.parameter(); err != nil {
 				return result, err
@@ -714,7 +713,6 @@ func (p *Parser) quotedString() (str string, err error) {
 	for {
 		switch state {
 		case 0: // inside quotes
-
 			if p.ch == '"' {
 				p.next()
 				return
@@ -843,7 +841,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 	}
 	if ct != nil && ct.superType == multipart &&
 		part.ContentBoundary != "" &&
-		part.ContentBoundary != cb /* content-boundary must be different to previous */ {
+		part.ContentBoundary != cb { /* content-boundary must be different to previous */
 		var subPart *Part
 		subPart = newPart()
 		for {
@@ -949,7 +947,7 @@ func (p *Parser) Close() error {
 // The parser doesn't decode any input. All it does
 // is collect information about where the different MIME parts
 // start and end, and other meta-data. This data can be used
-// later down the stack to determine how to store/display
+// later down the stack to determine how to store/decode/display
 // the messages
 // returns error if there's a parse error, except io.EOF when no
 // error occurred.

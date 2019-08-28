@@ -35,6 +35,10 @@ test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v ./response
 	$(GO_VARS) $(GO) test -v ./backends
 	$(GO_VARS) $(GO) test -v ./mail
+	$(GO_VARS) $(GO) test -v ./mail/mime
+	$(GO_VARS) $(GO) test -v ./mail/encoding
+	$(GO_VARS) $(GO) test -v ./mail/iconv
+	$(GO_VARS) $(GO) test -v ./mail/rfc5321
 
 testrace: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v . -race
