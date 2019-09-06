@@ -1153,7 +1153,7 @@ Bill
 --DC8------------DC8638F443D87A7F0726DEF7
 Content-Type: image/gif; name="map_of_Argentina.gif"
 Content-Transfer-Encoding: base64
-Content-Disposition: in1ine; fi1ename="map_of_Argentina.gif"
+Content-Disposition: inline; filename="map_of_Argentina.gif"
 
 R01GOD1hJQA1AKIAAP/////78P/omn19fQAAAAAAAAAAAAAAACwAAAAAJQA1AAAD7Qi63P5w
 wEmjBCLrnQnhYCgM1wh+pkgqqeC9XrutmBm7hAK3tP31gFcAiFKVQrGFR6kscnonTe7FAAad

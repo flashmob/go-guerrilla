@@ -1,7 +1,6 @@
 package backends
 
 import (
-	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/mime"
 	"testing"
@@ -11,7 +10,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	var in string
 
 	var buf chunkedBytesBuffer
-	buf.CapTo(64)
+	buf.capTo(64)
 
 	// the data to write is over-aligned
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789abcdef` // len == 130
@@ -22,7 +21,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is aligned
 	var buf2 chunkedBytesBuffer
-	buf2.CapTo(64)
+	buf2.capTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789abcd` // len == 128
 	i, _ = buf2.Write([]byte(in[:]))
 	if i != len(in) {
@@ -31,7 +30,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is under-aligned
 	var buf3 chunkedBytesBuffer
-	buf3.CapTo(64)
+	buf3.capTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789ab` // len == 126
 	i, _ = buf3.Write([]byte(in[:]))
 	if i != len(in) {
@@ -40,9 +39,20 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is smaller than the buffer
 	var buf4 chunkedBytesBuffer
-	buf4.CapTo(64)
+	buf4.capTo(64)
 	in = `1234567890` // len == 10
 	i, _ = buf4.Write([]byte(in[:]))
+	if i != len(in) {
+		t.Error("did not write", len(in), "bytes")
+	}
+
+	// what if the buffer already contains stuff before Write is called
+	// and the buffer len is smaller than the len of the slice of bytes we pass it?
+	var buf5 chunkedBytesBuffer
+	buf5.capTo(5)
+	buf5.buf = append(buf5.buf, []byte{'a', 'b', 'c'}...)
+	in = `1234567890` // len == 10
+	i, _ = buf5.Write([]byte(in[:]))
 	if i != len(in) {
 		t.Error("did not write", len(in), "bytes")
 	}
@@ -115,7 +125,7 @@ Bill
 --DC8------------DC8638F443D87A7F0726DEF7
 Content-Type: image/gif; name="map_of_Argentina.gif"
 Content-Transfer-Encoding: base64
-Content-Disposition: in1ine; fi1ename="map_of_Argentina.gif"
+Content-Disposition: attachment; filename="map_of_Argentina.gif"
 
 R01GOD1hJQA1AKIAAP/////78P/omn19fQAAAAAAAAAAAAAAACwAAAAAJQA1AAAD7Qi63P5w
 wEmjBCLrnQnhYCgM1wh+pkgqqeC9XrutmBm7hAK3tP31gFcAiFKVQrGFR6kscnonTe7FAAad
@@ -155,6 +165,8 @@ func TestChunkSaverWrite(t *testing.T) {
 	// let's test it
 
 	writeIt(parser, t, stream, 128)
+
+	_ = chunksaver.Close()
 	//writeIt(parser, t, stream, 128000)
 }
 
@@ -164,15 +176,18 @@ func writeIt(parser *mime.Parser, t *testing.T, stream StreamProcessor, size int
 		size = len(email)
 	}
 	total := 0
+
+	// break up the email in to chunks of size. Feed them through the mime parser
 	for msgPos := 0; msgPos < len(email); msgPos += size {
 		err := parser.Parse([]byte(email)[msgPos : msgPos+size])
 		if err != nil {
 			t.Error(err)
 			t.Fail()
 		}
+		// todo: close parser on last chunk! (and finalize save)
 		cut := msgPos + size
 		if cut > len(email) {
-			fmt.Println("* ", msgPos+cut-len(email))
+			// the last chunk make be shorter than size
 			cut -= cut - len(email)
 		}
 		i, _ := stream.Write([]byte(email)[msgPos:cut])
