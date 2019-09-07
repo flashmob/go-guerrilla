@@ -146,6 +146,8 @@ func TestChunkSaverWrite(t *testing.T) {
 
 	// place the parse result in an envelope
 	e := mail.NewEnvelope("127.0.0.1", 1)
+	to, _ := mail.NewAddress("test@test.com")
+	e.RcptTo = append(e.RcptTo, to)
 	e.Values["MimeParts"] = &parser.Parts
 
 	// instantiate the chunk saver
@@ -157,6 +159,7 @@ func TestChunkSaverWrite(t *testing.T) {
 	// configure the buffer cap
 	bc := BackendConfig{}
 	bc["chunksaver_chunk_size"] = 64
+	bc["chunksaver_storage_engine"] = "memory"
 	_ = Svc.initialize(bc)
 
 	// give it the envelope with the parse results
