@@ -155,7 +155,7 @@ func TestChunkSaverWrite(t *testing.T) {
 
 	// add the default processor as the underlying processor for chunksaver
 	// this will also set our Open, Close and Initialize functions
-	stream := chunksaver.p(DefaultStreamProcessor{})
+	stream := chunksaver.P(DefaultStreamProcessor{})
 	// configure the buffer cap
 	bc := BackendConfig{}
 	bc["chunksaver_chunk_size"] = 64

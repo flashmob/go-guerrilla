@@ -599,7 +599,7 @@ const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunksaver_
 func Chunksaver() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 
 		func(sp StreamProcessor) StreamProcessor {
 			var (

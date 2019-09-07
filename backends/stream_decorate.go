@@ -10,7 +10,7 @@ type streamCloseWith func() error
 
 // We define what a decorator to our processor will look like
 type StreamDecorator struct {
-	p     func(StreamProcessor) StreamProcessor
+	P     func(StreamProcessor) StreamProcessor
 	e     *mail.Envelope
 	Close streamCloseWith
 	Open  streamOpenWith
@@ -19,7 +19,7 @@ type StreamDecorator struct {
 // DecorateStream will decorate a StreamProcessor with a slice of passed decorators
 func DecorateStream(c StreamProcessor, ds []*StreamDecorator) (StreamProcessor, []*StreamDecorator) {
 	for i := range ds {
-		c = ds[i].p(c)
+		c = ds[i].P(c)
 	}
 	return c, ds
 }

@@ -27,7 +27,7 @@ func init() {
 func StreamMimeAnalyzer() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 
 		func(sp StreamProcessor) StreamProcessor {
 

@@ -14,7 +14,7 @@ func init() {
 
 func StreamDebug() *StreamDecorator {
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 
 		func(sp StreamProcessor) StreamProcessor {
 

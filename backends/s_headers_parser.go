@@ -32,7 +32,7 @@ const stateHeaderNotScanning = 1
 func StreamHeadersParser() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 		func(sp StreamProcessor) StreamProcessor {
 			var (
 				state    byte

@@ -19,7 +19,7 @@ func init() {
 
 func StreamDecompress() *StreamDecorator {
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 		func(sp StreamProcessor) StreamProcessor {
 			var (
 				zr io.ReadCloser

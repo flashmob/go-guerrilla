@@ -15,7 +15,7 @@ func init() {
 // Buffers to envelope.Data so that processors can be called on it at the end
 func StreamProcess() *StreamDecorator {
 	sd := &StreamDecorator{}
-	sd.p =
+	sd.P =
 
 		func(sp StreamProcessor) StreamProcessor {
 			var envelope *mail.Envelope
