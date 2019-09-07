@@ -214,8 +214,33 @@ type ChunkSaverStorage interface {
 	OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error)
 	CloseMessage(mailID uint64, size uint, partsInfo *partsInfo, subject string, deliveryID string, to string, from string) error
 	AddChunk(data []byte, hash []byte) error
+	GetEmail(mailID uint64) (*ChunkSaverEmail, error)
+	GetChunk(hash []byte) (*ChunkSaverChunk, error)
 	Initialize(cfg BackendConfig) error
 	Shutdown() (err error)
+}
+
+type ChunkSaverEmail struct {
+	mailID     uint64
+	createdAt  time.Time
+	size       uint
+	from       string
+	to         string
+	partsInfo  []byte
+	helo       string
+	subject    string
+	deliveryID string
+	recipient  string
+	ipv4       net.IPAddr
+	ipv6       net.IPAddr
+	returnPath string
+	isTLS      bool
+}
+
+type ChunkSaverChunk struct {
+	modifiedAt     time.Time
+	referenceCount uint
+	data           []byte
 }
 
 type chunkSaverMemoryEmail struct {
@@ -324,6 +349,13 @@ func (m *chunkSaverMemory) Shutdown() (err error) {
 	m.emails = nil
 	m.chunks = nil
 	return nil
+}
+
+func (m *chunkSaverMemory) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
+	return &ChunkSaverEmail{}, nil
+}
+func (m *chunkSaverMemory) GetChunk(hash []byte) (*ChunkSaverChunk, error) {
+	return &ChunkSaverChunk{}, nil
 }
 
 type chunkSaverSQLConfig struct {
@@ -524,6 +556,25 @@ func (c *chunkSaverSQL) Shutdown() (err error) {
 		}
 	}
 	return err
+}
+
+func (m *chunkSaverSQL) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
+	return &ChunkSaverEmail{}, nil
+}
+func (m *chunkSaverSQL) GetChunk(hash []byte) (*ChunkSaverChunk, error) {
+	return &ChunkSaverChunk{}, nil
+}
+
+type chunkMailReader struct {
+	db ChunkSaverStorage
+}
+
+func (r *chunkMailReader) Info(mailID uint64) (*partsInfo, error) {
+	return &partsInfo{}, nil
+}
+
+func (r *chunkMailReader) Read(p []byte) (int, error) {
+	return 1, nil
 }
 
 const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunksaver_chunk_size config setting
