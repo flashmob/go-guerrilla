@@ -1,8 +1,12 @@
 package backends
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/mime"
+	"io"
+	"net"
 	"testing"
 )
 
@@ -187,10 +191,9 @@ func writeIt(parser *mime.Parser, t *testing.T, stream StreamProcessor, size int
 			t.Error(err)
 			t.Fail()
 		}
-		// todo: close parser on last chunk! (and finalize save)
 		cut := msgPos + size
 		if cut > len(email) {
-			// the last chunk make be shorter than size
+			// the last chunk may be shorter than size
 			cut -= cut - len(email)
 		}
 		i, _ := stream.Write([]byte(email)[msgPos:cut])
@@ -199,4 +202,38 @@ func writeIt(parser *mime.Parser, t *testing.T, stream StreamProcessor, size int
 	if total != len(email) {
 		t.Error("short write, total is", total, "but len(email) is", len(email))
 	}
+}
+
+func TestMemDB(t *testing.T) {
+
+	m := new(chunkSaverMemory)
+
+	from := "test@grr.la"
+	helo := "home-host"
+	recipient := "mw@grr.la"
+	ipAddress := net.IPAddr{IP: net.ParseIP("127.0.0.1")}
+	returnPath := "moo@grr.la"
+	isTLS := false
+	_ = m.Initialize(nil)
+	mailID, err := m.OpenMessage(from, helo, recipient, ipAddress, returnPath, isTLS)
+	if err != nil {
+		t.Error(err)
+	}
+	buff := newChunkedBytesBufferMime()
+	buff.capTo(64)
+	buff.setDatabase(m)
+	written, err := io.Copy(buff, bytes.NewBuffer([]byte(email)))
+	if err != nil {
+		t.Error(err, "written:", written)
+	} else {
+		err = m.CloseMessage(mailID, written, &PartsInfo{}, "a subject", "1234abc", "a@grr.la", "b@grr.la")
+		if err != nil {
+			t.Error(err, "close message:", written)
+		}
+		email, _ := m.GetEmail(mailID)
+		fmt.Println(email)
+		//_ = m.GetChunks()
+		_ = m.Shutdown()
+	}
+
 }

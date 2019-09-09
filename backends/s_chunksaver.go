@@ -50,7 +50,7 @@ func init() {
 	}
 }
 
-type partsInfo struct {
+type PartsInfo struct {
 	Count     uint32        `json:"c"`  // number of parts
 	TextPart  int           `json:"tp"` // id of the main text part to display
 	HTMLPart  int           `json:"hp"` // id of the main html part to display (if any)
@@ -74,7 +74,7 @@ type chunkedBytesBuffer struct {
 	flushTrigger flushEvent
 }
 
-// flush signals that it's time to write the buffer out to disk
+// flush signals that it's time to write the buffer out to storage
 func (c *chunkedBytesBuffer) flush() error {
 	if len(c.buf) == 0 {
 		return nil
@@ -134,18 +134,18 @@ func (c *chunkedBytesBuffer) capTo(n int) {
 type chunkedBytesBufferMime struct {
 	chunkedBytesBuffer
 	current  *mime.Part
-	info     partsInfo
+	info     PartsInfo
 	md5      hash.Hash
 	database ChunkSaverStorage
 }
 
 func newChunkedBytesBufferMime() *chunkedBytesBufferMime {
 	b := new(chunkedBytesBufferMime)
-
 	b.chunkedBytesBuffer.flushTrigger = func() error {
 		return b.onFlush()
 	}
 	b.md5 = md5.New()
+	b.buf = make([]byte, 0, chunkMaxBytes)
 	return b
 }
 
@@ -212,7 +212,7 @@ func (b *chunkedBytesBufferMime) Reset() {
 
 func (b *chunkedBytesBufferMime) currentPart(cp *mime.Part) {
 	if b.current == nil {
-		b.info = partsInfo{Parts: make([]chunkedPart, 0, 3), TextPart: -1, HTMLPart: -1}
+		b.info = PartsInfo{Parts: make([]chunkedPart, 0, 3), TextPart: -1, HTMLPart: -1}
 	}
 	b.current = cp
 
@@ -221,10 +221,10 @@ func (b *chunkedBytesBufferMime) currentPart(cp *mime.Part) {
 // ChunkSaverStorage defines an interface to the storage layer (the database)
 type ChunkSaverStorage interface {
 	OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error)
-	CloseMessage(mailID uint64, size uint, partsInfo *partsInfo, subject string, deliveryID string, to string, from string) error
+	CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error
 	AddChunk(data []byte, hash []byte) error
 	GetEmail(mailID uint64) (*ChunkSaverEmail, error)
-	GetChunk(hash []byte) (*ChunkSaverChunk, error)
+	GetChunks(hash ...[]byte) ([]*ChunkSaverChunk, error)
 	Initialize(cfg BackendConfig) error
 	Shutdown() (err error)
 }
@@ -232,10 +232,10 @@ type ChunkSaverStorage interface {
 type ChunkSaverEmail struct {
 	mailID     uint64
 	createdAt  time.Time
-	size       uint
+	size       int64
 	from       string
 	to         string
-	partsInfo  []byte
+	partsInfo  PartsInfo
 	helo       string
 	subject    string
 	deliveryID string
@@ -255,7 +255,7 @@ type ChunkSaverChunk struct {
 type chunkSaverMemoryEmail struct {
 	mailID     uint64
 	createdAt  time.Time
-	size       uint
+	size       int64
 	from       string
 	to         string
 	partsInfo  []byte
@@ -305,7 +305,7 @@ func (m *chunkSaverMemory) OpenMessage(from string, helo string, recipient strin
 	return email.mailID, nil
 }
 
-func (m *chunkSaverMemory) CloseMessage(mailID uint64, size uint, partsInfo *partsInfo, subject string, deliveryID string, to string, from string) error {
+func (m *chunkSaverMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
 	if email := m.emails[mailID-m.IDOffset]; email == nil {
 		return errors.New("email not found")
 	} else {
@@ -329,7 +329,7 @@ func (m *chunkSaverMemory) AddChunk(data []byte, hash []byte) error {
 	if len(hash) != 16 {
 		return errors.New("invalid hash")
 	}
-	copy(key[:], hash[0:15])
+	copy(key[:], hash[0:16])
 	if chunk, ok := m.chunks[key]; ok {
 		// only update the counters and update time
 		chunk.referenceCount++
@@ -339,8 +339,10 @@ func (m *chunkSaverMemory) AddChunk(data []byte, hash []byte) error {
 		newChunk := chunkSaverMemoryChunk{
 			modifiedAt:     time.Now(),
 			referenceCount: 1,
-			data:           data,
+			//	data:           data,
 		}
+		newChunk.data = make([]byte, len(data))
+		copy(newChunk.data, data)
 		m.chunks[key] = &newChunk
 	}
 	return nil
@@ -361,10 +363,46 @@ func (m *chunkSaverMemory) Shutdown() (err error) {
 }
 
 func (m *chunkSaverMemory) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
-	return &ChunkSaverEmail{}, nil
+	if size := uint64(len(m.emails)) - m.IDOffset; size > mailID-m.IDOffset {
+		return nil, errors.New("mail not found")
+	}
+	email := m.emails[mailID-m.IDOffset]
+	pi := &PartsInfo{}
+	if err := json.Unmarshal(email.partsInfo, pi); err != nil {
+		return nil, err
+	}
+	return &ChunkSaverEmail{
+		mailID:     email.mailID,
+		createdAt:  email.createdAt,
+		size:       email.size,
+		from:       email.from,
+		to:         email.to,
+		partsInfo:  *pi,
+		helo:       email.helo,
+		subject:    email.subject,
+		deliveryID: email.deliveryID,
+		recipient:  email.recipient,
+		ipv4:       email.ipv4,
+		ipv6:       email.ipv6,
+		returnPath: email.returnPath,
+		isTLS:      email.isTLS,
+	}, nil
 }
-func (m *chunkSaverMemory) GetChunk(hash []byte) (*ChunkSaverChunk, error) {
-	return &ChunkSaverChunk{}, nil
+
+func (m *chunkSaverMemory) GetChunks(hash ...[]byte) ([]*ChunkSaverChunk, error) {
+	result := make([]*ChunkSaverChunk, 0, len(hash))
+	var key [16]byte
+	for i := range hash {
+		copy(key[:], hash[i][:16])
+		if c, ok := m.chunks[key]; ok {
+			result = append(result, &ChunkSaverChunk{
+				modifiedAt:     c.modifiedAt,
+				referenceCount: c.referenceCount,
+				data:           c.data,
+			})
+		}
+	}
+	return result, nil
 }
 
 type chunkSaverSQLConfig struct {
@@ -520,7 +558,7 @@ func (c *chunkSaverSQL) AddChunk(data []byte, hash []byte) error {
 	return nil
 }
 
-func (c *chunkSaverSQL) CloseMessage(mailID uint64, size uint, partsInfo *partsInfo, subject string, deliveryID string, to string, from string) error {
+func (c *chunkSaverSQL) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
 	partsInfoJson, err := json.Marshal(partsInfo)
 	if err != nil {
 		return err
@@ -570,16 +608,17 @@ func (c *chunkSaverSQL) Shutdown() (err error) {
 func (m *chunkSaverSQL) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
 	return &ChunkSaverEmail{}, nil
 }
-func (m *chunkSaverSQL) GetChunk(hash []byte) (*ChunkSaverChunk, error) {
-	return &ChunkSaverChunk{}, nil
+func (m *chunkSaverSQL) GetChunks(hash ...[]byte) ([]*ChunkSaverChunk, error) {
+	result := make([]*ChunkSaverChunk, 0, len(hash))
+	return result, nil
 }
 
 type chunkMailReader struct {
 	db ChunkSaverStorage
 }
 
-func (r *chunkMailReader) Info(mailID uint64) (*partsInfo, error) {
-	return &partsInfo{}, nil
+func (r *chunkMailReader) Info(mailID uint64) (*PartsInfo, error) {
+	return &PartsInfo{}, nil
 }
 
 func (r *chunkMailReader) Read(p []byte) (int, error) {
@@ -607,7 +646,7 @@ func Chunksaver() *StreamDecorator {
 				chunkBuffer *chunkedBytesBufferMime
 				msgPos      uint
 				database    ChunkSaverStorage
-				written     uint
+				written     int64
 
 				// just some headers from the first mime-part
 				subject string
@@ -747,7 +786,7 @@ func Chunksaver() *StreamDecorator {
 						// break chunk on new part
 						if part.StartingPos > 0 && part.StartingPos > msgPos {
 							count, _ = chunkBuffer.Write(p[pos : part.StartingPos-offset])
-							written += uint(count)
+							written += int64(count)
 							err = chunkBuffer.flush()
 							if err != nil {
 								return count, err
@@ -759,7 +798,7 @@ func Chunksaver() *StreamDecorator {
 						// break chunk on header
 						if part.StartingPosBody > 0 && part.StartingPosBody >= msgPos {
 							count, _ = chunkBuffer.Write(p[pos : part.StartingPosBody-offset])
-							written += uint(count)
+							written += int64(count)
 							err = chunkBuffer.flush()
 							if err != nil {
 								return count, err
@@ -771,7 +810,7 @@ func Chunksaver() *StreamDecorator {
 						// if on the latest (last) part, and yet there is still data to be written out
 						if len(*parts)-1 == i && len(p)-1 > pos {
 							count, _ = chunkBuffer.Write(p[pos:])
-							written += uint(count)
+							written += int64(count)
 							pos += count
 							msgPos += uint(count)
 						}
