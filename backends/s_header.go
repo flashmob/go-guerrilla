@@ -72,9 +72,9 @@ func StreamHeader() *StreamDecorator {
 	}))
 
 	sd := &StreamDecorator{}
-	sd.P =
+	sd.Decorate =
 
-		func(sp StreamProcessor) StreamProcessor {
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var sh *streamHeader
 
 			sd.Open = func(e *mail.Envelope) error {

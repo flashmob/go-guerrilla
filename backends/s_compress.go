@@ -15,8 +15,8 @@ func init() {
 
 func StreamCompress() *StreamDecorator {
 	sd := &StreamDecorator{}
-	sd.P =
-		func(sp StreamProcessor) StreamProcessor {
+	sd.Decorate =
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var zw io.WriteCloser
 			sd.Open = func(e *mail.Envelope) error {
 				var err error

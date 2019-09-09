@@ -27,9 +27,9 @@ func init() {
 func StreamMimeAnalyzer() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.P =
+	sd.Decorate =
 
-		func(sp StreamProcessor) StreamProcessor {
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 
 			var (
 				envelope *mail.Envelope

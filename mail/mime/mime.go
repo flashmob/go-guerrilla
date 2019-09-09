@@ -80,6 +80,8 @@ type Parser struct {
 	lastBoundaryPos uint // the last msgPos where a boundary was detected
 
 	maxNodes int // the desired number of maximum nodes the parser is limited to
+
+	w io.Writer // underlying io.Writer
 }
 
 type Part struct {
@@ -941,6 +943,16 @@ func (p *Parser) Close() error {
 
 }
 
+func (p *Parser) Write(buf []byte) (int, error) {
+	if err := p.Parse(buf); err != nil {
+		return len(buf), err
+	}
+	if p.w != nil {
+		return p.w.Write(buf)
+	}
+	return len(buf), nil
+}
+
 // Parse takes a byte stream, and feeds it to the MIME Parser, then
 // waits for the Parser to consume all input before returning.
 // The parser will build a parse tree in p.Parts
@@ -1000,6 +1012,12 @@ func NewMimeParser() *Parser {
 	p.gotNewSlice = make(chan bool)
 	p.result = make(chan parserMsg, 1)
 	p.maxNodes = MaxNodes
+	return p
+}
+
+func NewMimeParserWriter(w io.Writer) *Parser {
+	p := NewMimeParser()
+	p.w = w
 	return p
 }
 

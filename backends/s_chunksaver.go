@@ -638,9 +638,8 @@ const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunksaver_
 func Chunksaver() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.P =
-
-		func(sp StreamProcessor) StreamProcessor {
+	sd.Decorate =
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var (
 				envelope    *mail.Envelope
 				chunkBuffer *chunkedBytesBufferMime
@@ -655,34 +654,48 @@ func Chunksaver() *StreamDecorator {
 			)
 
 			var config *chunkSaverConfig
+			// optional dependency injection
+			for i := range a {
+				if db, ok := a[i].(ChunkSaverStorage); ok {
+					database = db
+				}
+				if buff, ok := a[i].(*chunkedBytesBufferMime); ok {
+					chunkBuffer = buff
+				}
+			}
 
 			Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-				chunkBuffer = newChunkedBytesBufferMime()
+				if chunkBuffer == nil {
+					chunkBuffer = newChunkedBytesBufferMime()
+				}
 				configType := BaseConfig(&chunkSaverConfig{})
 				bcfg, err := Svc.ExtractConfig(backendConfig, configType)
 				if err != nil {
 					return err
 				}
 				config = bcfg.(*chunkSaverConfig)
+				// configure storage if none was injected
+				if database == nil {
+					if config.StorageEngine == "memory" {
+						db := new(chunkSaverMemory)
+						database = db
+					} else {
+						db := new(chunkSaverSQL)
+						database = db
+					}
+				}
+				err = database.Initialize(backendConfig)
+				if err != nil {
+					return err
+				}
+				// configure the chunks buffer
 				if config.ChunkMaxBytes > 0 {
 					chunkBuffer.capTo(config.ChunkMaxBytes)
 				} else {
 					chunkBuffer.capTo(chunkMaxBytes)
 				}
-				if config.StorageEngine == "memory" {
-					db := new(chunkSaverMemory)
-					chunkBuffer.setDatabase(db)
-					database = db
-				} else {
-					db := new(chunkSaverSQL)
-					chunkBuffer.setDatabase(db)
-					database = db
-				}
+				chunkBuffer.setDatabase(database)
 
-				err = database.Initialize(backendConfig)
-				if err != nil {
-					return err
-				}
 				return nil
 			}))
 

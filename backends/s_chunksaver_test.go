@@ -6,7 +6,6 @@ import (
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/mime"
 	"io"
-	"net"
 	"testing"
 )
 
@@ -145,21 +144,25 @@ U6ZGxseyk8SasGw3J9GRzdTQky1iHNvcPNNI4TLeKdfMvy0vMqLrItvuxfDW8ubjueDtJufz
 
 func TestChunkSaverWrite(t *testing.T) {
 
-	// parse an email
-	parser := mime.NewMimeParser()
-
 	// place the parse result in an envelope
 	e := mail.NewEnvelope("127.0.0.1", 1)
 	to, _ := mail.NewAddress("test@test.com")
 	e.RcptTo = append(e.RcptTo, to)
-	e.Values["MimeParts"] = &parser.Parts
 
+	store := new(chunkSaverMemory)
+	chunkBuffer := newChunkedBytesBufferMime()
 	// instantiate the chunk saver
 	chunksaver := streamers["chunksaver"]()
+	mimeanalyzer := streamers["mimeanalyzer"]()
 
 	// add the default processor as the underlying processor for chunksaver
-	// this will also set our Open, Close and Initialize functions
-	stream := chunksaver.P(DefaultStreamProcessor{})
+	// and chain it with mimeanalyzer.
+	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
+	// This will also set our Open, Close and Initialize functions
+	// we also inject a ChunkSaverStorage and a ChunkedBytesBufferMime
+
+	stream := mimeanalyzer.Decorate(chunksaver.Decorate(DefaultStreamProcessor{}, store, chunkBuffer))
+
 	// configure the buffer cap
 	bc := BackendConfig{}
 	bc["chunksaver_chunk_size"] = 64
@@ -168,72 +171,14 @@ func TestChunkSaverWrite(t *testing.T) {
 
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)
+	_ = mimeanalyzer.Open(e)
 
-	// let's test it
-
-	writeIt(parser, t, stream, 128)
-
-	_ = chunksaver.Close()
-	//writeIt(parser, t, stream, 128000)
-}
-
-func writeIt(parser *mime.Parser, t *testing.T, stream StreamProcessor, size int) {
-
-	if size > len(email) {
-		size = len(email)
-	}
-	total := 0
-
-	// break up the email in to chunks of size. Feed them through the mime parser
-	for msgPos := 0; msgPos < len(email); msgPos += size {
-		err := parser.Parse([]byte(email)[msgPos : msgPos+size])
-		if err != nil {
-			t.Error(err)
-			t.Fail()
-		}
-		cut := msgPos + size
-		if cut > len(email) {
-			// the last chunk may be shorter than size
-			cut -= cut - len(email)
-		}
-		i, _ := stream.Write([]byte(email)[msgPos:cut])
-		total += i
-	}
-	if total != len(email) {
-		t.Error("short write, total is", total, "but len(email) is", len(email))
-	}
-}
-
-func TestMemDB(t *testing.T) {
-
-	m := new(chunkSaverMemory)
-
-	from := "test@grr.la"
-	helo := "home-host"
-	recipient := "mw@grr.la"
-	ipAddress := net.IPAddr{IP: net.ParseIP("127.0.0.1")}
-	returnPath := "moo@grr.la"
-	isTLS := false
-	_ = m.Initialize(nil)
-	mailID, err := m.OpenMessage(from, helo, recipient, ipAddress, returnPath, isTLS)
-	if err != nil {
+	buf := make([]byte, 128)
+	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email)), buf); err != nil {
 		t.Error(err)
-	}
-	buff := newChunkedBytesBufferMime()
-	buff.capTo(64)
-	buff.setDatabase(m)
-	written, err := io.Copy(buff, bytes.NewBuffer([]byte(email)))
-	if err != nil {
-		t.Error(err, "written:", written)
 	} else {
-		err = m.CloseMessage(mailID, written, &PartsInfo{}, "a subject", "1234abc", "a@grr.la", "b@grr.la")
-		if err != nil {
-			t.Error(err, "close message:", written)
-		}
-		email, _ := m.GetEmail(mailID)
-		fmt.Println(email)
-		//_ = m.GetChunks()
-		_ = m.Shutdown()
+		_ = mimeanalyzer.Close()
+		_ = chunksaver.Close()
+		fmt.Println("written:", written)
 	}
-
 }

@@ -32,8 +32,8 @@ const stateHeaderNotScanning = 1
 func StreamHeadersParser() *StreamDecorator {
 
 	sd := &StreamDecorator{}
-	sd.P =
-		func(sp StreamProcessor) StreamProcessor {
+	sd.Decorate =
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var (
 				state    byte
 				envelope *mail.Envelope

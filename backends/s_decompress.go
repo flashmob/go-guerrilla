@@ -19,8 +19,8 @@ func init() {
 
 func StreamDecompress() *StreamDecorator {
 	sd := &StreamDecorator{}
-	sd.P =
-		func(sp StreamProcessor) StreamProcessor {
+	sd.Decorate =
+		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var (
 				zr io.ReadCloser
 				pr *io.PipeReader
