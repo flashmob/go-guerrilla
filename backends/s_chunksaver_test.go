@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/mime"
 	"io"
 	"testing"
 )
@@ -150,7 +149,8 @@ func TestChunkSaverWrite(t *testing.T) {
 	e.RcptTo = append(e.RcptTo, to)
 
 	store := new(chunkSaverMemory)
-	chunkBuffer := newChunkedBytesBufferMime()
+	chunkBuffer := newChunkedBytesBufferMime(9)
+	//chunkBuffer.setDatabase(store)
 	// instantiate the chunk saver
 	chunksaver := streamers["chunksaver"]()
 	mimeanalyzer := streamers["mimeanalyzer"]()
@@ -165,8 +165,9 @@ func TestChunkSaverWrite(t *testing.T) {
 
 	// configure the buffer cap
 	bc := BackendConfig{}
-	bc["chunksaver_chunk_size"] = 64
+	bc["chunksaver_chunk_size"] = 1024
 	bc["chunksaver_storage_engine"] = "memory"
+	bc["chunksaver_compress_level"] = 9
 	_ = Svc.initialize(bc)
 
 	// give it the envelope with the parse results
@@ -180,5 +181,10 @@ func TestChunkSaverWrite(t *testing.T) {
 		_ = mimeanalyzer.Close()
 		_ = chunksaver.Close()
 		fmt.Println("written:", written)
+		total := 0
+		for _, chunk := range store.chunks {
+			total += len(chunk.data)
+		}
+		fmt.Println("compressed", total, "saved:", written-int64(total))
 	}
 }
