@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"io"
+	"os"
 	"testing"
 )
 
@@ -147,9 +148,10 @@ func TestChunkSaverWrite(t *testing.T) {
 	e := mail.NewEnvelope("127.0.0.1", 1)
 	to, _ := mail.NewAddress("test@test.com")
 	e.RcptTo = append(e.RcptTo, to)
+	e.MailFrom, _ = mail.NewAddress("test@test.com")
 
 	store := new(chunkSaverMemory)
-	chunkBuffer := newChunkedBytesBufferMime(9)
+	chunkBuffer := newChunkedBytesBufferMime()
 	//chunkBuffer.setDatabase(store)
 	// instantiate the chunk saver
 	chunksaver := streamers["chunksaver"]()
@@ -165,9 +167,9 @@ func TestChunkSaverWrite(t *testing.T) {
 
 	// configure the buffer cap
 	bc := BackendConfig{}
-	bc["chunksaver_chunk_size"] = 1024
+	bc["chunksaver_chunk_size"] = 8000
 	bc["chunksaver_storage_engine"] = "memory"
-	bc["chunksaver_compress_level"] = 9
+	bc["chunksaver_compress_level"] = 0
 	_ = Svc.initialize(bc)
 
 	// give it the envelope with the parse results
@@ -186,5 +188,17 @@ func TestChunkSaverWrite(t *testing.T) {
 			total += len(chunk.data)
 		}
 		fmt.Println("compressed", total, "saved:", written-int64(total))
+		email, err := store.GetEmail(1)
+		if err != nil {
+			t.Error("email not found")
+			return
+		}
+		r, err := NewChunkMailReader(store, email, 1)
+		for i := 0; i < len(email.partsInfo.Parts); i++ {
+			fmt.Println("seeking to", i+1)
+			r.SeekPart(i)
+			io.Copy(os.Stdout, r)
+		}
+
 	}
 }
