@@ -142,6 +142,13 @@ U6ZGxseyk8SasGw3J9GRzdTQky1iHNvcPNNI4TLeKdfMvy0vMqLrItvuxfDW8ubjueDtJufz
 
 `
 
+func TestHashBytes(t *testing.T) {
+	var h HashKey
+	h.Pack([]byte{222, 23, 3, 128, 1, 23, 3, 128, 1, 23, 3, 255, 1, 23, 3, 128})
+	if h.String() != "3hcDgAEXA4ABFwP/ARcDgA" {
+		t.Error("expecting 3hcDgAEXA4ABFwP/ARcDgA got", h.String())
+	}
+}
 func TestChunkSaverWrite(t *testing.T) {
 
 	// place the parse result in an envelope
@@ -187,6 +194,7 @@ func TestChunkSaverWrite(t *testing.T) {
 		for _, chunk := range store.chunks {
 			total += len(chunk.data)
 		}
+		// 8A9m4qGsTU4wQB1wAgBEVw==
 		fmt.Println("compressed", total, "saved:", written-int64(total))
 		email, err := store.GetEmail(1)
 		if err != nil {

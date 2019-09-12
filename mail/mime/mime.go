@@ -440,7 +440,6 @@ func (p *Parser) header(mh *Part) (err error) {
 	}()
 
 	for {
-
 		switch state {
 		case 0: // header name
 			if (p.ch >= 33 && p.ch <= 126) && p.ch != ':' {
@@ -476,9 +475,7 @@ func (p *Parser) header(mh *Part) (err error) {
 				p.next()
 				continue
 			}
-
 		case 1: // header value
-
 			if name == contentTypeHeader {
 				var err error
 				contentType, err := p.contentType()
@@ -846,6 +843,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 		part.ContentBoundary != cb { /* content-boundary must be different to previous */
 		var subPart *Part
 		subPart = newPart()
+		subPart.ContentBoundary = part.ContentBoundary
 		for {
 			subPartId := part.Node + dot + strconv.Itoa(count)
 			if end, bErr := p.boundary(part.ContentBoundary); bErr != nil {
@@ -891,10 +889,12 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 }
 
 func (p *Parser) split(subPart *Part, count int) (*Part, int) {
+	cb := subPart.ContentBoundary
 	subPart = nil
 	count++
 	subPart = newPart()
 	subPart.StartingPos = p.msgPos
+	subPart.ContentBoundary = cb
 	return subPart, count
 }
 
