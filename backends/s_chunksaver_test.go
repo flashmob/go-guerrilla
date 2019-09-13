@@ -201,9 +201,15 @@ func TestChunkSaverWrite(t *testing.T) {
 			t.Error("email not found")
 			return
 		}
-		r, err := NewChunkMailReader(store, email, 1)
-		for i := 0; i < len(email.partsInfo.Parts); i++ {
-			fmt.Println("seeking to", i+1)
+
+		// this should read all parts
+		r, err := NewChunkMailReader(store, email, 0)
+		io.Copy(os.Stdout, r)
+
+		// test the seek feature
+		r, err = NewChunkMailReader(store, email, 1)
+		for i := 1; i < len(email.partsInfo.Parts); i++ {
+			fmt.Println("seeking to", i)
 			r.SeekPart(i)
 			io.Copy(os.Stdout, r)
 		}
