@@ -204,15 +204,38 @@ func TestChunkSaverWrite(t *testing.T) {
 
 		// this should read all parts
 		r, err := NewChunkMailReader(store, email, 0)
-		io.Copy(os.Stdout, r)
+		if w, err := io.Copy(os.Stdout, r); err != nil {
+			t.Error(err)
+		} else if w != email.size {
+			t.Error("email.size != number of bytes copied from reader")
+		}
 
 		// test the seek feature
 		r, err = NewChunkMailReader(store, email, 1)
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+		// we start from 1 because if the start from 0, all the parts will be read
 		for i := 1; i < len(email.partsInfo.Parts); i++ {
 			fmt.Println("seeking to", i)
-			r.SeekPart(i)
-			io.Copy(os.Stdout, r)
+			err = r.SeekPart(i)
+			if err != nil {
+				t.Error(err)
+			}
+			w, err := io.Copy(os.Stdout, r)
+			if err != nil {
+				t.Error(err)
+			}
+			if w != int64(email.partsInfo.Parts[i].Size) {
+				t.Error("incorrect size, expecting", email.partsInfo.Parts[i].Size, "but read:", w)
+			}
 		}
+
+		dr, err := NewChunkPartDecoder(store, email, 5)
+		_ = dr
+		var decoded bytes.Buffer
+		io.Copy(&decoded, dr)
 
 	}
 }

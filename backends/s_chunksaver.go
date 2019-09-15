@@ -45,8 +45,8 @@ import (
 type chunkSaverConfig struct {
 	// ChunkMaxBytes controls the maximum buffer size for saving
 	// 16KB default.
-	ChunkMaxBytes int    `json:"chunksaver_chunk_size"`
-	StorageEngine string `json:"chunksaver_storage_engine"`
+	ChunkMaxBytes int    `json:"chunksaver_chunk_size,omitempty"`
+	StorageEngine string `json:"chunksaver_storage_engine,omitempty"`
 	CompressLevel int    `json:"chunksaver_compress_level,omitempty"`
 }
 
@@ -822,6 +822,72 @@ func (r *chunkMailReader) Read(p []byte) (n int, err error) {
 	}
 	err = io.EOF
 	return n, err
+}
+
+// chunkPartDecoder decodes base64 and q-printable, then converting charset to utf8-8
+type chunkPartDecoder struct {
+	*chunkMailReader
+	buf   []byte
+	state int
+}
+
+func NewChunkPartDecoder(db ChunkSaverStorage, email *ChunkSaverEmail, part int) (*chunkPartDecoder, error) {
+	r, err := NewChunkMailReader(db, email, part)
+	if err != nil {
+		return nil, err
+	}
+	decoder := new(chunkPartDecoder)
+	decoder.chunkMailReader = r
+	return decoder, nil
+}
+
+const chunkSaverNL = '\n'
+
+func (r *chunkPartDecoder) Read(p []byte) (n int, err error) {
+	var part *ChunkedPart
+	//if cap(p) != cap(r.buf) {
+	r.buf = make([]byte, len(p), cap(p))
+	//} else {
+	//	r.buf = r.buf[:0] // length back to 0
+	//}
+	part = &r.email.partsInfo.Parts[r.part]
+	_ = part
+	var offset int
+
+	for {
+		n, err = r.chunkMailReader.Read(r.buf)
+		if n == 0 {
+			return
+		}
+		switch r.state {
+		case 0:
+			// finding the start of the header
+			if i := bytes.IndexByte(r.buf, chunkSaverNL); i != -1 {
+				if i+1 < len(r.buf) {
+					if r.buf[i+1] == chunkSaverNL {
+						r.state = 3 // found the header
+					}
+				}
+				r.state = 1
+			}
+			// a new []byte will be loaded on next iteration
+
+		case 1:
+
+			if i := bytes.Index(r.buf, []byte("\n")); i != -1 {
+				r.state = 2
+			}
+		}
+		//offset++
+		if offset > len(p) {
+			break
+		}
+	}
+
+	return
+
+	//if r.email.partsInfo.Parts[r.part].
+
 }
 
 const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunksaver_chunk_size config setting
