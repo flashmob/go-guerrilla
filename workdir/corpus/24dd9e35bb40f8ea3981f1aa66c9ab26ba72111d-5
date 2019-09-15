@@ -1,0 +1,19 @@
+RCPT TO:t3@test.com>
+DAT
+RCPT TO:3@test.com>
+DATA
+.
+RCPT TO:st@test.com>
+DATA
+RCt3@test.com>.
+RCPT TO:3@test
+DATA
+.
+.
+RCPT TO:t3@test.com>
+DATA
+.
+RCPT TO:st@test.com>
+DATA
+RCPTPT TO:st@test.com>DATA
+.

@@ -1,0 +1,15 @@
+
+MAIL FROM:
+RSET
+NOOP
+RCPT TO:
+RCPT TO:
+
+
+
+HELP
+NOOP
+RCPT TO:
+RCPT TO:t3@test.com>
+DATA
+.

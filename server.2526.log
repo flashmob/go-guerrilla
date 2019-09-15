@@ -1,0 +1,5 @@
+time="2019-08-22T01:13:39+10:00" level=info msg="Listening on TCP 127.0.0.1:2526"
+time="2019-08-22T01:14:20+10:00" level=info msg="Handle client [127.0.0.1], id: 1"
+time="2019-08-22T01:14:28+10:00" level=info msg="Handle client [127.0.0.1], id: 2"
+time="2019-08-22T02:33:01+10:00" level=info msg="Server [127.0.0.1:2526] has stopped accepting new clients"
+time="2019-08-22T02:33:01+10:00" level=info msg="shutting down pool [127.0.0.1:2526]"

@@ -1,0 +1,3 @@
+RCPT TO:<test@test.com> som> BODY=8BITMIME<test2@test.com>:test3@test.com>
+DATA
+ 

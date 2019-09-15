@@ -1,0 +1,8 @@
+HELO
+MAIL FROM:er@e> =
+
+
+RCPT TO:t2@t
+RCPT TO:t2
+RCPT TO:t3@t
+

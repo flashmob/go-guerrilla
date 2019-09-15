@@ -1,0 +1,14 @@
+x
+EHLO
+EHLO
+EHLO
+EHLO
+OM<useexaplom> DY=4BIMIE
+HELP
+NP
+RPT TO<tet@test.om>
+RCPT TO:<tests@test.com>
+DATA
+No sject
+..ow you'r jt3mebodyhat i ud to kn
+
