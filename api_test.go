@@ -1183,9 +1183,10 @@ func TestStreamChunkSaver(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"stream_save_process":   "mimeanalyzer|chunksaver",
-			"chunksaver_chunk_size": 1024 * 32,
-			"stream_buffer_size":    1024 * 16,
+			"stream_save_process":       "mimeanalyzer|chunksaver",
+			"chunksaver_chunk_size":     1024 * 32,
+			"stream_buffer_size":        1024 * 16,
+			"chunksaver_storage_engine": "memory",
 		},
 	}
 
