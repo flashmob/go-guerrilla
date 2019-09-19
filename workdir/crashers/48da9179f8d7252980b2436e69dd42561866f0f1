@@ -1,7 +1,0 @@
-EHLO test.com
-MAIL FROM:<user@example.com>
-ct: Testing Subject
-
-..Some body
-..
-.

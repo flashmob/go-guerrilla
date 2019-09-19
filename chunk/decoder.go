@@ -12,9 +12,8 @@ const (
 	encodingTypeQP
 )
 
-// chunkPartDecoder decodes base64 and q-printable, then converting charset to utf8-8
-type chunkPartDecoder struct {
-	*chunkMailReader
+// decoder decodes base64 and q-printable, then converting charset to UTF-8
+type decoder struct {
 	buf     []byte
 	state   int
 	charset string
@@ -25,17 +24,16 @@ type chunkPartDecoder struct {
 // db Storage, email *Email, part int)
 /*
 
-r, err := NewChunkMailReader(db, email, part)
+r, err := NewChunkedReader(db, email, part)
 	if err != nil {
 		return nil, err
 	}
 
 */
 
-// NewChunkPartDecoder reads from an underlying reader r and decodes base64, quoted-printable and decodes
-func NewChunkPartDecoder(r io.Reader, enc transportEncoding, charset string) (*chunkPartDecoder, error) {
-
-	decoder := new(chunkPartDecoder)
+// NewDecoder reads from an underlying reader r and decodes base64, quoted-printable and decodes
+func NewDecoder(r io.Reader, encoding transportEncoding, charset string) (*decoder, error) {
+	decoder := new(decoder)
 	decoder.r = r
 	return decoder, nil
 }
@@ -48,14 +46,12 @@ const (
 	decoderStateDecode
 )
 
-func (r *chunkPartDecoder) Read(p []byte) (n int, err error) {
-	var part *ChunkedPart
-	//if cap(p) != cap(r.buf) {
+func (r *decoder) Read(p []byte) (n int, err error) {
+
 	r.buf = make([]byte, len(p), cap(p))
 	var start, buffered int
-	part = &r.email.partsInfo.Parts[r.part]
-	_ = part
-	buffered, err = r.chunkMailReader.Read(r.buf)
+
+	buffered, err = r.r.Read(r.buf)
 	if buffered == 0 {
 		return
 	}
@@ -90,7 +86,7 @@ func (r *chunkPartDecoder) Read(p []byte) (n int, err error) {
 			return
 		}
 
-		buffered, err = r.chunkMailReader.Read(r.buf)
+		buffered, err = r.r.Read(r.buf)
 		if buffered == 0 {
 			return
 		}

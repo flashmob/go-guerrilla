@@ -1,5 +1,0 @@
-	"EHLO test.com\r\nMAIL " +
-	"FROM:<user@example.c" +
-	"om>\r\nct: Testing Sub" +
-	"ject\r\n\r\n..Some body\r" +
-	"\n..\r\n.\r\n"

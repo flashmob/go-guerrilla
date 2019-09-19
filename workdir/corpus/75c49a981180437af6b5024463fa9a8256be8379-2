@@ -1,11 +1,0 @@
-MAIL FROM:
-RCPT TO:
-RCPT TO:
-RCPT TO:3@test.com>
-DATA
-Subject: =?ISO-2022-JP?B?GyRCMX5KZxsoQlVSTBskQiROGyhC?=
-	=?ISO-2022-JP?B?GyRCJCpDTiRpJDshQxsoQi0xOTYbJEIhbiU5JUglbSVzJTAlPCVtGyhC?=
-
-..Now you're just somebody that i used to =
-know
-.

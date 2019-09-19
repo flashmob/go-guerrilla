@@ -1,8 +1,0 @@
-HELO test.com
-MAIL FROM: =?ISO-2022-JP?B?GyRCJEEkUCRSJG0bKEIgbWFnMiAwMDAxMDIzMTIw?= <mailmag@mag2tegami.com>RCPT TO:<test@test.com>
-DATA
-Subject: =?ISO-2022-JP?B?GyRCIVokQSRQJFIkbSFbGyhCMy8xMhskQktcRnw9Kk47ISobKEI=?=
- =?ISO-2022-JP?B?UFBDLUUbJEIhViVeJTklPyE8JTMlcyVGJXMlRCFXGyhC?=
-
-..Now you're just somebody that i used to know
-.

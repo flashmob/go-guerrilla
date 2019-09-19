@@ -38,7 +38,7 @@ func init() {
 	}
 }
 
-type ChunkSaverConfig struct {
+type Config struct {
 	// ChunkMaxBytes controls the maximum buffer size for saving
 	// 16KB default.
 	ChunkMaxBytes int    `json:"chunksaver_chunk_size,omitempty"`
@@ -76,7 +76,7 @@ func Chunksaver() *backends.StreamDecorator {
 				progress int // tracks which mime parts were processed
 			)
 
-			var config *ChunkSaverConfig
+			var config *Config
 			// optional dependency injection
 			for i := range a {
 				if db, ok := a[i].(Storage); ok {
@@ -89,12 +89,12 @@ func Chunksaver() *backends.StreamDecorator {
 
 			backends.Svc.AddInitializer(backends.InitializeWith(func(backendConfig backends.BackendConfig) error {
 
-				configType := backends.BaseConfig(&ChunkSaverConfig{})
+				configType := backends.BaseConfig(&Config{})
 				bcfg, err := backends.Svc.ExtractConfig(backendConfig, configType)
 				if err != nil {
 					return err
 				}
-				config = bcfg.(*ChunkSaverConfig)
+				config = bcfg.(*Config)
 				if chunkBuffer == nil {
 					chunkBuffer = NewChunkedBytesBufferMime()
 				}
@@ -105,7 +105,7 @@ func Chunksaver() *backends.StreamDecorator {
 						db.CompressLevel = config.CompressLevel
 						database = db
 					} else {
-						db := new(ChunkSaverSQL)
+						db := new(StoreSQL)
 						database = db
 					}
 				}

@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-type chunkMailReader struct {
+type chunkedReader struct {
 	db    Storage
 	email *Email
 	// part requests a part. If 0, all the parts are read sequentially
@@ -16,10 +16,10 @@ type chunkMailReader struct {
 	cache cachedChunks
 }
 
-// NewChunkMailReader loads the email and selects which mime-part Read will read, starting from 1
+// NewChunkedReader loads the email and selects which mime-part Read will read, starting from 1
 // if part is 0, Read will read in the entire message. 1 selects the first part, 2 2nd, and so on..
-func NewChunkMailReader(db Storage, email *Email, part int) (*chunkMailReader, error) {
-	r := new(chunkMailReader)
+func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error) {
+	r := new(chunkedReader)
 	r.db = db
 	r.part = part
 	if email == nil {
@@ -38,7 +38,7 @@ func NewChunkMailReader(db Storage, email *Email, part int) (*chunkMailReader, e
 
 // SeekPart resets the reader. The part argument chooses which part Read will read in
 // If part is 0, Read will return the entire message
-func (r *chunkMailReader) SeekPart(part int) error {
+func (r *chunkedReader) SeekPart(part int) error {
 	if parts := len(r.email.partsInfo.Parts); parts == 0 {
 		return errors.New("email has mime parts missing")
 	} else if part > parts {
@@ -146,7 +146,7 @@ func (c *cachedChunks) empty() {
 }
 
 // Read implements the io.Reader interface
-func (r *chunkMailReader) Read(p []byte) (n int, err error) {
+func (r *chunkedReader) Read(p []byte) (n int, err error) {
 	var length int
 	for ; r.i < len(r.email.partsInfo.Parts); r.i++ {
 		length, err = r.cache.warm(r.email.partsInfo.Parts[r.i].ChunkHash...)

@@ -3,11 +3,13 @@ package chunk
 import (
 	"bytes"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/mail"
 	"io"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 func TestChunkedBytesBuffer(t *testing.T) {
@@ -392,7 +394,7 @@ func TestChunkSaverWrite(t *testing.T) {
 		}
 
 		// this should read all parts
-		r, err := NewChunkMailReader(store, email, 0)
+		r, err := NewChunkedReader(store, email, 0)
 		if w, err := io.Copy(os.Stdout, r); err != nil {
 			t.Error(err)
 		} else if w != email.size {
@@ -400,7 +402,7 @@ func TestChunkSaverWrite(t *testing.T) {
 		}
 
 		// test the seek feature
-		r, err = NewChunkMailReader(store, email, 0)
+		r, err = NewChunkedReader(store, email, 0)
 		if err != nil {
 			t.Error(err)
 			t.FailNow()
@@ -420,15 +422,24 @@ func TestChunkSaverWrite(t *testing.T) {
 				t.Error("incorrect size, expecting", email.partsInfo.Parts[i].Size, "but read:", w)
 			}
 		}
-		/*
-			dr, err := NewChunkPartDecoder(store, email, 0)
-			_ = dr
-			if err != nil {
-				t.Error(err)
-				t.FailNow()
-			}
-			var decoded bytes.Buffer
-			io.Copy(&decoded, dr)
-		*/
+
+		r, err = NewChunkedReader(store, email, 0)
+		if err != nil {
+			t.Error(err)
+		}
+		part := email.partsInfo.Parts[4]
+		encoding := encodingTypeQP
+		if strings.Contains(part.TransferEncoding, "base") {
+			encoding = encodingTypeBase64
+		}
+		dr, err := NewDecoder(r, encoding, part.Charset)
+		_ = dr
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+		var decoded bytes.Buffer
+		io.Copy(&decoded, dr)
+
 	}
 }
