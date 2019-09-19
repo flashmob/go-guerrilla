@@ -684,7 +684,7 @@ func (c *chunkSaverSQL) OpenMessage(from string, helo string, recipient string, 
 	if ip := ipAddress.IP.To4(); ip != nil {
 		ip4 = binary.BigEndian.Uint32(ip)
 	} else {
-		_ = copy(ip6, []byte(ipAddress.IP))
+		_ = copy(ip6, ipAddress.IP)
 	}
 	r, err := c.statements["insertEmail"].Exec(from, helo, recipient, ip4, ip6, returnPath, isTLS)
 	if err != nil {
@@ -901,7 +901,6 @@ func (c *cachedChunks) get(i int) (*ChunkSaverChunk, error) {
 					break
 				}
 			}
-
 			// return the chunk asked for
 			return chunks[0], nil
 		}
@@ -909,21 +908,14 @@ func (c *cachedChunks) get(i int) (*ChunkSaverChunk, error) {
 
 }
 
-// purgeChunks remove any chunks before i
-func (c *cachedChunks) purgeChunks(i int) {
-
-}
 func (c *cachedChunks) empty() {
-
 	for i := range c.chunks {
 		c.chunks[i] = nil
 	}
 	c.chunks = c.chunks[:] // set len to 0
-
 	for key := range c.hashIndex {
 		delete(c.hashIndex, key)
 	}
-
 }
 
 // Read implements the io.Reader interface
@@ -963,20 +955,39 @@ func (r *chunkMailReader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
+type transportEncoding int
+
+const (
+	encodingTypeBase64 transportEncoding = iota
+	encodingTypeQP
+)
+
 // chunkPartDecoder decodes base64 and q-printable, then converting charset to utf8-8
 type chunkPartDecoder struct {
 	*chunkMailReader
-	buf   []byte
-	state int
+	buf     []byte
+	state   int
+	charset string
+
+	r io.Reader
 }
 
-func NewChunkPartDecoder(db ChunkSaverStorage, email *ChunkSaverEmail, part int) (*chunkPartDecoder, error) {
-	r, err := NewChunkMailReader(db, email, part)
+// example
+// db ChunkSaverStorage, email *ChunkSaverEmail, part int)
+/*
+
+r, err := NewChunkMailReader(db, email, part)
 	if err != nil {
 		return nil, err
 	}
+
+*/
+
+// NewChunkPartDecoder reads from an underlying reader r and decodes base64, quoted-printable and decodes
+func NewChunkPartDecoder(r io.Reader, enc transportEncoding, charset string) (*chunkPartDecoder, error) {
+
 	decoder := new(chunkPartDecoder)
-	decoder.chunkMailReader = r
+	decoder.r = r
 	return decoder, nil
 }
 
