@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	streamers["compress"] = func() *StreamDecorator {
+	Streamers["compress"] = func() *StreamDecorator {
 		return StreamCompress()
 	}
 }

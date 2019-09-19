@@ -1,7 +1,7 @@
 package backends
 
 var (
-	streamers map[string]StreamProcessorConstructor
+	Streamers map[string]StreamProcessorConstructor
 )
 
 func init() {

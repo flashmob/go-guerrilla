@@ -397,7 +397,7 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	items := strings.Split(cfg, "|")
 	for i := range items {
 		name := items[len(items)-1-i] // reverse order, since decorators are stacked
-		if makeFunc, ok := streamers[name]; ok {
+		if makeFunc, ok := Streamers[name]; ok {
 			decorators = append(decorators, makeFunc())
 		} else {
 			ErrProcessorNotFound = errors.New(fmt.Sprintf("stream processor [%s] not found", name))
@@ -467,8 +467,8 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 
 		gw.streamers = append(gw.streamers, s)
 	}
-	// initialize processors
-	if err := Svc.initialize(cfg); err != nil {
+	// Initialize processors
+	if err := Svc.Initialize(cfg); err != nil {
 		gw.State = BackendStateError
 		return err
 	}

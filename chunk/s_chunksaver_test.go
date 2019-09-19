@@ -1,8 +1,9 @@
-package backends
+package chunk
 
 import (
 	"bytes"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/mail"
 	"io"
 	"os"
@@ -13,7 +14,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	var in string
 
 	var buf chunkedBytesBuffer
-	buf.capTo(64)
+	buf.CapTo(64)
 
 	// the data to write is over-aligned
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789abcdef` // len == 130
@@ -24,7 +25,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is aligned
 	var buf2 chunkedBytesBuffer
-	buf2.capTo(64)
+	buf2.CapTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789abcd` // len == 128
 	i, _ = buf2.Write([]byte(in[:]))
 	if i != len(in) {
@@ -33,7 +34,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is under-aligned
 	var buf3 chunkedBytesBuffer
-	buf3.capTo(64)
+	buf3.CapTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789ab` // len == 126
 	i, _ = buf3.Write([]byte(in[:]))
 	if i != len(in) {
@@ -42,7 +43,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// the data to write is smaller than the buffer
 	var buf4 chunkedBytesBuffer
-	buf4.capTo(64)
+	buf4.CapTo(64)
 	in = `1234567890` // len == 10
 	i, _ = buf4.Write([]byte(in[:]))
 	if i != len(in) {
@@ -52,7 +53,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	// what if the buffer already contains stuff before Write is called
 	// and the buffer len is smaller than the len of the slice of bytes we pass it?
 	var buf5 chunkedBytesBuffer
-	buf5.capTo(5)
+	buf5.CapTo(5)
 	buf5.buf = append(buf5.buf, []byte{'a', 'b', 'c'}...)
 	in = `1234567890` // len == 10
 	i, _ = buf5.Write([]byte(in[:]))
@@ -345,12 +346,12 @@ func TestChunkSaverWrite(t *testing.T) {
 	e.RcptTo = append(e.RcptTo, to)
 	e.MailFrom, _ = mail.NewAddress("test@test.com")
 
-	store := new(chunkSaverMemory)
-	chunkBuffer := newChunkedBytesBufferMime()
+	store := new(ChunkSaverMemory)
+	chunkBuffer := NewChunkedBytesBufferMime()
 	//chunkBuffer.setDatabase(store)
 	// instantiate the chunk saver
-	chunksaver := streamers["chunksaver"]()
-	mimeanalyzer := streamers["mimeanalyzer"]()
+	chunksaver := backends.Streamers["chunksaver"]()
+	mimeanalyzer := backends.Streamers["mimeanalyzer"]()
 
 	// add the default processor as the underlying processor for chunksaver
 	// and chain it with mimeanalyzer.
@@ -358,14 +359,14 @@ func TestChunkSaverWrite(t *testing.T) {
 	// This will also set our Open, Close and Initialize functions
 	// we also inject a ChunkSaverStorage and a ChunkedBytesBufferMime
 
-	stream := mimeanalyzer.Decorate(chunksaver.Decorate(DefaultStreamProcessor{}, store, chunkBuffer))
+	stream := mimeanalyzer.Decorate(chunksaver.Decorate(backends.DefaultStreamProcessor{}, store, chunkBuffer))
 
 	// configure the buffer cap
-	bc := BackendConfig{}
+	bc := backends.BackendConfig{}
 	bc["chunksaver_chunk_size"] = 8000
 	bc["chunksaver_storage_engine"] = "memory"
 	bc["chunksaver_compress_level"] = 0
-	_ = Svc.initialize(bc)
+	_ = backends.Svc.Initialize(bc)
 
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)
@@ -419,15 +420,15 @@ func TestChunkSaverWrite(t *testing.T) {
 				t.Error("incorrect size, expecting", email.partsInfo.Parts[i].Size, "but read:", w)
 			}
 		}
-
-		dr, err := NewChunkPartDecoder(store, email, 0)
-		_ = dr
-		if err != nil {
-			t.Error(err)
-			t.FailNow()
-		}
-		var decoded bytes.Buffer
-		io.Copy(&decoded, dr)
-
+		/*
+			dr, err := NewChunkPartDecoder(store, email, 0)
+			_ = dr
+			if err != nil {
+				t.Error(err)
+				t.FailNow()
+			}
+			var decoded bytes.Buffer
+			io.Copy(&decoded, dr)
+		*/
 	}
 }

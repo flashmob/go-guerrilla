@@ -21,7 +21,7 @@ import (
 // ----------------------------------------------------------------------------------
 
 func init() {
-	streamers["headersparser"] = func() *StreamDecorator {
+	Streamers["headersparser"] = func() *StreamDecorator {
 		return StreamHeadersParser()
 	}
 }

@@ -25,7 +25,7 @@ var (
 func init() {
 	Svc = &service{}
 	processors = make(map[string]ProcessorConstructor)
-	streamers = make(map[string]StreamProcessorConstructor)
+	Streamers = make(map[string]StreamProcessorConstructor)
 }
 
 type ProcessorConstructor func() Decorator
@@ -198,7 +198,7 @@ func (s *service) reset() {
 // Initialize initializes all the processors one-by-one and returns any errors.
 // Subsequent calls to Initialize will not call the initializer again unless it failed on the previous call
 // so Initialize may be called again to retry after getting errors
-func (s *service) initialize(backend BackendConfig) Errors {
+func (s *service) Initialize(backend BackendConfig) Errors {
 	s.Lock()
 	defer s.Unlock()
 	var errors Errors = nil
@@ -253,7 +253,7 @@ func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) 
 		return p()
 	}
 	// add to our processors list
-	streamers[strings.ToLower(name)] = c
+	Streamers[strings.ToLower(name)] = c
 }
 
 // extractConfig loads the backend config. It has already been unmarshalled

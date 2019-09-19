@@ -19,7 +19,7 @@ import (
 // ----------------------------------------------------------------------------------
 
 func init() {
-	streamers["mimeanalyzer"] = func() *StreamDecorator {
+	Streamers["mimeanalyzer"] = func() *StreamDecorator {
 		return StreamMimeAnalyzer()
 	}
 }

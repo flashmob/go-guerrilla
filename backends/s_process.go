@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	streamers["process"] = func() *StreamDecorator {
+	Streamers["process"] = func() *StreamDecorator {
 		return StreamProcess()
 	}
 }

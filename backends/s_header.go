@@ -23,7 +23,7 @@ import (
 // ----------------------------------------------------------------------------------
 
 func init() {
-	streamers["header"] = func() *StreamDecorator {
+	Streamers["header"] = func() *StreamDecorator {
 		return StreamHeader()
 	}
 }
