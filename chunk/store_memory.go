@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-type ChunkSaverMemory struct {
-	chunks        map[HashKey]*chunkSaverMemoryChunk
-	emails        []*chunkSaverMemoryEmail
+type StoreMemory struct {
+	chunks        map[HashKey]*memoryChunk
+	emails        []*memoryEmail
 	nextID        uint64
 	IDOffset      uint64
 	CompressLevel int
 }
 
-type chunkSaverMemoryEmail struct {
+type memoryEmail struct {
 	mailID     uint64
 	createdAt  time.Time
 	size       int64
@@ -34,21 +34,21 @@ type chunkSaverMemoryEmail struct {
 	isTLS      bool
 }
 
-type chunkSaverMemoryChunk struct {
+type memoryChunk struct {
 	modifiedAt     time.Time
 	referenceCount uint
 	data           []byte
 }
 
-// OpenMessage implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error) {
+// OpenMessage implements the Storage interface
+func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error) {
 	var ip4, ip6 net.IPAddr
 	if ip := ipAddress.IP.To4(); ip != nil {
 		ip4 = ipAddress
 	} else {
 		ip6 = ipAddress
 	}
-	email := chunkSaverMemoryEmail{
+	email := memoryEmail{
 		mailID:     m.nextID,
 		createdAt:  time.Now(),
 		from:       from,
@@ -64,8 +64,8 @@ func (m *ChunkSaverMemory) OpenMessage(from string, helo string, recipient strin
 	return email.mailID, nil
 }
 
-// CloseMessage implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
+// CloseMessage implements the Storage interface
+func (m *StoreMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
 	if email := m.emails[mailID-m.IDOffset]; email == nil {
 		return errors.New("email not found")
 	} else {
@@ -84,8 +84,8 @@ func (m *ChunkSaverMemory) CloseMessage(mailID uint64, size int64, partsInfo *Pa
 	return nil
 }
 
-// AddChunk implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) AddChunk(data []byte, hash []byte) error {
+// AddChunk implements the Storage interface
+func (m *StoreMemory) AddChunk(data []byte, hash []byte) error {
 	var key HashKey
 	if len(hash) != hashByteSize {
 		return errors.New("invalid hash")
@@ -108,7 +108,7 @@ func (m *ChunkSaverMemory) AddChunk(data []byte, hash []byte) error {
 			return err
 		}
 		// add a new chunk
-		newChunk := chunkSaverMemoryChunk{
+		newChunk := memoryChunk{
 			modifiedAt:     time.Now(),
 			referenceCount: 1,
 			data:           compressed.Bytes(),
@@ -118,25 +118,25 @@ func (m *ChunkSaverMemory) AddChunk(data []byte, hash []byte) error {
 	return nil
 }
 
-// Initialize implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) Initialize(cfg backends.BackendConfig) error {
+// Initialize implements the Storage interface
+func (m *StoreMemory) Initialize(cfg backends.BackendConfig) error {
 	m.IDOffset = 1
 	m.nextID = m.IDOffset
-	m.emails = make([]*chunkSaverMemoryEmail, 0, 100)
-	m.chunks = make(map[HashKey]*chunkSaverMemoryChunk, 1000)
+	m.emails = make([]*memoryEmail, 0, 100)
+	m.chunks = make(map[HashKey]*memoryChunk, 1000)
 	m.CompressLevel = zlib.NoCompression
 	return nil
 }
 
-// Shutdown implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) Shutdown() (err error) {
+// Shutdown implements the Storage interface
+func (m *StoreMemory) Shutdown() (err error) {
 	m.emails = nil
 	m.chunks = nil
 	return nil
 }
 
-// GetEmail implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
+// GetEmail implements the Storage interface
+func (m *StoreMemory) GetEmail(mailID uint64) (*Email, error) {
 	if size := uint64(len(m.emails)) - m.IDOffset; size > mailID-m.IDOffset {
 		return nil, errors.New("mail not found")
 	}
@@ -145,7 +145,7 @@ func (m *ChunkSaverMemory) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
 	if err := pi.UnmarshalJSONZlib(email.partsInfo); err != nil {
 		return nil, err
 	}
-	return &ChunkSaverEmail{
+	return &Email{
 		mailID:     email.mailID,
 		createdAt:  email.createdAt,
 		size:       email.size,
@@ -163,9 +163,9 @@ func (m *ChunkSaverMemory) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
 	}, nil
 }
 
-// GetChunk implements the ChunkSaverStorage interface
-func (m *ChunkSaverMemory) GetChunks(hash ...HashKey) ([]*ChunkSaverChunk, error) {
-	result := make([]*ChunkSaverChunk, 0, len(hash))
+// GetChunk implements the Storage interface
+func (m *StoreMemory) GetChunks(hash ...HashKey) ([]*Chunk, error) {
+	result := make([]*Chunk, 0, len(hash))
 	var key HashKey
 	for i := range hash {
 		key = hash[i]
@@ -174,7 +174,7 @@ func (m *ChunkSaverMemory) GetChunks(hash ...HashKey) ([]*ChunkSaverChunk, error
 			if err != nil {
 				return nil, err
 			}
-			result = append(result, &ChunkSaverChunk{
+			result = append(result, &Chunk{
 				modifiedAt:     c.modifiedAt,
 				referenceCount: c.referenceCount,
 				data:           zwr,

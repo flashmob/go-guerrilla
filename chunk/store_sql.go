@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-type chunkSaverSQLConfig struct {
+type sqlConfig struct {
 	EmailTable  string `json:"chunksaver_email_table,omitempty"`
 	ChunkTable  string `json:"chunksaver_chunk_table,omitempty"`
 	Driver      string `json:"chunksaver_sql_driver,omitempty"`
@@ -16,9 +16,9 @@ type chunkSaverSQLConfig struct {
 	PrimaryHost string `json:"chunksaver_primary_mail_host,omitempty"`
 }
 
-// ChunkSaverSQL implements the ChunkSaverStorage interface
+// ChunkSaverSQL implements the Storage interface
 type ChunkSaverSQL struct {
-	config     *chunkSaverSQLConfig
+	config     *sqlConfig
 	statements map[string]*sql.Stmt
 	db         *sql.DB
 }
@@ -120,7 +120,7 @@ func (c *ChunkSaverSQL) prepareSql() error {
 	return nil
 }
 
-// OpenMessage implements the ChunkSaverStorage interface
+// OpenMessage implements the Storage interface
 func (c *ChunkSaverSQL) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error) {
 
 	// if it's ipv4 then we want ipv6 to be 0, and vice-versa
@@ -142,7 +142,7 @@ func (c *ChunkSaverSQL) OpenMessage(from string, helo string, recipient string, 
 	return uint64(id), err
 }
 
-// AddChunk implements the ChunkSaverStorage interface
+// AddChunk implements the Storage interface
 func (c *ChunkSaverSQL) AddChunk(data []byte, hash []byte) error {
 	// attempt to increment the reference_count (it means the chunk is already in there)
 	r, err := c.statements["chunkReferenceIncr"].Exec(hash)
@@ -163,7 +163,7 @@ func (c *ChunkSaverSQL) AddChunk(data []byte, hash []byte) error {
 	return nil
 }
 
-// CloseMessage implements the ChunkSaverStorage interface
+// CloseMessage implements the Storage interface
 func (c *ChunkSaverSQL) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
 	partsInfoJson, err := json.Marshal(partsInfo)
 	if err != nil {
@@ -178,12 +178,12 @@ func (c *ChunkSaverSQL) CloseMessage(mailID uint64, size int64, partsInfo *Parts
 
 // Initialize loads the specific database config, connects to the db, prepares statements
 func (c *ChunkSaverSQL) Initialize(cfg backends.BackendConfig) error {
-	configType := backends.BaseConfig(&chunkSaverSQLConfig{})
+	configType := backends.BaseConfig(&sqlConfig{})
 	bcfg, err := backends.Svc.ExtractConfig(cfg, configType)
 	if err != nil {
 		return err
 	}
-	c.config = bcfg.(*chunkSaverSQLConfig)
+	c.config = bcfg.(*sqlConfig)
 	c.db, err = c.connect()
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (c *ChunkSaverSQL) Initialize(cfg backends.BackendConfig) error {
 	return nil
 }
 
-// Shutdown implements the ChunkSaverStorage interface
+// Shutdown implements the Storage interface
 func (c *ChunkSaverSQL) Shutdown() (err error) {
 	defer func() {
 		closeErr := c.db.Close()
@@ -212,13 +212,13 @@ func (c *ChunkSaverSQL) Shutdown() (err error) {
 	return err
 }
 
-// GetEmail implements the ChunkSaverStorage interface
-func (c *ChunkSaverSQL) GetEmail(mailID uint64) (*ChunkSaverEmail, error) {
-	return &ChunkSaverEmail{}, nil
+// GetEmail implements the Storage interface
+func (c *ChunkSaverSQL) GetEmail(mailID uint64) (*Email, error) {
+	return &Email{}, nil
 }
 
-// GetChunk implements the ChunkSaverStorage interface
-func (c *ChunkSaverSQL) GetChunks(hash ...HashKey) ([]*ChunkSaverChunk, error) {
-	result := make([]*ChunkSaverChunk, 0, len(hash))
+// GetChunk implements the Storage interface
+func (c *ChunkSaverSQL) GetChunks(hash ...HashKey) ([]*Chunk, error) {
+	result := make([]*Chunk, 0, len(hash))
 	return result, nil
 }

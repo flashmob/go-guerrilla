@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// ChunkSaverStorage defines an interface to the storage layer (the database)
-type ChunkSaverStorage interface {
+// Storage defines an interface to the storage layer (the database)
+type Storage interface {
 	// OpenMessage is used to begin saving an email. An email id is returned and used to call CloseMessage later
 	OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error)
 	// CloseMessage finalizes the writing of an email. Additional data collected while parsing the email is saved
@@ -16,17 +16,17 @@ type ChunkSaverStorage interface {
 	// AddChunk saves a chunk of bytes to a given hash key
 	AddChunk(data []byte, hash []byte) error
 	// GetEmail returns an email that's been saved
-	GetEmail(mailID uint64) (*ChunkSaverEmail, error)
+	GetEmail(mailID uint64) (*Email, error)
 	// GetChunks loads in the specified chunks of bytes from storage
-	GetChunks(hash ...HashKey) ([]*ChunkSaverChunk, error)
+	GetChunks(hash ...HashKey) ([]*Chunk, error)
 	// Initialize is called when the backend is started
 	Initialize(cfg backends.BackendConfig) error
 	// Shutdown is called when the backend gets shutdown.
 	Shutdown() (err error)
 }
 
-// ChunkSaverEmail represents an email
-type ChunkSaverEmail struct {
+// Email represents an email
+type Email struct {
 	mailID     uint64
 	createdAt  time.Time
 	size       int64
@@ -43,7 +43,7 @@ type ChunkSaverEmail struct {
 	isTLS      bool       // isTLS is true when TLS was used to connect
 }
 
-type ChunkSaverChunk struct {
+type Chunk struct {
 	modifiedAt     time.Time
 	referenceCount uint // referenceCount counts how many emails reference this chunk
 	data           io.Reader

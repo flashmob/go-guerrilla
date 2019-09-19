@@ -13,7 +13,7 @@ import (
 func TestChunkedBytesBuffer(t *testing.T) {
 	var in string
 
-	var buf chunkedBytesBuffer
+	var buf chunkingBuffer
 	buf.CapTo(64)
 
 	// the data to write is over-aligned
@@ -24,7 +24,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	}
 
 	// the data to write is aligned
-	var buf2 chunkedBytesBuffer
+	var buf2 chunkingBuffer
 	buf2.CapTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789abcd` // len == 128
 	i, _ = buf2.Write([]byte(in[:]))
@@ -33,7 +33,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	}
 
 	// the data to write is under-aligned
-	var buf3 chunkedBytesBuffer
+	var buf3 chunkingBuffer
 	buf3.CapTo(64)
 	in = `123456789012345678901234567890123456789012345678901234567890abcde12345678901234567890123456789012345678901234567890123456789ab` // len == 126
 	i, _ = buf3.Write([]byte(in[:]))
@@ -42,7 +42,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	}
 
 	// the data to write is smaller than the buffer
-	var buf4 chunkedBytesBuffer
+	var buf4 chunkingBuffer
 	buf4.CapTo(64)
 	in = `1234567890` // len == 10
 	i, _ = buf4.Write([]byte(in[:]))
@@ -52,7 +52,7 @@ func TestChunkedBytesBuffer(t *testing.T) {
 
 	// what if the buffer already contains stuff before Write is called
 	// and the buffer len is smaller than the len of the slice of bytes we pass it?
-	var buf5 chunkedBytesBuffer
+	var buf5 chunkingBuffer
 	buf5.CapTo(5)
 	buf5.buf = append(buf5.buf, []byte{'a', 'b', 'c'}...)
 	in = `1234567890` // len == 10
@@ -346,7 +346,7 @@ func TestChunkSaverWrite(t *testing.T) {
 	e.RcptTo = append(e.RcptTo, to)
 	e.MailFrom, _ = mail.NewAddress("test@test.com")
 
-	store := new(ChunkSaverMemory)
+	store := new(StoreMemory)
 	chunkBuffer := NewChunkedBytesBufferMime()
 	//chunkBuffer.setDatabase(store)
 	// instantiate the chunk saver
@@ -357,7 +357,7 @@ func TestChunkSaverWrite(t *testing.T) {
 	// and chain it with mimeanalyzer.
 	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
 	// This will also set our Open, Close and Initialize functions
-	// we also inject a ChunkSaverStorage and a ChunkedBytesBufferMime
+	// we also inject a Storage and a ChunkingBufferMime
 
 	stream := mimeanalyzer.Decorate(chunksaver.Decorate(backends.DefaultStreamProcessor{}, store, chunkBuffer))
 

@@ -63,9 +63,9 @@ func Chunksaver() *backends.StreamDecorator {
 		func(sp backends.StreamProcessor, a ...interface{}) backends.StreamProcessor {
 			var (
 				envelope    *mail.Envelope
-				chunkBuffer *ChunkedBytesBufferMime
+				chunkBuffer *ChunkingBufferMime
 				msgPos      uint
-				database    ChunkSaverStorage
+				database    Storage
 				written     int64
 
 				// just some headers from the first mime-part
@@ -79,10 +79,10 @@ func Chunksaver() *backends.StreamDecorator {
 			var config *ChunkSaverConfig
 			// optional dependency injection
 			for i := range a {
-				if db, ok := a[i].(ChunkSaverStorage); ok {
+				if db, ok := a[i].(Storage); ok {
 					database = db
 				}
-				if buff, ok := a[i].(*ChunkedBytesBufferMime); ok {
+				if buff, ok := a[i].(*ChunkingBufferMime); ok {
 					chunkBuffer = buff
 				}
 			}
@@ -101,7 +101,7 @@ func Chunksaver() *backends.StreamDecorator {
 				// configure storage if none was injected
 				if database == nil {
 					if config.StorageEngine == "memory" {
-						db := new(ChunkSaverMemory)
+						db := new(StoreMemory)
 						db.CompressLevel = config.CompressLevel
 						database = db
 					} else {

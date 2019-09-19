@@ -22,7 +22,7 @@ type chunkPartDecoder struct {
 	r io.Reader
 }
 
-// db ChunkSaverStorage, email *ChunkSaverEmail, part int)
+// db Storage, email *Email, part int)
 /*
 
 r, err := NewChunkMailReader(db, email, part)

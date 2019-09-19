@@ -12,13 +12,13 @@ import (
 
 type flushEvent func() error
 
-type chunkedBytesBuffer struct {
+type chunkingBuffer struct {
 	buf          []byte
 	flushTrigger flushEvent
 }
 
 // Flush signals that it's time to write the buffer out to storage
-func (c *chunkedBytesBuffer) Flush() error {
+func (c *chunkingBuffer) Flush() error {
 	if len(c.buf) == 0 {
 		return nil
 	}
@@ -33,13 +33,13 @@ func (c *chunkedBytesBuffer) Flush() error {
 }
 
 // Reset sets the length back to 0, making it re-usable
-func (c *chunkedBytesBuffer) Reset() {
+func (c *chunkingBuffer) Reset() {
 	c.buf = c.buf[:0] // set the length back to 0
 }
 
 // Write takes a p slice of bytes and writes it to the buffer.
 // It will never grow the buffer, flushing it as soon as it's full.
-func (c *chunkedBytesBuffer) Write(p []byte) (i int, err error) {
+func (c *chunkingBuffer) Write(p []byte) (i int, err error) {
 	remaining := len(p)
 	bufCap := cap(c.buf)
 	for {
@@ -66,25 +66,25 @@ func (c *chunkedBytesBuffer) Write(p []byte) (i int, err error) {
 }
 
 // CapTo caps the internal buffer to specified number of bytes, sets the length back to 0
-func (c *chunkedBytesBuffer) CapTo(n int) {
+func (c *chunkingBuffer) CapTo(n int) {
 	if cap(c.buf) == n {
 		return
 	}
 	c.buf = make([]byte, 0, n)
 }
 
-// ChunkedBytesBufferMime decorates chunkedBytesBuffer, specifying that to do when a flush event is triggered
-type ChunkedBytesBufferMime struct {
-	chunkedBytesBuffer
+// ChunkingBufferMime decorates chunkingBuffer, specifying that to do when a flush event is triggered
+type ChunkingBufferMime struct {
+	chunkingBuffer
 	current  *mime.Part
 	Info     PartsInfo
 	md5      hash.Hash
-	database ChunkSaverStorage
+	database Storage
 }
 
-func NewChunkedBytesBufferMime() *ChunkedBytesBufferMime {
-	b := new(ChunkedBytesBufferMime)
-	b.chunkedBytesBuffer.flushTrigger = func() error {
+func NewChunkedBytesBufferMime() *ChunkingBufferMime {
+	b := new(ChunkingBufferMime)
+	b.chunkingBuffer.flushTrigger = func() error {
 		return b.onFlush()
 	}
 	b.md5 = md5.New()
@@ -92,14 +92,14 @@ func NewChunkedBytesBufferMime() *ChunkedBytesBufferMime {
 	return b
 }
 
-func (b *ChunkedBytesBufferMime) SetDatabase(database ChunkSaverStorage) {
+func (b *ChunkingBufferMime) SetDatabase(database Storage) {
 	b.database = database
 }
 
 // onFlush is called whenever the flush event fires.
 // - It saves the chunk to disk and adds the chunk's hash to the list.
 // - It builds the b.Info.Parts structure
-func (b *ChunkedBytesBufferMime) onFlush() error {
+func (b *ChunkingBufferMime) onFlush() error {
 	b.md5.Write(b.buf)
 	var chash HashKey
 	copy(chash[:], b.md5.Sum([]byte{}))
@@ -130,7 +130,7 @@ func (b *ChunkedBytesBufferMime) onFlush() error {
 	return nil
 }
 
-func (b *ChunkedBytesBufferMime) fillInfo(cp *ChunkedPart, index int) {
+func (b *ChunkingBufferMime) fillInfo(cp *ChunkedPart, index int) {
 	if cp.ContentType == "" && b.current.ContentType != nil {
 		cp.ContentType = b.current.ContentType.String()
 	}
@@ -155,13 +155,13 @@ func (b *ChunkedBytesBufferMime) fillInfo(cp *ChunkedPart, index int) {
 	}
 }
 
-// Reset decorates the Reset method of the chunkedBytesBuffer
-func (b *ChunkedBytesBufferMime) Reset() {
+// Reset decorates the Reset method of the chunkingBuffer
+func (b *ChunkingBufferMime) Reset() {
 	b.md5.Reset()
-	b.chunkedBytesBuffer.Reset()
+	b.chunkingBuffer.Reset()
 }
 
-func (b *ChunkedBytesBufferMime) CurrentPart(cp *mime.Part) {
+func (b *ChunkingBufferMime) CurrentPart(cp *mime.Part) {
 	if b.current == nil {
 		b.Info = *NewPartsInfo()
 		b.Info.Parts = make([]ChunkedPart, 0, 3)

@@ -7,8 +7,8 @@ import (
 )
 
 type chunkMailReader struct {
-	db    ChunkSaverStorage
-	email *ChunkSaverEmail
+	db    Storage
+	email *Email
 	// part requests a part. If 0, all the parts are read sequentially
 	part int
 	i, j int
@@ -18,7 +18,7 @@ type chunkMailReader struct {
 
 // NewChunkMailReader loads the email and selects which mime-part Read will read, starting from 1
 // if part is 0, Read will read in the entire message. 1 selects the first part, 2 2nd, and so on..
-func NewChunkMailReader(db ChunkSaverStorage, email *ChunkSaverEmail, part int) (*chunkMailReader, error) {
+func NewChunkMailReader(db Storage, email *Email, part int) (*chunkMailReader, error) {
 	r := new(chunkMailReader)
 	r.db = db
 	r.part = part
@@ -50,9 +50,9 @@ func (r *chunkMailReader) SeekPart(part int) error {
 }
 
 type cachedChunks struct {
-	chunks    []*ChunkSaverChunk
+	chunks    []*Chunk
 	hashIndex map[int]HashKey
-	db        ChunkSaverStorage
+	db        Storage
 }
 
 const chunkCachePreload = 2
@@ -64,7 +64,7 @@ func (c *cachedChunks) warm(hashes ...HashKey) (int, error) {
 		c.hashIndex = make(map[int]HashKey, len(hashes))
 	}
 	if c.chunks == nil {
-		c.chunks = make([]*ChunkSaverChunk, 0, 100)
+		c.chunks = make([]*Chunk, 0, 100)
 	}
 	if len(c.chunks) > 0 {
 		// already been filled
@@ -93,7 +93,7 @@ func (c *cachedChunks) warm(hashes ...HashKey) (int, error) {
 
 // get returns a chunk. If the chunk doesn't exist, it gets it and pre-loads the next few
 // also removes the previous chunks that now have become stale
-func (c *cachedChunks) get(i int) (*ChunkSaverChunk, error) {
+func (c *cachedChunks) get(i int) (*Chunk, error) {
 	if i > len(c.chunks) {
 		return nil, errors.New("not enough chunks")
 	}
