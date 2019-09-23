@@ -67,7 +67,7 @@ type Logger interface {
 type HookedLogger struct {
 
 	// satisfy the log.FieldLogger interface
-	*log.Logger
+	Logger log.FieldLogger
 
 	h LoggerHook
 
@@ -75,6 +75,114 @@ type HookedLogger struct {
 	dest string
 
 	oo OutputOption
+}
+
+func (l *HookedLogger) WithField(key string, value interface{}) *log.Entry {
+	return l.Logger.WithField(key, value)
+}
+
+func (l *HookedLogger) WithFields(fields log.Fields) *log.Entry {
+	return l.Logger.WithFields(fields)
+}
+
+func (l *HookedLogger) WithError(err error) *log.Entry {
+	return l.Logger.WithError(err)
+}
+
+func (l *HookedLogger) Debugf(format string, args ...interface{}) {
+	l.Logger.Debugf(format, args)
+}
+
+func (l *HookedLogger) Infof(format string, args ...interface{}) {
+	l.Logger.Infof(format, args)
+}
+
+func (l *HookedLogger) Printf(format string, args ...interface{}) {
+	l.Logger.Printf(format, args)
+}
+
+func (l *HookedLogger) Warnf(format string, args ...interface{}) {
+	l.Logger.Warnf(format, args)
+}
+
+func (l *HookedLogger) Warningf(format string, args ...interface{}) {
+	l.Logger.Warningf(format, args)
+}
+
+func (l *HookedLogger) Errorf(format string, args ...interface{}) {
+	l.Logger.Errorf(format, args)
+}
+
+func (l *HookedLogger) Fatalf(format string, args ...interface{}) {
+	l.Logger.Fatalf(format, args)
+}
+
+func (l *HookedLogger) Panicf(format string, args ...interface{}) {
+	l.Logger.Panicf(format, args)
+}
+
+func (l *HookedLogger) Debug(args ...interface{}) {
+	l.Logger.Debug(args)
+}
+
+func (l *HookedLogger) Info(args ...interface{}) {
+	l.Logger.Info(args)
+}
+
+func (l *HookedLogger) Print(args ...interface{}) {
+	l.Logger.Print(args)
+}
+
+func (l *HookedLogger) Warn(args ...interface{}) {
+	l.Logger.Warn(args)
+}
+
+func (l *HookedLogger) Warning(args ...interface{}) {
+	l.Logger.Warning(args)
+}
+
+func (l *HookedLogger) Error(args ...interface{}) {
+	l.Logger.Error(args)
+}
+
+func (l *HookedLogger) Fatal(args ...interface{}) {
+	l.Logger.Fatal(args)
+}
+
+func (l *HookedLogger) Panic(args ...interface{}) {
+	l.Logger.Panic(args)
+}
+
+func (l *HookedLogger) Debugln(args ...interface{}) {
+	l.Logger.Debugln(args)
+}
+
+func (l *HookedLogger) Infoln(args ...interface{}) {
+	l.Logger.Infoln(args)
+}
+
+func (l *HookedLogger) Println(args ...interface{}) {
+	l.Logger.Println(args)
+}
+
+func (l *HookedLogger) Warnln(args ...interface{}) {
+	l.Logger.Warnln(args)
+}
+
+func (l *HookedLogger) Warningln(args ...interface{}) {
+	l.Logger.Warningln(args)
+}
+
+func (l *HookedLogger) Errorln(args ...interface{}) {
+	l.Logger.Errorln(args)
+}
+
+func (l *HookedLogger) Fatalln(args ...interface{}) {
+	l.Logger.Fatalln(args)
+}
+
+func (l *HookedLogger) Panicln(args ...interface{}) {
+	l.Logger.Panicln(args)
 }
 
 type loggerKey struct {
@@ -194,7 +302,17 @@ func (l *HookedLogger) SetLevel(level string) {
 
 // GetLevel gets the current log level
 func (l *HookedLogger) GetLevel() string {
-	return l.Level.String()
+	entry, ok := l.Logger.(*log.Entry)
+	if ok {
+		return entry.Level.String()
+	}
+
+	logger, ok := l.Logger.(*log.Logger)
+	if ok {
+		return logger.Level.String()
+	}
+
+	panic("unsupported logger")
 }
 
 // Reopen closes the log file and re-opens it
