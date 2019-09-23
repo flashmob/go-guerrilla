@@ -1,4 +1,4 @@
-package rfc5321
+package smtp
 
 import (
 	"strings"
@@ -580,4 +580,31 @@ func TestParse(t *testing.T) {
 		t.Error("not expected parse error")
 	}
 
+}
+
+func TestTransport(t *testing.T) {
+
+	path := PathParam([]string{"BODY", "8bitmime"})
+	transport := path.Transport()
+	if transport != TransportType8bit {
+		t.Error("transport was not 8bit")
+	}
+
+	path = []string{"BODY", "7bit"}
+	transport = path.Transport()
+	if transport != TransportType7bit {
+		t.Error("transport was not 7bit")
+	}
+
+	path = []string{"BODY", "invalid"}
+	transport = path.Transport()
+	if transport != TransportTypeInvalid {
+		t.Error("transport was not invalid")
+	}
+
+	path = []string{}
+	transport = path.Transport()
+	if transport != TransportTypeUnspecified {
+		t.Error("transport was not unspecified")
+	}
 }

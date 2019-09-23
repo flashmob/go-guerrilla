@@ -499,7 +499,7 @@ func (p *Parser) header(mh *Part) (err error) {
 				mh.Headers.Add(contentTypeHeader, contentType.String())
 				state = 0
 			} else {
-				if (p.ch >= 33 && p.ch <= 126) || p.isWSP(p.ch) {
+				if p.ch != '\n' || p.isWSP(p.ch) {
 					_ = p.accept.WriteByte(p.ch)
 				} else if p.ch == '\n' {
 					c := p.peek()

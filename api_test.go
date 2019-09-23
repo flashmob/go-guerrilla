@@ -447,7 +447,7 @@ func talkToServer(address string, body string) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n")
+	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com> BODY=8BITMIME\r\n")
 	if err != nil {
 		return err
 	}

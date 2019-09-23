@@ -1,4 +1,4 @@
-package rfc5321
+package smtp
 
 // Parse RFC5321 productions, no regex
 
@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -21,6 +22,34 @@ const (
 	LimitRecipients = 100
 )
 
+type PathParam []string
+
+type TransportType int
+
+const (
+	TransportType7bit TransportType = iota
+	TransportType8bit
+	TransportTypeUnspecified
+	TransportTypeInvalid
+)
+
+// is8BitMime checks for the BODY parameter as
+func (p PathParam) Transport() TransportType {
+	if len(p) != 2 {
+		return TransportTypeUnspecified
+	}
+	if strings.ToUpper(p[0]) != "BODY" {
+		// this is not a 'BODY' param
+		return TransportTypeUnspecified
+	}
+	if strings.ToUpper(p[1]) == "8BITMIME" {
+		return TransportType8bit
+	} else if strings.ToUpper(p[1]) == "7BIT" {
+		return TransportType7bit
+	}
+	return TransportTypeInvalid
+}
+
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
 	NullPath  bool
@@ -28,7 +57,7 @@ type Parser struct {
 	Domain    string
 
 	ADL        []string
-	PathParams [][]string
+	PathParams []PathParam
 
 	pos int
 	ch  byte
@@ -149,8 +178,8 @@ func (s *Parser) RcptTo(input []byte) (err error) {
 }
 
 // esmtp-param *(SP esmtp-param)
-func (s *Parser) parameters() ([][]string, error) {
-	params := make([][]string, 0)
+func (s *Parser) parameters() ([]PathParam, error) {
+	params := make([]PathParam, 0)
 	for {
 		if result, err := s.param(); err != nil {
 			return params, err

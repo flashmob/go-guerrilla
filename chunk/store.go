@@ -2,6 +2,7 @@ package chunk
 
 import (
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"io"
 	"net"
 	"time"
@@ -10,7 +11,7 @@ import (
 // Storage defines an interface to the storage layer (the database)
 type Storage interface {
 	// OpenMessage is used to begin saving an email. An email id is returned and used to call CloseMessage later
-	OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error)
+	OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool, transport smtp.TransportType) (mailID uint64, err error)
 	// CloseMessage finalizes the writing of an email. Additional data collected while parsing the email is saved
 	CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error
 	// AddChunk saves a chunk of bytes to a given hash key
@@ -36,11 +37,12 @@ type Email struct {
 	helo       string // helo message given by the client when the message was transmitted
 	subject    string // subject stores the value from the first "Subject" header field
 	deliveryID string
-	recipient  string     // recipient is the email address that the server received from the RCPT TO command
-	ipv4       net.IPAddr // set to a value if client connected via ipv4
-	ipv6       net.IPAddr // set to a value if client connected via ipv6
-	returnPath string     // returnPath is the email address that the server received from the MAIL FROM command
-	isTLS      bool       // isTLS is true when TLS was used to connect
+	recipient  string             // recipient is the email address that the server received from the RCPT TO command
+	ipv4       net.IPAddr         // set to a value if client connected via ipv4
+	ipv6       net.IPAddr         // set to a value if client connected via ipv6
+	returnPath string             // returnPath is the email address that the server received from the MAIL FROM command
+	isTLS      bool               // isTLS is true when TLS was used to connect
+	transport  smtp.TransportType // did the sender signal 8bitmime?
 }
 
 type Chunk struct {

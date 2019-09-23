@@ -143,7 +143,9 @@ func Chunksaver() *backends.StreamDecorator {
 					e.RcptTo[0].String(),
 					ip,
 					e.MailFrom.String(),
-					e.TLS)
+					e.TLS,
+					e.TransportType,
+				)
 				if err != nil {
 					return err
 				}
@@ -227,6 +229,7 @@ func Chunksaver() *backends.StreamDecorator {
 								return count, err
 							}
 							chunkBuffer.CurrentPart(part)
+							// end of a part here
 							fmt.Println("->N")
 							pos += count
 							msgPos = part.StartingPos
@@ -241,6 +244,7 @@ func Chunksaver() *backends.StreamDecorator {
 								return count, err
 							}
 							chunkBuffer.CurrentPart(part)
+							// end of a header here
 							fmt.Println("->H")
 							pos += count
 							msgPos = part.StartingPosBody

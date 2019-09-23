@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"errors"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"net"
 	"time"
 )
@@ -32,6 +33,7 @@ type memoryEmail struct {
 	ipv6       net.IPAddr
 	returnPath string
 	isTLS      bool
+	is8Bit     smtp.TransportType
 }
 
 type memoryChunk struct {
@@ -41,7 +43,7 @@ type memoryChunk struct {
 }
 
 // OpenMessage implements the Storage interface
-func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error) {
+func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool, transport smtp.TransportType) (mailID uint64, err error) {
 	var ip4, ip6 net.IPAddr
 	if ip := ipAddress.IP.To4(); ip != nil {
 		ip4 = ipAddress
@@ -58,6 +60,7 @@ func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ip
 		ipv6:       ip6,
 		returnPath: returnPath,
 		isTLS:      isTLS,
+		is8Bit:     transport,
 	}
 	m.emails = append(m.emails, &email)
 	m.nextID++
@@ -160,6 +163,7 @@ func (m *StoreMemory) GetEmail(mailID uint64) (*Email, error) {
 		ipv6:       email.ipv6,
 		returnPath: email.returnPath,
 		isTLS:      email.isTLS,
+		transport:  email.is8Bit,
 	}, nil
 }
 

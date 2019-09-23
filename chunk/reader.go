@@ -21,7 +21,6 @@ type chunkedReader struct {
 func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error) {
 	r := new(chunkedReader)
 	r.db = db
-	r.part = part
 	if email == nil {
 		return nil, errors.New("nil email")
 	} else {
@@ -37,6 +36,7 @@ func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error
 }
 
 // SeekPart resets the reader. The part argument chooses which part Read will read in
+// If part is 1, it will return the first part
 // If part is 0, Read will return the entire message
 func (r *chunkedReader) SeekPart(part int) error {
 	if parts := len(r.email.partsInfo.Parts); parts == 0 {
@@ -44,7 +44,10 @@ func (r *chunkedReader) SeekPart(part int) error {
 	} else if part > parts {
 		return errors.New("no such part available")
 	}
-	r.i = part
+	r.part = part
+	if part > 0 {
+		r.i = part - 1
+	}
 	r.j = 0
 	return nil
 }
@@ -122,13 +125,16 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 				c.hashIndex[j] = toGet[j-i]
 			}
 			// remove any old ones (walk back)
-			for j := i; j > -1; j-- {
-				if c.chunks[j] != nil {
-					c.chunks[j] = nil
-				} else {
-					break
+			if i-1 > -1 {
+				for j := i - 1; j > -1; j-- {
+					if c.chunks[j] != nil {
+						c.chunks[j] = nil
+					} else {
+						break
+					}
 				}
 			}
+
 			// return the chunk asked for
 			return chunks[0], nil
 		}
@@ -160,19 +166,28 @@ func (r *chunkedReader) Read(p []byte) (n int, err error) {
 				return nRead, err
 			}
 			nRead, err = chunk.data.Read(p)
-			if err == io.EOF {
-				r.j++ // advance to the next chunk
+			if err == io.EOF { // we've read the entire chunk
+
+				if closer, ok := chunk.data.(io.ReadCloser); ok {
+					err = closer.Close()
+					if err != nil {
+						return nRead, err
+					}
+				}
+				r.j++ // advance to the next chunk the part
 				err = nil
-			}
-			if r.j == length { // last chunk in a part?
-				r.j = 0 // reset chunk index
-				r.i++   // advance to the next part
-				if r.i == len(r.email.partsInfo.Parts) || r.part > 0 {
-					// there are no more parts to return
-					err = io.EOF
-					r.cache.empty()
+
+				if r.j == length { // last chunk in a part?
+					r.j = 0 // reset chunk index
+					r.i++   // advance to the next part
+					if r.i == len(r.email.partsInfo.Parts) || r.part > 0 {
+						// there are no more parts to return
+						err = io.EOF
+						r.cache.empty()
+					}
 				}
 			}
+
 			// unless there's an error, the next time this function will be
 			// called, it will read the next chunk
 			return nRead, err

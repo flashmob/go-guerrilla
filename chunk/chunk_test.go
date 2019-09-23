@@ -340,39 +340,97 @@ func TestHashBytes(t *testing.T) {
 		t.Error("expecting 3hcDgAEXA4ABFwP/ARcDgA got", h.String())
 	}
 }
+
+func TestChunkSaverReader(t *testing.T) {
+	store, chunksaver, mimeanalyzer, stream := initTestStream()
+	buf := make([]byte, 64)
+	var result bytes.Buffer
+	if _, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
+		t.Error(err)
+	} else {
+		_ = mimeanalyzer.Close()
+		_ = chunksaver.Close()
+
+		email, err := store.GetEmail(1)
+		if err != nil {
+			t.Error("email not found")
+			return
+		}
+
+		// this should read all parts
+		r, err := NewChunkedReader(store, email, 0)
+		buf2 := make([]byte, 64)
+		if w, err := io.CopyBuffer(&result, r, buf2); err != nil {
+			t.Error(err)
+		} else if w != email.size {
+			t.Error("email.size != number of bytes copied from reader", w, email.size)
+		}
+
+		if !strings.Contains(result.String(), "k+DQo8L2h0bWw+DQo") {
+			t.Error("Looks like it didn;t read the entire email, was expecting k+DQo8L2h0bWw+DQo")
+		}
+		result.Reset()
+
+		// Test the decoder, hit the decoderStateMatchNL state
+		r, err = NewChunkedReader(store, email, 0)
+		if err != nil {
+			t.Error(err)
+		}
+		part := email.partsInfo.Parts[0]
+		encoding := transportQuotedPrintable
+		if strings.Contains(part.TransferEncoding, "base") {
+			encoding = transportBase64
+		}
+		dr, err := NewDecoder(r, encoding, part.Charset)
+		_ = dr
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+
+		buf3 := make([]byte, 1253) // 1253 intentionally causes the decoderStateMatchNL state to hit
+		_, err = io.CopyBuffer(&result, dr, buf3)
+		if err != nil {
+			t.Error()
+		}
+		if !strings.Contains(result.String(), "</html") {
+			t.Error("looks like it didn't decode, expecting </html>")
+		}
+		result.Reset()
+
+		// test the decoder, hit the decoderStateFindHeader state
+		r, err = NewChunkedReader(store, email, 0)
+		if err != nil {
+			t.Error(err)
+		}
+		part = email.partsInfo.Parts[0]
+		encoding = transportQuotedPrintable
+		if strings.Contains(part.TransferEncoding, "base") {
+			encoding = transportBase64
+		}
+		dr, err = NewDecoder(r, encoding, part.Charset)
+		_ = dr
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+
+		buf4 := make([]byte, 64) // state decoderStateFindHeader will hit
+		_, err = io.CopyBuffer(&result, dr, buf4)
+		if err != nil {
+			t.Error()
+		}
+		if !strings.Contains(result.String(), "</html") {
+			t.Error("looks like it didn't decode, expecting </html>")
+		}
+
+	}
+
+}
+
 func TestChunkSaverWrite(t *testing.T) {
 
-	// place the parse result in an envelope
-	e := mail.NewEnvelope("127.0.0.1", 1)
-	to, _ := mail.NewAddress("test@test.com")
-	e.RcptTo = append(e.RcptTo, to)
-	e.MailFrom, _ = mail.NewAddress("test@test.com")
-
-	store := new(StoreMemory)
-	chunkBuffer := NewChunkedBytesBufferMime()
-	//chunkBuffer.setDatabase(store)
-	// instantiate the chunk saver
-	chunksaver := backends.Streamers["chunksaver"]()
-	mimeanalyzer := backends.Streamers["mimeanalyzer"]()
-
-	// add the default processor as the underlying processor for chunksaver
-	// and chain it with mimeanalyzer.
-	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
-	// This will also set our Open, Close and Initialize functions
-	// we also inject a Storage and a ChunkingBufferMime
-
-	stream := mimeanalyzer.Decorate(chunksaver.Decorate(backends.DefaultStreamProcessor{}, store, chunkBuffer))
-
-	// configure the buffer cap
-	bc := backends.BackendConfig{}
-	bc["chunksaver_chunk_size"] = 8000
-	bc["chunksaver_storage_engine"] = "memory"
-	bc["chunksaver_compress_level"] = 0
-	_ = backends.Svc.Initialize(bc)
-
-	// give it the envelope with the parse results
-	_ = chunksaver.Open(e)
-	_ = mimeanalyzer.Open(e)
+	store, chunksaver, mimeanalyzer, stream := initTestStream()
 
 	buf := make([]byte, 128)
 	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
@@ -398,7 +456,7 @@ func TestChunkSaverWrite(t *testing.T) {
 		if w, err := io.Copy(os.Stdout, r); err != nil {
 			t.Error(err)
 		} else if w != email.size {
-			t.Error("email.size != number of bytes copied from reader")
+			t.Error("email.size != number of bytes copied from reader", w, email.size)
 		}
 
 		// test the seek feature
@@ -427,10 +485,10 @@ func TestChunkSaverWrite(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		part := email.partsInfo.Parts[4]
-		encoding := encodingTypeQP
+		part := email.partsInfo.Parts[0]
+		encoding := transportQuotedPrintable
 		if strings.Contains(part.TransferEncoding, "base") {
-			encoding = encodingTypeBase64
+			encoding = transportBase64
 		}
 		dr, err := NewDecoder(r, encoding, part.Charset)
 		_ = dr
@@ -438,8 +496,42 @@ func TestChunkSaverWrite(t *testing.T) {
 			t.Error(err)
 			t.FailNow()
 		}
-		var decoded bytes.Buffer
-		io.Copy(&decoded, dr)
+		//var decoded bytes.Buffer
+		//io.Copy(&decoded, dr)
+		io.Copy(os.Stdout, dr)
 
 	}
+}
+
+func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
+	// place the parse result in an envelope
+	e := mail.NewEnvelope("127.0.0.1", 1)
+	to, _ := mail.NewAddress("test@test.com")
+	e.RcptTo = append(e.RcptTo, to)
+	e.MailFrom, _ = mail.NewAddress("test@test.com")
+	store := new(StoreMemory)
+	chunkBuffer := NewChunkedBytesBufferMime()
+	//chunkBuffer.setDatabase(store)
+	// instantiate the chunk saver
+	chunksaver := backends.Streamers["chunksaver"]()
+	mimeanalyzer := backends.Streamers["mimeanalyzer"]()
+	// add the default processor as the underlying processor for chunksaver
+	// and chain it with mimeanalyzer.
+	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
+	// This will also set our Open, Close and Initialize functions
+	// we also inject a Storage and a ChunkingBufferMime
+	stream := mimeanalyzer.Decorate(chunksaver.Decorate(backends.DefaultStreamProcessor{}, store, chunkBuffer))
+
+	// configure the buffer cap
+	bc := backends.BackendConfig{}
+	bc["chunksaver_chunk_size"] = 8000
+	bc["chunksaver_storage_engine"] = "memory"
+	bc["chunksaver_compress_level"] = 0
+	_ = backends.Svc.Initialize(bc)
+
+	// give it the envelope with the parse results
+	_ = chunksaver.Open(e)
+	_ = mimeanalyzer.Open(e)
+
+	return store, chunksaver, mimeanalyzer, stream
 }

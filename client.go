@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/rfc5321"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"github.com/flashmob/go-guerrilla/response"
 	"net"
 	"sync"
@@ -51,7 +51,7 @@ type client struct {
 	// guards access to conn
 	connGuard sync.Mutex
 	log       log.Logger
-	parser    rfc5321.Parser
+	parser    smtp.Parser
 }
 
 // NewClient allocates a new client.
@@ -210,7 +210,7 @@ type pathParser func([]byte) error
 func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 	address := mail.Address{}
 	var err error
-	if len(in) > rfc5321.LimitPath {
+	if len(in) > smtp.LimitPath {
 		return address, errors.New(response.Canned.FailPathTooLong.String())
 	}
 	if err = p(in); err != nil {
@@ -218,9 +218,9 @@ func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 	} else if c.parser.NullPath {
 		// bounce has empty from address
 		address = mail.Address{}
-	} else if len(c.parser.LocalPart) > rfc5321.LimitLocalPart {
+	} else if len(c.parser.LocalPart) > smtp.LimitLocalPart {
 		err = errors.New(response.Canned.FailLocalPartTooLong.String())
-	} else if len(c.parser.Domain) > rfc5321.LimitDomain {
+	} else if len(c.parser.Domain) > smtp.LimitDomain {
 		err = errors.New(response.Canned.FailDomainTooLong.String())
 	} else {
 		address = mail.Address{

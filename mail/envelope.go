@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"io"
 	"mime"
 	"net/mail"
@@ -35,7 +36,7 @@ type Address struct {
 	// ADL is at-domain list if matched
 	ADL []string
 	// PathParams contains any ESTMP parameters that were matched
-	PathParams [][]string
+	PathParams []smtp.PathParam
 	// NullPath is true if <> was received
 	NullPath bool
 }
@@ -97,6 +98,8 @@ type Envelope struct {
 	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
+	// TransportType indicates whenever 8BITMIME extension has been signaled
+	TransportType smtp.TransportType
 	// When locked, it means that the envelope is being processed by the backend
 	sync.Mutex
 }

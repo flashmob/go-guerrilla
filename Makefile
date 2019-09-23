@@ -38,7 +38,8 @@ test: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v ./mail/mime
 	$(GO_VARS) $(GO) test -v ./mail/encoding
 	$(GO_VARS) $(GO) test -v ./mail/iconv
-	$(GO_VARS) $(GO) test -v ./mail/rfc5321
+	$(GO_VARS) $(GO) test -v ./mail/smtp
+	$(GO_VARS) $(GO) test -v ./chunk
 
 testrace: *.go */*.go */*/*.go
 	$(GO_VARS) $(GO) test -v . -race

@@ -18,7 +18,7 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/rfc5321"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -348,7 +348,16 @@ func (s *server) isShuttingDown() bool {
 	return s.clientPool.IsShuttingDown()
 }
 
-// Handles an entire client SMTP exchange
+const advertisePipelining = "250-PIPELINING\r\n"
+const advertiseStartTLS = "250-STARTTLS\r\n"
+const advertiseEnhancedStatusCodes = "250-ENHANCEDSTATUSCODES\r\n"
+const advertise8BitMime = "250-8BITMIME\r\n"
+
+// The last line doesn't need \r\n since string will be printed as a new line.
+// Also, Last line has no dash -
+const advertiseHelp = "250 HELP"
+
+// handleClient handles an entire client SMTP exchange
 func (s *server) handleClient(client *client) {
 	defer client.closeConn()
 	sc := s.configStore.Load().(ServerConfig)
@@ -365,12 +374,9 @@ func (s *server) handleClient(client *client) {
 
 	// Extended feature advertisements
 	messageSize := fmt.Sprintf("250-SIZE %d\r\n", sc.MaxSize)
-	pipelining := "250-PIPELINING\r\n"
-	advertiseTLS := "250-STARTTLS\r\n"
-	advertiseEnhancedStatusCodes := "250-ENHANCEDSTATUSCODES\r\n"
+	advertiseTLS := advertiseStartTLS
 	// The last line doesn't need \r\n since string will be printed as a new line.
 	// Also, Last line has no dash -
-	help := "250 HELP"
 
 	if sc.TLS.AlwaysOn {
 		tlsConfig, ok := s.tlsConfigStore.Load().(*tls.Config)
@@ -434,10 +440,11 @@ func (s *server) handleClient(client *client) {
 				client.resetTransaction()
 				client.sendResponse(ehlo,
 					messageSize,
-					pipelining,
+					advertisePipelining,
 					advertiseTLS,
 					advertiseEnhancedStatusCodes,
-					help)
+					advertise8BitMime,
+					advertiseHelp)
 
 			case cmdHELP.match(cmd):
 				quote := response.GetQuote()
@@ -475,10 +482,20 @@ func (s *server) handleClient(client *client) {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
 				}
+				client.TransportType = smtp.TransportTypeUnspecified
+				for i := range client.MailFrom.PathParams {
+					if tt := client.MailFrom.PathParams[i].Transport(); tt != smtp.TransportTypeUnspecified {
+						client.TransportType = tt
+						if tt == smtp.TransportTypeInvalid {
+							continue
+						}
+						break
+					}
+				}
 				client.sendResponse(r.SuccessMailCmd)
 
 			case cmdRCPT.match(cmd):
-				if len(client.RcptTo) > rfc5321.LimitRecipients {
+				if len(client.RcptTo) > smtp.LimitRecipients {
 					client.sendResponse(r.ErrorTooManyRecipients)
 					break
 				}

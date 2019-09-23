@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"net"
 )
 
@@ -44,8 +45,8 @@ func (s *StoreSQL) prepareSql() error {
 
 	if stmt, err := s.db.Prepare(`INSERT INTO ` +
 		s.config.EmailTable +
-		` (from, helo, recipient, ipv4_addr, ipv6_addr, return_path, is_tls) 
- VALUES(?, ?, ?, ?, ?, ?, ?)`); err != nil {
+		` (from, helo, recipient, ipv4_addr, ipv6_addr, return_path, is_tls, is_8bit) 
+ VALUES(?, ?, ?, ?, ?, ?, ?, ?)`); err != nil {
 		return err
 	} else {
 		s.statements["insertEmail"] = stmt
@@ -121,7 +122,7 @@ func (s *StoreSQL) prepareSql() error {
 }
 
 // OpenMessage implements the Storage interface
-func (s *StoreSQL) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool) (mailID uint64, err error) {
+func (s *StoreSQL) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool, transport smtp.TransportType) (mailID uint64, err error) {
 
 	// if it's ipv4 then we want ipv6 to be 0, and vice-versa
 	var ip4 uint32
@@ -131,7 +132,7 @@ func (s *StoreSQL) OpenMessage(from string, helo string, recipient string, ipAdd
 	} else {
 		_ = copy(ip6, ipAddress.IP)
 	}
-	r, err := s.statements["insertEmail"].Exec(from, helo, recipient, ip4, ip6, returnPath, isTLS)
+	r, err := s.statements["insertEmail"].Exec(from, helo, recipient, ip4, ip6, returnPath, isTLS, transport)
 	if err != nil {
 		return 0, err
 	}
