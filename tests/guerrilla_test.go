@@ -868,7 +868,7 @@ func TestHeloEhlo(t *testing.T) {
 				}
 			}
 
-			expected = fmt.Sprintf("250-%s Hello\r\n250-SIZE 100017\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-ENHANCEDSTATUSCODES\r\n250 HELP\r\n", hostname)
+			expected = fmt.Sprintf("250-%s Hello\r\n250-SIZE 100017\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-ENHANCEDSTATUSCODES\r\n250-8BITMIME\r\n250 HELP\r\n", hostname)
 			if fullresp != expected {
 				t.Error("Server did not respond with [" + expected + "], it said [" + fullresp + "]")
 			}
