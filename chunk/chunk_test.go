@@ -398,7 +398,7 @@ func TestChunkSaverReader(t *testing.T) {
 		}
 		result.Reset()
 
-		// test the decoder, hit the decoderStateFindHeader state
+		// test the decoder, hit the decoderStateFindHeaderEnd state
 		r, err = NewChunkedReader(store, email, 0)
 		if err != nil {
 			t.Error(err)
@@ -415,7 +415,7 @@ func TestChunkSaverReader(t *testing.T) {
 			t.FailNow()
 		}
 
-		buf4 := make([]byte, 64) // state decoderStateFindHeader will hit
+		buf4 := make([]byte, 64) // state decoderStateFindHeaderEnd will hit
 		_, err = io.CopyBuffer(&result, dr, buf4)
 		if err != nil {
 			t.Error()

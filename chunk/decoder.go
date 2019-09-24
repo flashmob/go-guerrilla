@@ -23,14 +23,14 @@ const (
 
 // decoder decodes base64 and q-printable, then converting charset to UTF-8
 type decoder struct {
-	buf       []byte
 	state     int
 	charset   string
 	transport transportEncoding
 	r         io.Reader
 }
 
-// NewDecoder reads from an underlying reader r and decodes base64, quoted-printable and decodes
+// NewDecoder reads a MIME-part from an underlying reader r
+// then decodes base64 or quoted-printable to 8bit, and converts encoding to UTF-8
 func NewDecoder(r io.Reader, transport transportEncoding, charset string) (*decoder, error) {
 	decoder := new(decoder)
 	decoder.transport = transport
@@ -42,48 +42,52 @@ func NewDecoder(r io.Reader, transport transportEncoding, charset string) (*deco
 const chunkSaverNL = '\n'
 
 const (
-	decoderStateFindHeader int = iota
+	decoderStateFindHeaderEnd int = iota
 	decoderStateMatchNL
 	decoderStateDecodeSetup
 	decoderStateDecode
 )
 
 func (r *decoder) Read(p []byte) (n int, err error) {
-	r.buf = make([]byte, len(p), cap(p))
 	var start, buffered int
 	if r.state != decoderStateDecode {
-		buffered, err = r.r.Read(r.buf)
+		// we haven't found the body yet, so read in some input and scan for the end of the header
+		// i.e. the body starts after "\n\n" is matched
+		buffered, err = r.r.Read(p)
 		if buffered == 0 {
 			return
 		}
 	}
+	buf := p[0:buffered] // we'll use p as a scratch buffer
 	for {
+		// The following is a simple state machine to find the body. Once it's found, the machine will go into a
+		// 'decoderStateDecode' state where the decoding will be performed with each call to Read
 		switch r.state {
-		case decoderStateFindHeader:
+		case decoderStateFindHeaderEnd:
 			// finding the start of the header
-			if start = bytes.Index(r.buf, []byte{chunkSaverNL, chunkSaverNL}); start != -1 {
+			if start = bytes.Index(buf, []byte{chunkSaverNL, chunkSaverNL}); start != -1 {
 				start += 2                        // skip the \n\n
 				r.state = decoderStateDecodeSetup // found the header
 				continue
-			} else if r.buf[len(r.buf)-1] == chunkSaverNL {
+			} else if buf[len(buf)-1] == chunkSaverNL {
 				// the last char is a \n so next call to Read will check if it starts with a matching \n
 				r.state = decoderStateMatchNL
 			}
 		case decoderStateMatchNL:
 			// check the first char if it is a '\n' because last time we matched a '\n'
-			if r.buf[0] == '\n' {
+			if buf[0] == '\n' {
 				// found the header
 				start = 1
 				r.state = decoderStateDecodeSetup
 				continue
 			} else {
-				r.state = decoderStateFindHeader
+				r.state = decoderStateFindHeaderEnd
 				continue
 			}
 		case decoderStateDecodeSetup:
 			if start != buffered {
 				// include any bytes that have already been read
-				r.r = io.MultiReader(bytes.NewBuffer(r.buf[start:buffered]), r.r)
+				r.r = io.MultiReader(bytes.NewBuffer(buf[start:]), r.r)
 			}
 			switch r.transport {
 			case transportQuotedPrintable:
@@ -103,10 +107,12 @@ func (r *decoder) Read(p []byte) (n int, err error) {
 			r.state = decoderStateDecode
 			continue
 		case decoderStateDecode:
+			// already found the body, do conversion and decoding
 			return r.r.Read(p)
 		}
 		start = 0
-		buffered, err = r.r.Read(r.buf)
+		// haven't found the body yet, continue scanning
+		buffered, err = r.r.Read(buf)
 		if buffered == 0 {
 			return
 		}
