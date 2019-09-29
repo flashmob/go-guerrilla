@@ -73,13 +73,11 @@ func (t *Transform) unswap() {
 }
 
 func (t *Transform) ReWrite(b []byte) (count int, err error) {
-
 	if !t.isBody {
 		count = len(b)
 		if i, err := io.Copy(&t.buf, bytes.NewReader(b)); err != nil {
 			return int(i), err
 		}
-		// *
 		for {
 			line, rErr := t.buf.ReadBytes('\n')
 			if rErr == nil {
@@ -89,16 +87,17 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 					t.current.Charset = "utf8"
 				} else if bytes.Contains(line, []byte("charset=")) {
 					rx := regexp.MustCompile("charset=\".+?\"")
-					_ = rx
-					//line = rx.ReplaceAll(line, []byte("charset=\"utf8\"") )
+					line = rx.ReplaceAll(line, []byte("charset=\"utf8\""))
+				}
+				_, err = io.Copy(t.parser, bytes.NewReader(line))
+				if err != nil {
+					return
 				}
 
 			} else {
 				break
 			}
 		}
-		// */
-
 	} else {
 
 		// do body decode here
