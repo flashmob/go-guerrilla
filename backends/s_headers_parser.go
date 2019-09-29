@@ -52,7 +52,7 @@ func StreamHeadersParser() *StreamDecorator {
 			return StreamProcessWith(func(p []byte) (int, error) {
 				switch state {
 				case stateHeaderScanning:
-					if mimeParts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
+					if mimeParts, ok := envelope.Values["MimeParts"].(*mime.Parts); ok {
 						// copy the the headers of the first mime-part to envelope.Header
 						// then call envelope.ParseHeaders()
 						if len(*mimeParts) > 0 {

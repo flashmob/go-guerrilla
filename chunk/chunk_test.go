@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/chunk/transfer"
 	"github.com/flashmob/go-guerrilla/mail"
 )
 
@@ -377,11 +378,12 @@ func TestChunkSaverReader(t *testing.T) {
 			t.Error(err)
 		}
 		part := email.partsInfo.Parts[0]
-		encoding := transportQuotedPrintable
+
+		encoding := transfer.QuotedPrintable
 		if strings.Contains(part.TransferEncoding, "base") {
-			encoding = transportBase64
+			encoding = transfer.Base64
 		}
-		dr, err := NewDecoder(r, encoding, part.Charset)
+		dr, err := transfer.NewDecoder(r, encoding, part.Charset)
 		_ = dr
 		if err != nil {
 			t.Error(err)
@@ -404,11 +406,11 @@ func TestChunkSaverReader(t *testing.T) {
 			t.Error(err)
 		}
 		part = email.partsInfo.Parts[0]
-		encoding = transportQuotedPrintable
+		encoding = transfer.QuotedPrintable
 		if strings.Contains(part.TransferEncoding, "base") {
-			encoding = transportBase64
+			encoding = transfer.Base64
 		}
-		dr, err = NewDecoder(r, encoding, part.Charset)
+		dr, err = transfer.NewDecoder(r, encoding, part.Charset)
 		_ = dr
 		if err != nil {
 			t.Error(err)
@@ -486,11 +488,11 @@ func TestChunkSaverWrite(t *testing.T) {
 			t.Error(err)
 		}
 		part := email.partsInfo.Parts[0]
-		encoding := transportQuotedPrintable
+		encoding := transfer.QuotedPrintable
 		if strings.Contains(part.TransferEncoding, "base") {
-			encoding = transportBase64
+			encoding = transfer.Base64
 		}
-		dr, err := NewDecoder(r, encoding, part.Charset)
+		dr, err := transfer.NewDecoder(r, encoding, part.Charset)
 		_ = dr
 		if err != nil {
 			t.Error(err)
@@ -515,12 +517,18 @@ func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.Stream
 	// instantiate the chunk saver
 	chunksaver := backends.Streamers["chunksaver"]()
 	mimeanalyzer := backends.Streamers["mimeanalyzer"]()
+	transformer := backends.Streamers["transformer"]()
+	debug := backends.Streamers["debug"]()
 	// add the default processor as the underlying processor for chunksaver
 	// and chain it with mimeanalyzer.
 	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
 	// This will also set our Open, Close and Initialize functions
 	// we also inject a Storage and a ChunkingBufferMime
-	stream := mimeanalyzer.Decorate(chunksaver.Decorate(backends.DefaultStreamProcessor{}, store, chunkBuffer))
+	stream := mimeanalyzer.Decorate(
+		transformer.Decorate(
+			debug.Decorate(
+				chunksaver.Decorate(
+					backends.DefaultStreamProcessor{}, store, chunkBuffer))))
 
 	// configure the buffer cap
 	bc := backends.BackendConfig{}
@@ -532,6 +540,6 @@ func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.Stream
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)
 	_ = mimeanalyzer.Open(e)
-
+	_ = transformer.Open(e)
 	return store, chunksaver, mimeanalyzer, stream
 }

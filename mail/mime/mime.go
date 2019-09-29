@@ -73,7 +73,7 @@ type Parser struct {
 	// each node. The name of the node is the *path* of the node. The root node is always
 	// "1". The child would be "1.1", the next sibling would be "1.2", while the child of
 	// "1.2" would be "1.2.1"
-	Parts []*Part
+	Parts Parts
 
 	msgPos uint // global position in the message
 
@@ -83,6 +83,8 @@ type Parser struct {
 
 	w io.Writer // underlying io.Writer
 }
+
+type Parts []*Part
 
 type Part struct {
 
@@ -99,6 +101,12 @@ type Part struct {
 	EndingPos uint
 	// EndingPosBody is thr ending position for the body. Typically identical to EndingPos
 	EndingPosBody uint
+
+	StartingPosDelta     uint
+	StartingPosBodyDelta uint
+	EndingPosDelta       uint
+	EndingPosBodyDelta   uint
+
 	// Charset holds the character-set the part is encoded in, eg. us-ascii
 	Charset string
 	// TransferEncoding holds the transfer encoding that was used to pack the message eg. base64
@@ -883,6 +891,19 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 				}
 			}
 		}
+	} else if part.ContentBoundary == "" {
+		for {
+			p.skip(len(p.buf))
+			if p.ch == 0 {
+				if part.StartingPosBody > 0 {
+					part.EndingPosBody = p.msgPos
+					part.EndingPos = p.msgPos
+				}
+				err = io.EOF
+				return
+			}
+		}
+
 	}
 	return
 

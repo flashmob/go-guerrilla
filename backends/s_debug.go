@@ -3,7 +3,6 @@ package backends
 import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
-	"strings"
 )
 
 func init() {
@@ -23,8 +22,9 @@ func StreamDebug() *StreamDecorator {
 			}
 			return StreamProcessWith(func(p []byte) (int, error) {
 				str := string(p)
-				str = strings.Replace(str, "\n", "<LF>\n", -1)
-				fmt.Println(str)
+				//str = strings.Replace(str, "\n", "<LF>\n", -1)
+				//fmt.Println(str)
+				fmt.Print(str)
 				Log().WithField("p", string(p)).Info("Debug stream")
 				return sp.Write(p)
 			})

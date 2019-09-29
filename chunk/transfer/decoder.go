@@ -1,4 +1,4 @@
-package chunk
+package transfer
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 	_ "github.com/flashmob/go-guerrilla/mail/encoding"
 )
 
-type transportEncoding int
+type Encoding int
 
 const (
-	transportBase64 transportEncoding = iota
-	transportQuotedPrintable
-	transport7bit // default, 1-127, 13 & 10 at line endings
-	transport8bit // 998 octets per line,  13 & 10 at line endings
+	Base64 Encoding = iota
+	QuotedPrintable
+	SevenBit // default, 1-127, 13 & 10 at line endings
+	EightBit // 998 octets per line,  13 & 10 at line endings
 
 )
 
@@ -25,18 +25,27 @@ const (
 type decoder struct {
 	state     int
 	charset   string
-	transport transportEncoding
+	transport Encoding
 	r         io.Reader
 }
 
 // NewDecoder reads a MIME-part from an underlying reader r
 // then decodes base64 or quoted-printable to 8bit, and converts encoding to UTF-8
-func NewDecoder(r io.Reader, transport transportEncoding, charset string) (*decoder, error) {
+func NewDecoder(r io.Reader, transport Encoding, charset string) (*decoder, error) {
 	decoder := new(decoder)
 	decoder.transport = transport
 	decoder.charset = strings.ToLower(charset)
 	decoder.r = r
 	return decoder, nil
+}
+
+func NewBodyDecoder(r io.Reader, transport Encoding, charset string) (*decoder, error) {
+	d, err := NewDecoder(r, transport, charset)
+	if err != nil {
+		return d, err
+	}
+	d.state = decoderStateDecodeSetup
+	return d, nil
 }
 
 const chunkSaverNL = '\n'
@@ -90,9 +99,9 @@ func (r *decoder) Read(p []byte) (n int, err error) {
 				r.r = io.MultiReader(bytes.NewBuffer(buf[start:]), r.r)
 			}
 			switch r.transport {
-			case transportQuotedPrintable:
+			case QuotedPrintable:
 				r.r = quotedprintable.NewReader(r.r)
-			case transportBase64:
+			case Base64:
 				r.r = base64.NewDecoder(base64.StdEncoding, r.r)
 			default:
 

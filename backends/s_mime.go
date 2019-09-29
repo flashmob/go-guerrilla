@@ -15,7 +15,7 @@ import (
 // --------------:-------------------------------------------------------------------
 // Input         :
 // ----------------------------------------------------------------------------------
-// Output        : MimeParts (of type *[]*mime.Part) stored in the envelope.Values map
+// Output        : MimeParts (of type *mime.Parts) stored in the envelope.Values map
 // ----------------------------------------------------------------------------------
 
 func init() {
@@ -53,17 +53,6 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			}
 
 			sd.Close = func() error {
-				/*
-					defer func() {
-						// todo remove, for debugging only
-						if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok {
-							for _, v := range *parts {
-								fmt.Println(v.Node + " " + strconv.Itoa(int(v.StartingPos)) + " " + strconv.Itoa(int(v.StartingPosBody)) + " " + strconv.Itoa(int(v.EndingPosBody)))
-							}
-						}
-					}()
-
-				*/
 
 				if parseErr == nil {
 					_ = parser.Close()

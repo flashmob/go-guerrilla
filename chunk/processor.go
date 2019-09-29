@@ -27,7 +27,7 @@ import (
 // ----------------------------------------------------------------------------------
 // Config Options: chunksaver_chunk_size - maximum chunk size, in bytes
 // --------------:-------------------------------------------------------------------
-// Input         : e.Values["MimeParts"] Which is of type *[]*mime.Part, as populated by "mimeanalyzer"
+// Input         : e.Values["MimeParts"] Which is of type *mime.Parts, as populated by "mimeanalyzer"
 // ----------------------------------------------------------------------------------
 // Output        :
 // ----------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ func Chunksaver() *backends.StreamDecorator {
 			)
 
 			var config *Config
-			// optional dependency injection
+			// optional dependency injection (you can pass your own instance of Storage or ChunkingBufferMime)
 			for i := range a {
 				if db, ok := a[i].(Storage); ok {
 					database = db
@@ -178,7 +178,7 @@ func Chunksaver() *backends.StreamDecorator {
 				return nil
 			}
 
-			fillVars := func(parts *[]*mime.Part, subject, to, from string) (string, string, string) {
+			fillVars := func(parts *mime.Parts, subject, to, from string) (string, string, string) {
 				if len(*parts) > 0 {
 					if subject == "" {
 						if val, ok := (*parts)[0].Headers["Subject"]; ok {
@@ -210,7 +210,7 @@ func Chunksaver() *backends.StreamDecorator {
 				if envelope.Values == nil {
 					return count, errors.New("no message headers found")
 				}
-				if parts, ok := envelope.Values["MimeParts"].(*[]*mime.Part); ok && len(*parts) > 0 {
+				if parts, ok := envelope.Values["MimeParts"].(*mime.Parts); ok && len(*parts) > 0 {
 					var pos int
 
 					subject, to, from = fillVars(parts, subject, to, from)
@@ -236,7 +236,11 @@ func Chunksaver() *backends.StreamDecorator {
 						}
 						// break chunk on header
 						if part.StartingPosBody > 0 && part.StartingPosBody >= msgPos {
-							count, _ = chunkBuffer.Write(p[pos : part.StartingPosBody-offset])
+							to := part.StartingPosBody - offset
+							if lenp := len(p); int(to) > lenp {
+								to = uint(lenp)
+							}
+							count, _ = chunkBuffer.Write(p[pos:to])
 							written += int64(count)
 
 							err = chunkBuffer.Flush()

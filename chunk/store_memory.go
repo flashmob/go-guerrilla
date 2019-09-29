@@ -14,7 +14,7 @@ type StoreMemory struct {
 	chunks        map[HashKey]*memoryChunk
 	emails        []*memoryEmail
 	nextID        uint64
-	IDOffset      uint64
+	offset        uint64
 	CompressLevel int
 }
 
@@ -69,7 +69,7 @@ func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ip
 
 // CloseMessage implements the Storage interface
 func (m *StoreMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
-	if email := m.emails[mailID-m.IDOffset]; email == nil {
+	if email := m.emails[mailID-m.offset]; email == nil {
 		return errors.New("email not found")
 	} else {
 		email.size = size
@@ -123,8 +123,8 @@ func (m *StoreMemory) AddChunk(data []byte, hash []byte) error {
 
 // Initialize implements the Storage interface
 func (m *StoreMemory) Initialize(cfg backends.BackendConfig) error {
-	m.IDOffset = 1
-	m.nextID = m.IDOffset
+	m.offset = 1
+	m.nextID = m.offset
 	m.emails = make([]*memoryEmail, 0, 100)
 	m.chunks = make(map[HashKey]*memoryChunk, 1000)
 	m.CompressLevel = zlib.NoCompression
@@ -140,10 +140,12 @@ func (m *StoreMemory) Shutdown() (err error) {
 
 // GetEmail implements the Storage interface
 func (m *StoreMemory) GetEmail(mailID uint64) (*Email, error) {
-	if size := uint64(len(m.emails)) - m.IDOffset; size > mailID-m.IDOffset {
+	if count := len(m.emails); count == 0 {
+		return nil, errors.New("storage is empty")
+	} else if overflow := uint64(count) - m.offset; overflow > mailID-m.offset {
 		return nil, errors.New("mail not found")
 	}
-	email := m.emails[mailID-m.IDOffset]
+	email := m.emails[mailID-m.offset]
 	pi := NewPartsInfo()
 	if err := pi.UnmarshalJSONZlib(email.partsInfo); err != nil {
 		return nil, err

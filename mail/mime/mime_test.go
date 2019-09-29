@@ -594,3 +594,75 @@ func TestNonMineEmail(t *testing.T) {
 	}
 
 }
+
+var email6 = `Delivered-To: nevaeh@sharklasers.com
+Received: from bb_dyn_pb-146-88-38-36.violin.co.th (bb_dyn_pb-146-88-38-36.violin.co.th  [146.88.38.36])
+	by sharklasers.com with SMTP id d0e961595a207a79ab84603750372de8@sharklasers.com;
+	Tue, 17 Sep 2019 01:13:00 +0000
+Received: from mx03.listsystemsf.net [100.20.38.85] by mxs.perenter.com with SMTP; Tue, 17 Sep 2019 04:57:59 +0500
+Received: from mts.locks.grgtween.net ([Tue, 17 Sep 2019 04:52:27 +0500])
+	by webmail.halftomorrow.com with LOCAL; Tue, 17 Sep 2019 04:52:27 +0500
+Received: from mail.naihautsui.co.kr ([61.220.30.1]) by mtu67.syds.piswix.net with ASMTP; Tue, 17 Sep 2019 04:47:25 +0500
+Received: from unknown (HELO mx03.listsystemsf.net) (Tue, 17 Sep 2019 04:41:45 +0500)
+	by smtp-server1.cfdenselr.com with LOCAL; Tue, 17 Sep 2019 04:41:45 +0500
+Message-ID: <78431AF2.E9B20F56@violin.co.th>
+Date: Tue, 17 Sep 2019 04:14:56 +0500
+Reply-To: "Richard" <richard@grr.la>
+From: "Rick" <rich@grr.la>
+User-Agent: Mozilla 4.73 [de]C-CCK-MCD DT  (Win98; U)
+X-Accept-Language: en-us
+MIME-Version: 1.0
+To: "Nevaeh" <nevaeh@sharklasers.com>
+Subject: Cesść tereska
+Content-Type: text/html;
+	charset="iso-8859-1"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAG4AAAAyCAIAAAAydXkgAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA
+B3RJTUUH1gYEExgGfYkXIAAAAAd0RVh0QXV0aG9yAKmuzEgAAAAMdEVYdERlc2NyaXB0aW9uABMJ
+ISMAAAAKdEVYdENvcHlyaWdodACsD8w6AAAADnRFWHRDcmVhdGlvbiB0aW1lADX3DwkAAAAJdEVY
+dFNvZnR3YXJlAF1w/zoAAAALdEVYdERpc2NsYWltZXIAt8C0jwAAAAh0RVh0V2FybmluZwDAG+aH
+AAAAB3RFWHRTb3VyY2UA9f+D6wAAAAh0RVh0Q29tbWVudAD2zJa/AAAABnRFWHRUaXRsZQCo7tIn
+AAABAElEQVR4nO2ZUY6DIBCG66YH88FGvQLHEI+hHsMriPFw7AMJIYAwoO269v+eSDPDmKn5HOXx
+AAAAAAAAAPxblmWRZJZlSU3RCCE451Z1IUQ00c1ScM7p15zHT1J0URSpwUkpmrquh2HY60uA1+vl
+/b2qKkp63tUCcA8otrK8k+dKr7+I1V0tEEUppRRCZDcnzZUZHLdP6g6uFomiBACYeHUTTnF9ZwV4
+3dp1HaW0V5dRUR6ZJU3e7kqLaK+9ZpymKamKOV3uTZrhigCAU1wZhV7aRE2IlKn2tq60WNeVHtz3
+vV7Xdc05b5pmL0ADVwLg5QOu3BNZhhxVwH1cmYoluwDqX2zbj2bPFgAAAMdJREFUNnUruBIALxmu
+dF1mBXhlSimtPzW6O5hfIQOJB7mcK72NSzrk2bYt+ku0IvhL8PCKwxhTi3meT9s06aBGOSjjpduF
+Ut1UnlnUUmG4kDtj6j5aa5c3noOfhX4ND1eXhvJMOYZFGYYxNs8zY6wsS73O3u2rUY1jjOkOBlp5
+uSf4NTn/fsw4Bz/oSnMMCm9laU4FuzMj5ZpN6K58JrVSfnAEW9d127ZxHInVLZM2TSOlpL/C72He
+j2c+wQEAAAAAAAAAfB2/3ihTGANzPd8AAAAASUVORK5CYII=
+`
+
+func TestNonMineEmailBigBody(t *testing.T) {
+	p = NewMimeParser()
+	b := []byte(email6)
+	to := 74
+	var in [][]byte
+	for i := 0; ; i += to {
+		if to+i > len(b) {
+			in = append(in, b[i:])
+			break
+		}
+		in = append(in, b[i:to+i])
+	}
+	p.inject(in...)
+	if err := p.mime(nil, ""); err != nil && err != NotMime && err != io.EOF {
+		t.Error(err)
+	} else {
+		for part := range p.Parts {
+			fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+		}
+	}
+	err := p.Close()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// what if we pass an empty string?
+	p.inject([]byte{' '})
+	if err := p.mime(nil, ""); err == nil || err == NotMime || err == io.EOF {
+		t.Error("unexpected error", err)
+	}
+
+}

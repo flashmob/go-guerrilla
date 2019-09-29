@@ -50,7 +50,7 @@ func (r MimeDotReader) Close() (err error) {
 }
 
 // Parts returns the mime-header parts built by the parser
-func (r *MimeDotReader) Parts() []*mime.Part {
+func (r *MimeDotReader) Parts() mime.Parts {
 	return r.p.Parts
 }
 
