@@ -17,9 +17,12 @@ import (
 // ----------------------------------------------------------------------------------
 // Config Options:
 // --------------:-------------------------------------------------------------------
-// Input         :
+// Input         : envelope.Values["MimeParts"]
 // ----------------------------------------------------------------------------------
-// Output        : 8bit mime message
+// Output        : 8bit mime message, with charsets decoded to UTF-8
+//               : Note that this processor changes the body counts. Therefore, it makes
+//               : a new instance of envelope.Values["MimeParts"] which is then populated
+//               : by parsing the new re-written message
 // ----------------------------------------------------------------------------------
 
 func init() {
@@ -41,13 +44,11 @@ type Transform struct {
 	decoder             io.Reader
 	pr                  *io.PipeReader
 	pw                  *io.PipeWriter
-	parts               *mime.Parts
 	partsCachedOriginal *mime.Parts
 	envelope            *mail.Envelope
 
-	state   int
-	matched int
-
+	// we re-parse the output since the counts have changed
+	// parser implements the io.Writer interface, here output will be sent to it and then forwarded to the next processor
 	parser *mime.Parser
 }
 
@@ -74,6 +75,8 @@ func (t *Transform) unswap() {
 
 func (t *Transform) ReWrite(b []byte) (count int, err error) {
 	if !t.isBody {
+		// we place the partial header's bytes on a buffer from which we can read one line at a time
+		// then we match and replace the lines we want
 		count = len(b)
 		if i, err := io.Copy(&t.buf, bytes.NewReader(b)); err != nil {
 			return int(i), err
@@ -93,7 +96,6 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 				if err != nil {
 					return
 				}
-
 			} else {
 				break
 			}
@@ -167,7 +169,6 @@ func Transformer() *StreamDecorator {
 			}
 
 			sd.Open = func(e *mail.Envelope) error {
-				//charset_pos = 0
 				envelope = e
 				_ = envelope
 				if reWriter.parser == nil {
@@ -184,7 +185,6 @@ func Transformer() *StreamDecorator {
 
 					// we are going to change envelope.Values["MimeParts"] to our own copy with our own counts
 					envelope.Values["MimeParts"] = reWriter.swap()
-
 					defer reWriter.unswap()
 					var pos int
 
@@ -203,15 +203,12 @@ func Transformer() *StreamDecorator {
 								break
 							}
 							reWriter.current = part
-
 							pos += count
 							msgPos = part.StartingPos
 						}
 						// break chunk on header (found the body)
 						if part.StartingPosBody > 0 && part.StartingPosBody >= msgPos {
-							//reWriter.recalculate()
 							count, err = reWriter.ReWrite(p[pos : part.StartingPosBody-offset])
-
 							total += count
 							if err != nil {
 								break
@@ -219,7 +216,6 @@ func Transformer() *StreamDecorator {
 							_, _ = reWriter.parser.Write([]byte{'\n'}) // send an end of header to the parser
 							reWriter.isBody = true
 							reWriter.current = part
-
 							pos += count
 							msgPos = part.StartingPosBody
 						}
@@ -242,10 +238,10 @@ func Transformer() *StreamDecorator {
 						progress = len(*parts) - 2 // skip to 2nd last part, assume previous parts are already processed
 					}
 				}
-
+				// note that in this case, ReWrite method will output the stream to further processors down the line
+				// here we just return back with the result
 				return total, err
 			})
 		}
-
 	return sd
 }
