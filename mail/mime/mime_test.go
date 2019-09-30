@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,9 +61,35 @@ func TestMimeContentType(t *testing.T) {
 		<-p.consumed
 		p.gotNewSlice <- false
 	}()
-	subject := "text/plain; charset=\"us-ascii\"; moo; boundary=\"foo\""
+
+	// what happens if we call Charset with empty content type?
+	empty := contentType{}
+	blank := empty.Charset()
+	if blank != "" {
+		t.Error("expecting charset to be blank")
+	}
+
+	subject := "text/plain; charset=\"us-aScii\"; moo; boundary=\"foo\""
 	p.inject([]byte(subject))
 	contentType, err := p.contentType()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if charset := contentType.Charset(); charset != "US-ASCII" {
+		t.Error("charset is not US-ASCII")
+	}
+
+	// test the stringer (note it will canonicalize us-aScii to US-ASCII
+	subject = strings.Replace(subject, "us-aScii", "US-ASCII", 1)
+	if ct := contentType.String(); contentType.String() != subject {
+		t.Error("\n[" + ct + "]\ndoes not equal\n[" + subject + "]")
+	}
+
+	// what happens if we don't use quotes for the param?
+	subject = "text/plain; charset=us-aScii; moo; boundary=\"foo\""
+	p.inject([]byte(subject))
+	contentType, err = p.contentType()
 	if err != nil {
 		t.Error(err)
 	}
@@ -75,9 +102,6 @@ func TestMimeContentType(t *testing.T) {
 		t.Error("contentType.subType expecting 'text', got:", contentType.superType)
 	}
 
-	if ct := contentType.String(); contentType.String() != subject {
-		t.Error("\n[" + ct + "]\ndoes not equal\n[" + subject + "]")
-	}
 }
 
 func TestEmailHeader(t *testing.T) {

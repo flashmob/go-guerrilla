@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/textproto"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -178,6 +179,19 @@ func (c *contentType) String() (ret string) {
 	ret = fmt.Sprintf("%s/%s%s", c.superType, c.subType,
 		c.params())
 	return
+}
+
+// Charset returns the charset value specified by the content type
+func (c *contentType) Charset() (ret string) {
+	if c.superType == "" {
+		return ""
+	}
+	for i := range c.parameters {
+		if c.parameters[i].name == "charset" {
+			return c.parameters[i].value
+		}
+	}
+	return ""
 }
 
 func newPart() *Part {
@@ -499,7 +513,7 @@ func (p *Parser) header(mh *Part) (err error) {
 							return errors.New("boundary exceeded max length")
 						}
 					case contentType.parameters[i].name == "charset":
-						mh.Charset = contentType.parameters[i].value
+						mh.Charset = strings.ToUpper(contentType.parameters[i].value)
 					case contentType.parameters[i].name == "name":
 						mh.ContentName = contentType.parameters[i].value
 					}
@@ -604,6 +618,9 @@ func (p *Parser) contentType() (result contentType, err error) {
 			if key, val, err := p.parameter(); err != nil {
 				return result, err
 			} else {
+				if key == "charset" {
+					val = strings.ToUpper(val)
+				}
 				// add the new parameter
 				result.parameters = append(result.parameters, parameter{key, val})
 			}

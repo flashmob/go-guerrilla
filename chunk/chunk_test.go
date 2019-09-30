@@ -192,7 +192,7 @@ MIME-Version: 1.0
 To: "Nevaeh" <nevaeh@sharklasers.com>
 Subject: czy m�glbys spotkac sie ze mna w weekend?
 Content-Type: text/html;
-	charset="iso-8859-1"
+	charset="iso-8859-1""
 Content-Transfer-Encoding: base64
 
 PCFkb2N0eXBlIGh0bWw+DQo8aHRtbD4NCjxoZWFkPg0KPG1ldGEgY2hhcnNldD0idXRmLTgiPg0K

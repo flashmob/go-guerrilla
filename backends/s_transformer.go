@@ -3,11 +3,12 @@ package backends
 import (
 	"bytes"
 	"github.com/flashmob/go-guerrilla/chunk/transfer"
-	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/mime"
 	"io"
 	"regexp"
 	"sync"
+
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/mail/mime"
 )
 
 // ----------------------------------------------------------------------------------
@@ -67,11 +68,14 @@ func (t *Transform) swap() *mime.Parts {
 
 // point the parts from envelope.Values back to the original ones
 func (t *Transform) unswap() {
-	if parts, ok := t.envelope.Values["MimeParts"].(*mime.Parts); ok {
-		_ = parts
-		parts = t.partsCachedOriginal
+	if _, ok := t.envelope.Values["MimeParts"].(*mime.Parts); ok {
+		t.envelope.Values["MimeParts"] = t.partsCachedOriginal
 	}
 }
+
+var regexpCharset = regexp.MustCompile("(?i)charset=\"?(.+)\"?") // (?i) is a flag for case-insensitive
+
+// todo: we may optimize this by looking at t.partsCachedOriginal, implement a Reader for it, re-write the header as we read from it
 
 func (t *Transform) ReWrite(b []byte) (count int, err error) {
 	if !t.isBody {
@@ -81,23 +85,50 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 		if i, err := io.Copy(&t.buf, bytes.NewReader(b)); err != nil {
 			return int(i), err
 		}
+		var charsetProcessed bool
+		charsetFrom := ""
 		for {
 			line, rErr := t.buf.ReadBytes('\n')
+
 			if rErr == nil {
+				if !charsetProcessed {
+					// is charsetFrom supported?
+					exists := t.current.Headers.Get("content-type")
+					if exists != "" {
+						charsetProcessed = true
+						charsetFrom = t.current.ContentType.Charset()
+						if !mail.SupportsCharset(charsetFrom) {
+							charsetFrom = ""
+						}
+					}
+				}
+
 				if bytes.Contains(line, []byte("Content-Transfer-Encoding: base64")) {
 					line = bytes.Replace(line, []byte("base64"), []byte("8bit"), 1)
 					t.current.TransferEncoding = "8bit"
-					t.current.Charset = "utf8"
-				} else if bytes.Contains(line, []byte("charset=")) {
-					rx := regexp.MustCompile("charset=\".+?\"")
-					line = rx.ReplaceAll(line, []byte("charset=\"utf8\""))
+
+				} else if bytes.Contains(line, []byte("charset")) {
+					if match := regexpCharset.FindSubmatch(line); match != nil && len(match) > 0 {
+						// test if the encoding is supported
+						if charsetFrom != "" {
+							// it's supported, we can change it to utf8
+							line = regexpCharset.ReplaceAll(line, []byte("charset=utf8"))
+							t.current.Charset = "utf8"
+						}
+					}
 				}
 				_, err = io.Copy(t.parser, bytes.NewReader(line))
 				if err != nil {
 					return
 				}
+				if line[0] == '\n' {
+					// end of header
+					break
+				}
 			} else {
-				break
+				// returned data does not end in delim
+				panic("returned data does not end in delim")
+				//break
 			}
 		}
 	} else {
@@ -107,7 +138,17 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 		if t.decoder == nil {
 			t.buf.Reset()
 			// the decoder will be reading from an underlying pipe
-			t.decoder, err = transfer.NewBodyDecoder(t.pr, transfer.Base64, "iso-8859-1")
+			charsetFrom := t.current.ContentType.Charset()
+			if charsetFrom == "" {
+				charsetFrom = mail.MostCommonCharset
+			}
+			if mail.SupportsCharset(charsetFrom) {
+				t.decoder, err = transfer.NewBodyDecoder(t.pr, transfer.Base64, charsetFrom)
+			}
+			if err != nil {
+				return
+			}
+
 		}
 
 		wg := sync.WaitGroup{}

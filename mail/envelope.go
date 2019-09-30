@@ -285,3 +285,22 @@ func (p *Pool) Return(e *Envelope) {
 	// take a value off the semaphore to make room for more envelopes
 	<-p.sem
 }
+
+const MostCommonCharset = "ISO-8859-1"
+
+var supportedEncodingsCharsets map[string]bool
+
+func SupportsCharset(charset string) bool {
+	if supportedEncodingsCharsets == nil {
+		supportedEncodingsCharsets = make(map[string]bool)
+	} else if ok, result := supportedEncodingsCharsets[charset]; ok {
+		return result
+	}
+	_, err := Dec.CharsetReader(charset, bytes.NewReader([]byte{}))
+	if err != nil {
+		supportedEncodingsCharsets[charset] = false
+		return false
+	}
+	supportedEncodingsCharsets[charset] = true
+	return true
+}
