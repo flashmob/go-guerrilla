@@ -134,12 +134,20 @@ Content-Type: image/gif; name="map_of_Argentina.gif"
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="map_of_Argentina.gif"
 
-R01GOD1hJQA1AKIAAP/////78P/omn19fQAAAAAAAAAAAAAAACwAAAAAJQA1AAAD7Qi63P5w
-wEmjBCLrnQnhYCgM1wh+pkgqqeC9XrutmBm7hAK3tP31gFcAiFKVQrGFR6kscnonTe7FAAad
-GugmRu3CmiBt57fsVq3Y0VFKnpYdxPC6M7Ze4crnnHum4oN6LFJ1bn5NXTN7OF5fQkN5WYow
-BEN2dkGQGWJtSzqGTICJgnQuTJN/WJsojad9qXMuhIWdjXKjY4tenjo6tjVssk2gaWq3uGNX
-U6ZGxseyk8SasGw3J9GRzdTQky1iHNvcPNNI4TLeKdfMvy0vMqLrItvuxfDW8ubjueDtJufz
-7itICBxISKDBgwgTKjyYAAA7
+iVBORw0KGgoAAAANSUhEUgAAAG4AAAAyCAIAAAAydXkgAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA
+B3RJTUUH1gYEExgGfYkXIAAAAAd0RVh0QXV0aG9yAKmuzEgAAAAMdEVYdERlc2NyaXB0aW9uABMJ
+ISMAAAAKdEVYdENvcHlyaWdodACsD8w6AAAADnRFWHRDcmVhdGlvbiB0aW1lADX3DwkAAAAJdEVY
+dFNvZnR3YXJlAF1w/zoAAAALdEVYdERpc2NsYWltZXIAt8C0jwAAAAh0RVh0V2FybmluZwDAG+aH
+AAAAB3RFWHRTb3VyY2UA9f+D6wAAAAh0RVh0Q29tbWVudAD2zJa/AAAABnRFWHRUaXRsZQCo7tIn
+AAABAElEQVR4nO2ZUY6DIBCG66YH88FGvQLHEI+hHsMriPFw7AMJIYAwoO269v+eSDPDmKn5HOXx
+AAAAAAAAAPxblmWRZJZlSU3RCCE451Z1IUQ00c1ScM7p15zHT1J0URSpwUkpmrquh2HY60uA1+vl
+/b2qKkp63tUCcA8otrK8k+dKr7+I1V0tEEUppRRCZDcnzZUZHLdP6g6uFomiBACYeHUTTnF9ZwV4
+3dp1HaW0V5dRUR6ZJU3e7kqLaK+9ZpymKamKOV3uTZrhigCAU1wZhV7aRE2IlKn2tq60WNeVHtz3
+vV7Xdc05b5pmL0ADVwLg5QOu3BNZhhxVwH1cmYoluwDqX2zbj2bPFgAAAMdJREFUNnUruBIALxmu
+dF1mBXhlSimtPzW6O5hfIQOJB7mcK72NSzrk2bYt+ku0IvhL8PCKwxhTi3meT9s06aBGOSjjpduF
+Ut1UnlnUUmG4kDtj6j5aa5c3noOfhX4ND1eXhvJMOYZFGYYxNs8zY6wsS73O3u2rUY1jjOkOBlp5
+uSf4NTn/fsw4Bz/oSnMMCm9laU4FuzMj5ZpN6K58JrVSfnAEW9d127ZxHInVLZM2TSOlpL/C72He
+j2c+wQEAAAAAAAAAfB2/3ihTGANzPd8AAAAASUVORK5CYII=
 --DC8------------DC8638F443D87A7F0726DEF7--
 
 --D7F------------D7FD5A0B8AB9C65CCDBFA872--
@@ -342,8 +350,40 @@ func TestHashBytes(t *testing.T) {
 	}
 }
 
+func TestTransformer(t *testing.T) {
+	store, chunksaver, mimeanalyzer, stream := initTestStream(true)
+	buf := make([]byte, 64)
+	var result bytes.Buffer
+	if _, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
+		t.Error(err)
+	} else {
+		_ = mimeanalyzer.Close()
+		_ = chunksaver.Close()
+
+		email, err := store.GetEmail(1)
+		if err != nil {
+			t.Error("email not found")
+			return
+		}
+
+		// this should read all parts
+		r, err := NewChunkedReader(store, email, 0)
+		buf2 := make([]byte, 64)
+		if w, err := io.CopyBuffer(&result, r, buf2); err != nil {
+			t.Error(err)
+		} else if w != email.size {
+			t.Error("email.size != number of bytes copied from reader", w, email.size)
+		}
+
+		if !strings.Contains(result.String(), "</html>") {
+			t.Error("Looks like it didn;t read the entire email, was expecting </html>")
+		}
+		result.Reset()
+	}
+}
+
 func TestChunkSaverReader(t *testing.T) {
-	store, chunksaver, mimeanalyzer, stream := initTestStream()
+	store, chunksaver, mimeanalyzer, stream := initTestStream(false)
 	buf := make([]byte, 64)
 	var result bytes.Buffer
 	if _, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
@@ -432,8 +472,8 @@ func TestChunkSaverReader(t *testing.T) {
 
 func TestChunkSaverWrite(t *testing.T) {
 
-	store, chunksaver, mimeanalyzer, stream := initTestStream()
-
+	store, chunksaver, mimeanalyzer, stream := initTestStream(true)
+	var out bytes.Buffer
 	buf := make([]byte, 128)
 	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
 		t.Error(err)
@@ -445,7 +485,6 @@ func TestChunkSaverWrite(t *testing.T) {
 		for _, chunk := range store.chunks {
 			total += len(chunk.data)
 		}
-		// 8A9m4qGsTU4wQB1wAgBEVw==
 		fmt.Println("compressed", total, "saved:", written-int64(total))
 		email, err := store.GetEmail(1)
 		if err != nil {
@@ -455,11 +494,14 @@ func TestChunkSaverWrite(t *testing.T) {
 
 		// this should read all parts
 		r, err := NewChunkedReader(store, email, 0)
-		if w, err := io.Copy(os.Stdout, r); err != nil {
+		if w, err := io.Copy(&out, r); err != nil {
 			t.Error(err)
 		} else if w != email.size {
 			t.Error("email.size != number of bytes copied from reader", w, email.size)
+		} else if !strings.Contains(out.String(), "</html>") {
+			t.Error("The email didn't decode properly, expecting </html>")
 		}
+		out.Reset()
 
 		// test the seek feature
 		r, err = NewChunkedReader(store, email, 0)
@@ -474,13 +516,14 @@ func TestChunkSaverWrite(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			w, err := io.Copy(os.Stdout, r)
+			w, err := io.Copy(&out, r)
 			if err != nil {
 				t.Error(err)
 			}
-			if w != int64(email.partsInfo.Parts[i].Size) {
-				t.Error("incorrect size, expecting", email.partsInfo.Parts[i].Size, "but read:", w)
+			if w != int64(email.partsInfo.Parts[i-1].Size) {
+				t.Error(i, "incorrect size, expecting", email.partsInfo.Parts[i-1].Size, "but read:", w)
 			}
+			out.Reset()
 		}
 
 		r, err = NewChunkedReader(store, email, 0)
@@ -505,7 +548,7 @@ func TestChunkSaverWrite(t *testing.T) {
 	}
 }
 
-func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
+func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
 	// place the parse result in an envelope
 	e := mail.NewEnvelope("127.0.0.1", 1)
 	to, _ := mail.NewAddress("test@test.com")
@@ -518,17 +561,25 @@ func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.Stream
 	chunksaver := backends.Streamers["chunksaver"]()
 	mimeanalyzer := backends.Streamers["mimeanalyzer"]()
 	transformer := backends.Streamers["transformer"]()
-	debug := backends.Streamers["debug"]()
+	//debug := backends.Streamers["debug"]()
 	// add the default processor as the underlying processor for chunksaver
 	// and chain it with mimeanalyzer.
 	// Call order: mimeanalyzer -> chunksaver -> default (terminator)
 	// This will also set our Open, Close and Initialize functions
 	// we also inject a Storage and a ChunkingBufferMime
-	stream := mimeanalyzer.Decorate(
-		transformer.Decorate(
-			debug.Decorate(
+	var stream backends.StreamProcessor
+	if transform {
+		stream = mimeanalyzer.Decorate(
+			transformer.Decorate(
+				//debug.Decorate(
 				chunksaver.Decorate(
-					backends.DefaultStreamProcessor{}, store, chunkBuffer))))
+					backends.DefaultStreamProcessor{}, store, chunkBuffer))) //)
+	} else {
+		stream = mimeanalyzer.Decorate(
+			//debug.Decorate(
+			chunksaver.Decorate(
+				backends.DefaultStreamProcessor{}, store, chunkBuffer)) //)
+	}
 
 	// configure the buffer cap
 	bc := backends.BackendConfig{}
@@ -540,6 +591,9 @@ func initTestStream() (*StoreMemory, *backends.StreamDecorator, *backends.Stream
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)
 	_ = mimeanalyzer.Open(e)
-	_ = transformer.Open(e)
+	if transform {
+		_ = transformer.Open(e)
+	}
+
 	return store, chunksaver, mimeanalyzer, stream
 }

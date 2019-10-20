@@ -77,11 +77,13 @@ var regexpCharset = regexp.MustCompile("(?i)charset=\"?(.+)\"?") // (?i) is a fl
 
 // todo: we may optimize this by looking at t.partsCachedOriginal, implement a Reader for it, re-write the header as we read from it
 
-func (t *Transform) ReWrite(b []byte) (count int, err error) {
+func (t *Transform) ReWrite(b []byte, last bool) (count int, err error) {
+	defer func() {
+		count = len(b)
+	}()
 	if !t.isBody {
 		// we place the partial header's bytes on a buffer from which we can read one line at a time
 		// then we match and replace the lines we want
-		count = len(b)
 		if i, err := io.Copy(&t.buf, bytes.NewReader(b)); err != nil {
 			return int(i), err
 		}
@@ -89,7 +91,6 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 		charsetFrom := ""
 		for {
 			line, rErr := t.buf.ReadBytes('\n')
-
 			if rErr == nil {
 				if !charsetProcessed {
 					// is charsetFrom supported?
@@ -105,15 +106,12 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 
 				if bytes.Contains(line, []byte("Content-Transfer-Encoding: base64")) {
 					line = bytes.Replace(line, []byte("base64"), []byte("8bit"), 1)
-					t.current.TransferEncoding = "8bit"
-
 				} else if bytes.Contains(line, []byte("charset")) {
 					if match := regexpCharset.FindSubmatch(line); match != nil && len(match) > 0 {
 						// test if the encoding is supported
 						if charsetFrom != "" {
 							// it's supported, we can change it to utf8
 							line = regexpCharset.ReplaceAll(line, []byte("charset=utf8"))
-							t.current.Charset = "utf8"
 						}
 					}
 				}
@@ -126,12 +124,14 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 					break
 				}
 			} else {
-				// returned data does not end in delim
-				panic("returned data does not end in delim")
-				//break
+				return
 			}
 		}
 	} else {
+
+		if ct := t.current.ContentType.Supertype(); ct == "multipart" || ct == "message" {
+			return
+		}
 
 		// do body decode here
 		t.pr, t.pw = io.Pipe()
@@ -142,13 +142,15 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 			if charsetFrom == "" {
 				charsetFrom = mail.MostCommonCharset
 			}
-			if mail.SupportsCharset(charsetFrom) {
-				t.decoder, err = transfer.NewBodyDecoder(t.pr, transfer.Base64, charsetFrom)
-			}
-			if err != nil {
-				return
-			}
 
+			if mail.SupportsCharset(charsetFrom) {
+				t.decoder, err = transfer.NewBodyDecoder(t.pr, transfer.ParseEncoding(t.current.TransferEncoding), charsetFrom)
+				if err != nil {
+					return
+				}
+				t.current.Charset = "utf8"
+				t.current.TransferEncoding = "8bit"
+			}
 		}
 
 		wg := sync.WaitGroup{}
@@ -171,14 +173,16 @@ func (t *Transform) ReWrite(b []byte) (count int, err error) {
 		_ = i
 		wg.Wait()
 		_ = t.pr.Close()
-		count = len(b)
+
+		if last {
+			t.decoder = nil
+		}
 	}
 	return count, err
 }
 
 func (t *Transform) Reset() {
 	t.decoder = nil
-
 }
 
 func Transformer() *StreamDecorator {
@@ -236,8 +240,8 @@ func Transformer() *StreamDecorator {
 
 						// break chunk on new part
 						if part.StartingPos > 0 && part.StartingPos > msgPos {
-							reWriter.isBody = false
-							count, err = reWriter.ReWrite(p[pos : part.StartingPos-offset])
+							cbLen := len(part.ContentBoundary) + 3
+							count, err = reWriter.ReWrite(p[pos:part.StartingPos-offset-uint(cbLen)], true)
 
 							total += count
 							if err != nil {
@@ -246,10 +250,11 @@ func Transformer() *StreamDecorator {
 							reWriter.current = part
 							pos += count
 							msgPos = part.StartingPos
+							reWriter.isBody = false
 						}
 						// break chunk on header (found the body)
 						if part.StartingPosBody > 0 && part.StartingPosBody >= msgPos {
-							count, err = reWriter.ReWrite(p[pos : part.StartingPosBody-offset])
+							count, err = reWriter.ReWrite(p[pos:part.StartingPosBody-offset], true)
 							total += count
 							if err != nil {
 								break
@@ -262,7 +267,7 @@ func Transformer() *StreamDecorator {
 						}
 						// if on the latest (last) part, and yet there is still data to be written out
 						if len(*parts)-1 == i && len(p)-1 > pos {
-							count, err = reWriter.ReWrite(p[pos:])
+							count, err = reWriter.ReWrite(p[pos:], false)
 							total += count
 							if err != nil {
 								break

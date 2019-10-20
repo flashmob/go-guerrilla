@@ -194,6 +194,10 @@ func (c *contentType) Charset() (ret string) {
 	return ""
 }
 
+func (c *contentType) Supertype() (ret string) {
+	return c.superType
+}
+
 func newPart() *Part {
 	mh := new(Part)
 	mh.Headers = make(textproto.MIMEHeader, 1)

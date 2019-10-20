@@ -18,8 +18,24 @@ const (
 	QuotedPrintable
 	SevenBit // default, 1-127, 13 & 10 at line endings
 	EightBit // 998 octets per line,  13 & 10 at line endings
+	Binary   // 8 bit with no line restrictions
 
 )
+
+func ParseEncoding(str string) Encoding {
+	if str == "base64" {
+		return Base64
+	} else if str == "quoted-printable" {
+		return QuotedPrintable
+	} else if str == "7bit" {
+		return SevenBit
+	} else if str == "8bit" {
+		return EightBit
+	} else if str == "binary" {
+		return Binary
+	}
+	return SevenBit
+}
 
 // decoder decodes base64 and q-printable, then converting charset to UTF-8
 type decoder struct {

@@ -11,6 +11,8 @@ type chunkedReader struct {
 	email *Email
 	// part requests a part. If 0, all the parts are read sequentially
 	part int
+
+	// i is which part it's currently reading, j is which chunk of a part
 	i, j int
 
 	cache cachedChunks
@@ -20,6 +22,7 @@ type chunkedReader struct {
 // if part is 0, Read will read in the entire message. 1 selects the first part, 2 2nd, and so on..
 func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error) {
 	r := new(chunkedReader)
+	fmt.Println("new reader")
 	r.db = db
 	if email == nil {
 		return nil, errors.New("nil email")
@@ -145,7 +148,7 @@ func (c *cachedChunks) empty() {
 	for i := range c.chunks {
 		c.chunks[i] = nil
 	}
-	c.chunks = c.chunks[:] // set len to 0
+	c.chunks = c.chunks[:0] // set len to 0
 	for key := range c.hashIndex {
 		delete(c.hashIndex, key)
 	}
@@ -180,10 +183,10 @@ func (r *chunkedReader) Read(p []byte) (n int, err error) {
 				if r.j == length { // last chunk in a part?
 					r.j = 0 // reset chunk index
 					r.i++   // advance to the next part
+					r.cache.empty()
 					if r.i == len(r.email.partsInfo.Parts) || r.part > 0 {
 						// there are no more parts to return
 						err = io.EOF
-						r.cache.empty()
 					}
 				}
 			}
