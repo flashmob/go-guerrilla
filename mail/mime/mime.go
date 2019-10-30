@@ -103,11 +103,6 @@ type Part struct {
 	// EndingPosBody is thr ending position for the body. Typically identical to EndingPos
 	EndingPosBody uint
 
-	StartingPosDelta     uint
-	StartingPosBodyDelta uint
-	EndingPosDelta       uint
-	EndingPosBodyDelta   uint
-
 	// Charset holds the character-set the part is encoded in, eg. us-ascii
 	Charset string
 	// TransferEncoding holds the transfer encoding that was used to pack the message eg. base64
