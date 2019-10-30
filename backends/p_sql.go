@@ -227,11 +227,11 @@ func SQL() Decorator {
 					e.QueuedId = e.Hashes[0]
 				}
 
-				var co *compressor
+				var co *DataCompressor
 				// a compressor was set by the Compress processor
 				if c, ok := e.Values["zlib-compressor"]; ok {
 					body = "gzip"
-					co = c.(*compressor)
+					co = c.(*DataCompressor)
 				}
 				// was saved in redis by the Redis processor
 				if _, ok := e.Values["redis"]; ok {

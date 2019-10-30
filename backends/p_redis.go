@@ -93,7 +93,7 @@ func Redis() Decorator {
 					var stringer fmt.Stringer
 					// a compressor was set
 					if c, ok := e.Values["zlib-compressor"]; ok {
-						stringer = c.(*compressor)
+						stringer = c.(*DataCompressor)
 					} else {
 						stringer = e
 					}
