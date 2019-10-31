@@ -535,20 +535,20 @@ Array
 
 email 2
 
-1  0  121  1763
-1.1  207  302  628
-1.1.1  343  428  445
-1.1.2  485  569  586
-1.2  668  730  1763
-1.2.1  730  959  1763
-1.2.1.1  1045  1140  1501
-1.2.1.1.1  1181  1281  1303
-1.2.1.1.2  1343  1442  1459
-1.2.1.2  1541  1703  1721
+1  0  121  1763  1803
+1.1  207  302  628  668
+1.1.1  343  428  445  485
+1.1.2  485  569  586  628
+1.2  668  730  1763  1803
+1.2.1  730  959  1721  1763
+1.2.1.1  1045  1140  1501  1541
+1.2.1.1.1  1181  1281  1303  1343
+1.2.1.1.2  1343  1442  1459  1501
+1.2.1.2  1541  1703  1721  1763
 */
 func TestNestedEmail(t *testing.T) {
 	p = NewMimeParser()
-	email = email2
+	email = email3
 	//email = strings.Replace(string(email), "\n", "\r\n", -1)
 	p.inject([]byte(email))
 
@@ -568,7 +568,11 @@ func TestNestedEmail(t *testing.T) {
 		//output = replaceAtIndex(output, '#', p.Parts[part].StartingPos)
 		//output = replaceAtIndex(output, '&', p.Parts[part].StartingPosBody)
 		//output = replaceAtIndex(output, '*', p.Parts[part].EndingPosBody)
-		fmt.Println(p.Parts[part].Node + "  " + strconv.Itoa(int(p.Parts[part].StartingPos)) + "  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) + "  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)))
+		fmt.Println(p.Parts[part].Node +
+			"  " + strconv.Itoa(int(p.Parts[part].StartingPos)) +
+			"  " + strconv.Itoa(int(p.Parts[part].StartingPosBody)) +
+			"  " + strconv.Itoa(int(p.Parts[part].EndingPosBody)) +
+			"  " + strconv.Itoa(int(p.Parts[part].EndingPos)))
 	}
 	//fmt.Print(output)
 	//fmt.Println(strings.Index(output, "--D7F------------D7FD5A0B8AB9C65CCDBFA872--"))

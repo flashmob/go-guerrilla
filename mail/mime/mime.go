@@ -98,9 +98,10 @@ type Part struct {
 	StartingPos uint
 	// StartingPosBody is the starting position of the body, after header \n\n
 	StartingPosBody uint
-	// EndingPos is the ending position for the part
+	// EndingPos is the ending position for the part, including the boundary line
 	EndingPos uint
-	// EndingPosBody is thr ending position for the body. Typically identical to EndingPos
+	// EndingPosBody is the ending position for the body, excluding boundary.
+	// I.e EndingPos - len(Boundary Line)
 	EndingPosBody uint
 
 	// Charset holds the character-set the part is encoded in, eg. us-ascii
@@ -827,6 +828,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 		defer func() {
 			if err != MaxNodesErr {
 				part.EndingPosBody = p.lastBoundaryPos
+				part.EndingPos = p.msgPos
 			} else {
 				// remove the unfinished node (edge case)
 				var parts []*Part
@@ -858,8 +860,8 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 		count++
 		p.addPart(subPart, subPartId)
 		err = p.mime(subPart, part.ContentBoundary)
-		subPart.EndingPosBody = p.msgPos
-		part.EndingPosBody = p.msgPos
+		subPart.EndingPosBody = p.lastBoundaryPos
+		subPart.EndingPos = p.msgPos
 		return
 	}
 	if ct != nil && ct.superType == multipart &&
@@ -884,6 +886,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 			} else if end {
 				// reached the terminating boundary (ends with double dash --)
 				subPart.EndingPosBody = p.lastBoundaryPos
+				subPart.EndingPos = p.msgPos
 				break
 			} else {
 				// process the part boundary
@@ -898,6 +901,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 					subPartId = part.Node + dot + strconv.Itoa(count)
 				} else {
 					subPart.EndingPosBody = p.lastBoundaryPos
+					subPart.EndingPos = p.msgPos
 					subPart, count = p.split(subPart, count)
 					p.addPart(subPart, subPartId)
 					err = p.mime(subPart, part.ContentBoundary)
