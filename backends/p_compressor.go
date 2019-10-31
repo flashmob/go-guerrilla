@@ -32,10 +32,10 @@ func init() {
 
 // compressedData struct will be compressed using zlib when printed via fmt
 type DataCompressor struct {
-	extraHeaders []byte
-	data         *bytes.Buffer
+	ExtraHeaders []byte
+	Data         *bytes.Buffer
 	// the pool is used to recycle buffers to ease up on the garbage collector
-	pool *sync.Pool
+	Pool *sync.Pool
 }
 
 // newCompressedData returns a new CompressedData
@@ -49,44 +49,44 @@ func newCompressor() *DataCompressor {
 		},
 	}
 	return &DataCompressor{
-		pool: &p,
+		Pool: &p,
 	}
 }
 
 // Set the extraheaders and buffer of data to compress
 func (c *DataCompressor) set(b []byte, d *bytes.Buffer) {
-	c.extraHeaders = b
-	c.data = d
+	c.ExtraHeaders = b
+	c.Data = d
 }
 
 // String implements the Stringer interface.
 // Can only be called once!
 // This is because the compression buffer will be reset and compressor will be returned to the pool
 func (c *DataCompressor) String() string {
-	if c.data == nil {
+	if c.Data == nil {
 		return ""
 	}
 	//borrow a buffer form the pool
-	b := c.pool.Get().(*bytes.Buffer)
+	b := c.Pool.Get().(*bytes.Buffer)
 	// put back in the pool
 	defer func() {
 		b.Reset()
-		c.pool.Put(b)
+		c.Pool.Put(b)
 	}()
 
 	var r *bytes.Reader
 	w, _ := zlib.NewWriterLevel(b, zlib.BestSpeed)
-	r = bytes.NewReader(c.extraHeaders)
+	r = bytes.NewReader(c.ExtraHeaders)
 	_, _ = io.Copy(w, r)
-	_, _ = io.Copy(w, c.data)
+	_, _ = io.Copy(w, c.Data)
 	_ = w.Close()
 	return b.String()
 }
 
 // clear it, without clearing the pool
 func (c *DataCompressor) clear() {
-	c.extraHeaders = []byte{}
-	c.data = nil
+	c.ExtraHeaders = []byte{}
+	c.Data = nil
 }
 
 func Compressor() Decorator {
