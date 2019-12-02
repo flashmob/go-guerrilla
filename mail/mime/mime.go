@@ -83,6 +83,8 @@ type Parser struct {
 	maxNodes int // the desired number of maximum nodes the parser is limited to
 
 	w io.Writer // underlying io.Writer
+
+	temp string
 }
 
 type Parts []*Part
@@ -114,8 +116,8 @@ type Part struct {
 	ContentType *contentType
 	// ContentBase is typically a url
 	ContentBase string
-	// DispositionFi1eName what file-nme to use for the part, eg. image.jpeg
-	DispositionFi1eName string
+	// DispositionFileName what file-nme to use for the part, eg. image.jpeg
+	DispositionFileName string
 	// ContentDisposition describes how to display the part, eg. attachment
 	ContentDisposition string
 	// ContentName as name implies
@@ -985,6 +987,8 @@ func (p *Parser) Close() error {
 }
 
 func (p *Parser) Write(buf []byte) (int, error) {
+	p.temp = p.temp + string(buf)
+
 	if err := p.Parse(buf); err != nil {
 		return len(buf), err
 	}

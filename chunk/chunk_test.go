@@ -65,6 +65,76 @@ func TestChunkedBytesBuffer(t *testing.T) {
 	}
 }
 
+var n1 = `From:  Al Gore <vice-president@whitehouse.gov>
+To:  White House Transportation Coordinator <transport@whitehouse.gov>
+Subject: [Fwd: Map of Argentina with Description]
+MIME-Version: 1.0
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed; s=ncr424; d=reliancegeneral.co.in;
+ h=List-Unsubscribe:MIME-Version:From:To:Reply-To:Date:Subject:Content-Type:Content-Transfer-Encoding:Message-ID; i=prospects@prospects.reliancegeneral.co.in;
+ bh=F4UQPGEkpmh54C7v3DL8mm2db1QhZU4gRHR1jDqffG8=;
+ b=MVltcq6/I9b218a370fuNFLNinR9zQcdBSmzttFkZ7TvV2mOsGrzrwORT8PKYq4KNJNOLBahswXf
+   GwaMjDKT/5TXzegdX/L3f/X4bMAEO1einn+nUkVGLK4zVQus+KGqm4oP7uVXjqp70PWXScyWWkbT
+   1PGUwRfPd/HTJG5IUqs=
+Content-Type: multipart/mixed;
+ boundary="D7F------------D7FD5A0B8AB9C65CCDBFA872"
+
+This is a multi-part message in MIME format.
+--D7F------------D7FD5A0B8AB9C65CCDBFA872
+Content-Type: text/plain; charset=utf8
+Content-Transfer-Encoding: 7bit
+
+Fred,
+
+Fire up Air Force One!  We're going South!
+
+Thanks,
+Al
+--D7F------------D7FD5A0B8AB9C65CCDBFA872
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+
+Return-Path: <president@whitehouse.gov>
+Received: from mailhost.whitehouse.gov ([192.168.51.200])
+ by heartbeat.whitehouse.gov (8.8.8/8.8.8) with ESMTP id SAA22453
+ for <vice-president@heartbeat.whitehouse.gov>;
+ Mon, 13 Aug 1998 l8:14:23 +1000
+Received: from the_big_box.whitehouse.gov ([192.168.51.50])
+ by mailhost.whitehouse.gov (8.8.8/8.8.7) with ESMTP id RAA20366
+ for vice-president@whitehouse.gov; Mon, 13 Aug 1998 17:42:41 +1000
+ Date: Mon, 13 Aug 1998 17:42:41 +1000
+Message-Id: <199804130742.RAA20366@mai1host.whitehouse.gov>
+From: Bill Clinton <president@whitehouse.gov>
+To: A1 (The Enforcer) Gore <vice-president@whitehouse.gov>
+Subject:  Map of Argentina with Description
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="DC8------------DC8638F443D87A7F0726DEF7"
+
+This is a multi-part message in MIME format.
+--DC8------------DC8638F443D87A7F0726DEF7
+Content-Type: text/plain; charset=utf8
+Content-Transfer-Encoding: 7bit
+
+Hi A1,
+
+I finally figured out this MIME thing.  Pretty cool.  I'll send you
+some sax music in .au files next week!
+
+Anyway, the attached image is really too small to get a good look at
+Argentina.  Try this for a much better map:
+
+http://www.1one1yp1anet.com/dest/sam/graphics/map-arg.htm
+
+Then again, shouldn't the CIA have something like that?
+
+Bill
+--DC8------------DC8638F443D87A7F0726DEF7
+Content-Type: image/png; name="three.png"
+Content-Transfer-Encoding: 8bit
+
+`
+
 var email = `From:  Al Gore <vice-president@whitehouse.gov>
 To:  White House Transportation Coordinator <transport@whitehouse.gov>
 Subject: [Fwd: Map of Argentina with Description]
@@ -130,24 +200,12 @@ Then again, shouldn't the CIA have something like that?
 
 Bill
 --DC8------------DC8638F443D87A7F0726DEF7
-Content-Type: image/gif; name="map_of_Argentina.gif"
+Content-Type: image/gif; name="three.gif"
 Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="map_of_Argentina.gif"
+Content-Disposition: attachment; filename="three.gif"
 
-iVBORw0KGgoAAAANSUhEUgAAAG4AAAAyCAIAAAAydXkgAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA
-B3RJTUUH1gYEExgGfYkXIAAAAAd0RVh0QXV0aG9yAKmuzEgAAAAMdEVYdERlc2NyaXB0aW9uABMJ
-ISMAAAAKdEVYdENvcHlyaWdodACsD8w6AAAADnRFWHRDcmVhdGlvbiB0aW1lADX3DwkAAAAJdEVY
-dFNvZnR3YXJlAF1w/zoAAAALdEVYdERpc2NsYWltZXIAt8C0jwAAAAh0RVh0V2FybmluZwDAG+aH
-AAAAB3RFWHRTb3VyY2UA9f+D6wAAAAh0RVh0Q29tbWVudAD2zJa/AAAABnRFWHRUaXRsZQCo7tIn
-AAABAElEQVR4nO2ZUY6DIBCG66YH88FGvQLHEI+hHsMriPFw7AMJIYAwoO269v+eSDPDmKn5HOXx
-AAAAAAAAAPxblmWRZJZlSU3RCCE451Z1IUQ00c1ScM7p15zHT1J0URSpwUkpmrquh2HY60uA1+vl
-/b2qKkp63tUCcA8otrK8k+dKr7+I1V0tEEUppRRCZDcnzZUZHLdP6g6uFomiBACYeHUTTnF9ZwV4
-3dp1HaW0V5dRUR6ZJU3e7kqLaK+9ZpymKamKOV3uTZrhigCAU1wZhV7aRE2IlKn2tq60WNeVHtz3
-vV7Xdc05b5pmL0ADVwLg5QOu3BNZhhxVwH1cmYoluwDqX2zbj2bPFgAAAMdJREFUNnUruBIALxmu
-dF1mBXhlSimtPzW6O5hfIQOJB7mcK72NSzrk2bYt+ku0IvhL8PCKwxhTi3meT9s06aBGOSjjpduF
-Ut1UnlnUUmG4kDtj6j5aa5c3noOfhX4ND1eXhvJMOYZFGYYxNs8zY6wsS73O3u2rUY1jjOkOBlp5
-uSf4NTn/fsw4Bz/oSnMMCm9laU4FuzMj5ZpN6K58JrVSfnAEW9d127ZxHInVLZM2TSOlpL/C72He
-j2c+wQEAAAAAAAAAfB2/3ihTGANzPd8AAAAASUVORK5CYII=
+R0lGODlhEAAeAPAAAP///wAAACH5BAEAAAAALAAAAAAQAB4AAAIfhI+py+0Po5y0onCD3lzbD15K
+R4ZmiAHk6p3uC8dWAQA7
 --DC8------------DC8638F443D87A7F0726DEF7--
 
 --D7F------------D7FD5A0B8AB9C65CCDBFA872--
@@ -475,7 +533,7 @@ func TestChunkSaverWrite(t *testing.T) {
 	store, chunksaver, mimeanalyzer, stream := initTestStream(true)
 	var out bytes.Buffer
 	buf := make([]byte, 128)
-	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
+	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email)), buf); err != nil {
 		t.Error(err)
 	} else {
 		_ = mimeanalyzer.Close()
@@ -498,8 +556,8 @@ func TestChunkSaverWrite(t *testing.T) {
 			t.Error(err)
 		} else if w != email.size {
 			t.Error("email.size != number of bytes copied from reader", w, email.size)
-		} else if !strings.Contains(out.String(), "</html>") {
-			t.Error("The email didn't decode properly, expecting </html>")
+		} else if !strings.Contains(out.String(), "GIF89") {
+			t.Error("The email didn't decode properly, expecting GIF89")
 		}
 		out.Reset()
 

@@ -54,8 +54,9 @@ type PartsInfo struct {
 	Parts       []ChunkedPart `json:"p"`   // info describing a mime-part
 	CBoundaries []string      `json:"cbl"` // content boundaries list
 
-	bp sync.Pool // bytes.buffer pool
 }
+
+var bp sync.Pool // bytes.buffer pool
 
 // ChunkedPart contains header information about a mime-part, including keys pointing to where the data is stored at
 type ChunkedPart struct {
@@ -71,7 +72,7 @@ type ChunkedPart struct {
 
 func NewPartsInfo() *PartsInfo {
 	pi := new(PartsInfo)
-	pi.bp = sync.Pool{
+	bp = sync.Pool{
 		// if not available, then create a new one
 		New: func() interface{} {
 			var b bytes.Buffer
@@ -118,11 +119,11 @@ func (info *PartsInfo) MarshalJSONZlib() ([]byte, error) {
 		return buf, err
 	}
 	// borrow a buffer form the pool
-	compressed := info.bp.Get().(*bytes.Buffer)
+	compressed := bp.Get().(*bytes.Buffer)
 	// put back in the pool
 	defer func() {
 		compressed.Reset()
-		info.bp.Put(compressed)
+		bp.Put(compressed)
 	}()
 
 	zlibw, err := zlib.NewWriterLevel(compressed, 9)

@@ -2,7 +2,6 @@ package chunk
 
 import (
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/flashmob/go-guerrilla/backends"
@@ -129,6 +128,9 @@ func Chunksaver() *backends.StreamDecorator {
 				return err
 			}))
 
+			var writeTo uint
+			var pos int
+
 			sd.Open = func(e *mail.Envelope) error {
 				// create a new entry & grab the id
 				written = 0
@@ -201,17 +203,44 @@ func Chunksaver() *backends.StreamDecorator {
 							}
 						}
 					}
-
 				}
 				return subject, to, from
 			}
 
+			// end() triggers a buffer flush, at the end of a header or part-boundary
+			end := func(part *mime.Part, offset uint, p []byte, start uint) (int, error) {
+				var err error
+				var count int
+				// write out any unwritten bytes
+				writeTo = start - offset
+				size := uint(len(p))
+				if writeTo > size {
+					writeTo = size
+				}
+				if writeTo > 0 {
+					count, err = chunkBuffer.Write(p[pos:writeTo])
+					written += int64(count)
+					pos += count
+					if err != nil {
+						return count, err
+					}
+				} else {
+					count = 0
+				}
+				err = chunkBuffer.Flush()
+				if err != nil {
+					return count, err
+				}
+				chunkBuffer.CurrentPart(part)
+				return count, nil
+			}
+
 			return backends.StreamProcessWith(func(p []byte) (count int, err error) {
+				pos = 0
 				if envelope.Values == nil {
 					return count, errors.New("no message headers found")
 				}
 				if parts, ok := envelope.Values["MimeParts"].(*mime.Parts); ok && len(*parts) > 0 {
-					var pos int
 
 					subject, to, from = fillVars(parts, subject, to, from)
 					offset := msgPos
@@ -220,41 +249,29 @@ func Chunksaver() *backends.StreamDecorator {
 						part := (*parts)[i]
 
 						// break chunk on new part
-						if part.StartingPos > 0 && part.StartingPos > msgPos {
-							count, _ = chunkBuffer.Write(p[pos : part.StartingPos-offset])
-							written += int64(count)
-
-							err = chunkBuffer.Flush()
+						if part.StartingPos > 0 && part.StartingPos >= msgPos {
+							count, err = end(part, offset, p, part.StartingPos)
 							if err != nil {
 								return count, err
 							}
-							chunkBuffer.CurrentPart(part)
 							// end of a part here
-							fmt.Println("->N")
-							pos += count
+							//fmt.Println("->N --end of part ---")
+
 							msgPos = part.StartingPos
 						}
 						// break chunk on header
 						if part.StartingPosBody > 0 && part.StartingPosBody >= msgPos {
-							to := part.StartingPosBody - offset
-							if lenp := len(p); int(to) > lenp {
-								to = uint(lenp)
-							}
-							count, _ = chunkBuffer.Write(p[pos:to])
-							written += int64(count)
 
-							err = chunkBuffer.Flush()
+							count, err = end(part, offset, p, part.StartingPosBody)
 							if err != nil {
 								return count, err
 							}
-							chunkBuffer.CurrentPart(part)
 							// end of a header here
-							fmt.Println("->H")
-							pos += count
-							msgPos = part.StartingPosBody
+							//fmt.Println("->H --end of header --")
+							msgPos += uint(count)
 						}
 						// if on the latest (last) part, and yet there is still data to be written out
-						if len(*parts)-1 == i && len(p)-1 > pos {
+						if len(*parts)-1 == i && len(p) > pos {
 							count, _ = chunkBuffer.Write(p[pos:])
 							written += int64(count)
 							pos += count

@@ -22,7 +22,6 @@ type chunkedReader struct {
 // if part is 0, Read will read in the entire message. 1 selects the first part, 2 2nd, and so on..
 func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error) {
 	r := new(chunkedReader)
-	fmt.Println("new reader")
 	r.db = db
 	if email == nil {
 		return nil, errors.New("nil email")
@@ -56,11 +55,16 @@ func (r *chunkedReader) SeekPart(part int) error {
 }
 
 type cachedChunks struct {
-	chunks    []*Chunk
+	// chunks stores the cached chunks. It stores the latest chunk being read
+	// and the next few chunks that are yet to be read
+	// (see the chunkCachePreload constant)
+	chunks []*Chunk
+	// hashIndex is a look-up table that returns the hash of a given index
 	hashIndex map[int]HashKey
 	db        Storage
 }
 
+// chunkCachePreload controls how many to pre-load in the
 const chunkCachePreload = 2
 
 // warm allocates the chunk cache, and gets the first few and stores them in the cache
@@ -97,7 +101,7 @@ func (c *cachedChunks) warm(hashes ...HashKey) (int, error) {
 	return len(c.chunks), nil
 }
 
-// get returns a chunk. If the chunk doesn't exist, it gets it and pre-loads the next few
+// get returns a previously saved chunk and pre-loads the next few
 // also removes the previous chunks that now have become stale
 func (c *cachedChunks) get(i int) (*Chunk, error) {
 	if i > len(c.chunks) {
@@ -114,7 +118,7 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 			return nil, errors.New(fmt.Sprintf("hash for key [%s] not found", key))
 		}
 		// make a list of chunks to load (extra ones to be pre-loaded)
-		for to := i + 1; to < len(c.chunks) || to > chunkCachePreload+i; to++ {
+		for to := i + 1; to < len(c.chunks) && to < chunkCachePreload+i; to++ {
 			if key, ok := c.hashIndex[to]; ok {
 				toGet = append(toGet, key)
 			}
@@ -123,7 +127,7 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 			return nil, err
 		} else {
 			// cache the pre-loaded chunks
-			for j := i; j < len(c.chunks); j++ {
+			for j := i; j-i < len(chunks); j++ {
 				c.chunks[j] = chunks[j-i]
 				c.hashIndex[j] = toGet[j-i]
 			}

@@ -3,7 +3,6 @@ package chunk
 import (
 	"crypto/md5"
 	"errors"
-	"fmt"
 	"hash"
 	"strings"
 
@@ -22,7 +21,6 @@ func (c *chunkingBuffer) Flush() error {
 	if len(c.buf) == 0 {
 		return nil
 	}
-	fmt.Print(string(c.buf))
 	if c.flushTrigger != nil {
 		if err := c.flushTrigger(); err != nil {
 			return err
@@ -40,7 +38,7 @@ func (c *chunkingBuffer) Reset() {
 // Write takes a p slice of bytes and writes it to the buffer.
 // It will never grow the buffer, flushing it as soon as it's full.
 func (c *chunkingBuffer) Write(p []byte) (i int, err error) {
-	remaining := len(p)
+	remaining := len(p) // number of bytes remaining to write
 	bufCap := cap(c.buf)
 	for {
 		free := bufCap - len(c.buf)
