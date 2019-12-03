@@ -62,6 +62,7 @@ type server struct {
 type allowedHosts struct {
 	table      map[string]bool // host lookup table
 	wildcards  []string        // host wildcard list (* is used as a wildcard)
+	hasIP      bool            // is one of the hosts an ipv6 address
 	sync.Mutex                 // guard access to the map
 }
 
@@ -217,6 +218,10 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	for _, h := range allowedHosts {
 		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
+		} else if ip := net.ParseIP(h); ip != nil {
+			// this will save the normalized ip, as ip.String always returns ipv6 in short form
+			s.hosts.table[ip.String()] = true
+			s.hosts.hasIP = true
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
 		}
@@ -305,6 +310,12 @@ func (s *server) allowsHost(host string) bool {
 	if len(s.hosts.table) == 1 {
 		if _, ok := s.hosts.table["."]; ok {
 			return true
+		}
+	}
+	if s.hosts.hasIP {
+		if ip := net.ParseIP(host); ip != nil {
+			// normalize the ip address
+			host = ip.String()
 		}
 	}
 	if _, ok := s.hosts.table[strings.ToLower(host)]; ok {

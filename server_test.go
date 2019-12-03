@@ -552,6 +552,9 @@ func TestAllowsHosts(t *testing.T) {
 		"*.test",
 		"wild*.card",
 		"multiple*wild*cards.*",
+		"::FFFF:C0A8:1",          // ip4 in ipv6 format. It's actually 192.168.0.1
+		"2001:db8::ff00:42:8329", // same as 2001:0db8:0000:0000:0000:ff00:0042:8329
+		"127.0.0.1",
 	}
 	s.setAllowedHosts(allowedHosts)
 
@@ -564,6 +567,9 @@ func TestAllowsHosts(t *testing.T) {
 		"wild.card":               true,
 		"wild.card.com":           false,
 		"multipleXwildXcards.com": true,
+		"192.168.0.1":             true,
+		"2001:0db8:0000:0000:0000:ff00:0042:8329": true,
+		"127.0.0.1": true,
 	}
 
 	for host, allows := range testTable {
