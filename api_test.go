@@ -613,6 +613,9 @@ func TestPubSubAPI(t *testing.T) {
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
 	}
+	if err := os.Truncate("tests/pidfilex.pid", 0); err != nil {
+		t.Error(err)
+	}
 
 	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
 	if err := d.Start(); err != nil {
