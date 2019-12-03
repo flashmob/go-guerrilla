@@ -11,12 +11,13 @@ import (
 
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
+	"net"
+
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
-	"io/ioutil"
-	"net"
 )
 
 // getMockServerConfig gets a mock ServerConfig struct used for creating a new server
@@ -232,7 +233,7 @@ func TestTLSConfig(t *testing.T) {
 	} else if c.CurvePreferences[0] != tls.CurveP521 && c.CurvePreferences[1] != tls.CurveP384 {
 		t.Error("c.CurvePreferences curves not setup")
 	}
-	if strings.Index(string(c.RootCAs.Subjects()[0]), "Mountain View") == -1 {
+	if !strings.Contains(string(c.RootCAs.Subjects()[0]), "Mountain View") {
 		t.Error("c.RootCAs not correctly set")
 	}
 	if c.ClientAuth != tls.NoClientCert {
@@ -440,7 +441,7 @@ func TestGatewayTimeout(t *testing.T) {
 			expect := "transaction timeout"
 			if err != nil {
 				t.Error(err)
-			} else if strings.Index(str, expect) == -1 {
+			} else if !strings.Contains(str, expect) {
 				t.Error("Expected the reply to have'", expect, "'but got", str)
 			}
 		}
@@ -530,7 +531,7 @@ func TestGatewayPanic(t *testing.T) {
 				t.Error(err)
 			} else {
 				expect := "storage failed"
-				if strings.Index(str, expect) == -1 {
+				if !strings.Contains(str, expect) {
 					t.Error("Expected the reply to have'", expect, "'but got", str)
 				}
 			}

@@ -318,15 +318,6 @@ func trimToLimit(str string, limit int) string {
 }
 
 func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
-	tOut := GuerrillaDBAndRedisBatchTimeout
-	if g.config.BatchTimeout > 0 {
-		tOut = time.Duration(g.config.BatchTimeout)
-	}
-	tOut += 10
-	// don't go to 30 sec or more
-	if tOut >= 30 {
-		tOut = 29
-	}
 	if db, err := sql.Open(g.config.Driver, g.config.DSN); err != nil {
 		Log().Error("cannot open database", err, "]")
 		return nil, err

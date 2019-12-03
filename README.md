@@ -1,7 +1,7 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
-Breaking change: The structure of the config has recently changed to accommodate more advanced TLS settings.
+Note: Latest release, v1.6.0, has moved from Glide to Dep dependency management tool. 
 
 Go-Guerrilla SMTP Daemon
 ====================
@@ -81,10 +81,10 @@ Getting started
 
 #### Dependencies
 
-Go-Guerrilla uses [Glide](https://github.com/Masterminds/glide) to manage 
-dependencies. If you have glide installed, just run `glide install` as usual.
+Go-Guerrilla uses [Dep](https://golang.github.io/dep/) to manage 
+dependencies. If you have dep installed, just run `dep ensure` as usual.
  
-You can also run `$ go get ./..` if you don't want to use glide, and then run `$ make test`
+You can also run `$ go get ./..` if you don't want to use dep, and then run `$ make test`
 to ensure all is good.
 
 To build the binary run:
@@ -141,8 +141,10 @@ import (
 
 ```
 
-You may use ``$ go get ./...`` to get all dependencies, also Go-Guerrilla uses 
-[glide](https://github.com/Masterminds/glide) for dependency management.
+You should use the `dep ensure` command to get all dependencies, as Go-Guerrilla uses 
+[dep](https://golang.github.io/dep/) for dependency management. 
+
+Otherise, ``$ go get ./...`` should work if you're in a hurry.
 
 #### 2. Start a server
 

@@ -143,7 +143,10 @@ func (hook *LogrusHook) openCreate(dest string) (err error) {
 func (hook *LogrusHook) Fire(entry *log.Entry) error {
 	hookMu.Lock()
 	defer hookMu.Unlock()
-	if line, err := entry.String(); err == nil {
+
+	line, err := entry.String()
+
+	if err == nil {
 		r := strings.NewReader(line)
 		if _, err = io.Copy(hook.w, r); err != nil {
 			return err
@@ -157,9 +160,8 @@ func (hook *LogrusHook) Fire(entry *log.Entry) error {
 			}
 		}
 		return err
-	} else {
-		return err
 	}
+	return err
 }
 
 // Levels implements the logrus Hook interface
@@ -177,12 +179,12 @@ func (hook *LogrusHook) Reopen() error {
 			return err
 		}
 		// The file could have been re-named by an external program such as logrotate(8)
-		if _, err := os.Stat(hook.fname); err != nil {
+		_, err := os.Stat(hook.fname)
+		if err != nil {
 			// The file doesn't exist, create a new one.
 			return hook.openCreate(hook.fname)
-		} else {
-			return hook.openAppend(hook.fname)
 		}
+		return hook.openAppend(hook.fname)
 	}
 	return err
 

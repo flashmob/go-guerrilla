@@ -1,17 +1,20 @@
 language: go
 sudo: false
 go:
-  - 1.7
-  - 1.8
   - 1.9
   - 1.10.x
+  - 1.11.x
+  - 1.12.x
   - master
 
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+
 install:
-  - export GO15VENDOREXPERIMENT=1
-  - go get github.com/Masterminds/glide
-  - go install github.com/Masterminds/glide
-  - glide up
+  - go get -u github.com/golang/dep/cmd/dep
+  - dep ensure
 
 script:
   - ./.travis.gofmt.sh

@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
 	"os"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
 )
 
 // AppConfig is the holder of the configuration of the app
@@ -34,44 +35,32 @@ type AppConfig struct {
 
 // ServerConfig specifies config options for a single server
 type ServerConfig struct {
-	// IsEnabled set to true to start the server, false will ignore it
-	IsEnabled bool `json:"is_enabled"`
-	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
-	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
-	Hostname string `json:"host_name"`
-	// MaxSize is the maximum size of an email that will be accepted for delivery.
-	// Defaults to 10 Mebibytes
-	MaxSize int64 `json:"max_size"`
 	// TLS Configuration
 	TLS ServerTLSConfig `json:"tls,omitempty"`
-	// Timeout specifies the connection timeout in seconds. Defaults to 30
-	Timeout int `json:"timeout"`
-	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
-	ListenInterface string `json:"listen_interface"`
-
-	// MaxClients controls how many maximum clients we can handle at once.
-	// Defaults to defaultMaxClients
-	MaxClients int `json:"max_clients"`
 	// LogFile is where the logs go. Use path to file, or "stderr", "stdout" or "off".
 	// defaults to AppConfig.Log file setting
 	LogFile string `json:"log_file,omitempty"`
+	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
+	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
+	Hostname string `json:"host_name"`
+	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
+	ListenInterface string `json:"listen_interface"`
+	// MaxSize is the maximum size of an email that will be accepted for delivery.
+	// Defaults to 10 Mebibytes
+	MaxSize int64 `json:"max_size"`
+	// Timeout specifies the connection timeout in seconds. Defaults to 30
+	Timeout int `json:"timeout"`
+	// MaxClients controls how many maximum clients we can handle at once.
+	// Defaults to defaultMaxClients
+	MaxClients int `json:"max_clients"`
+	// IsEnabled set to true to start the server, false will ignore it
+	IsEnabled bool `json:"is_enabled"`
 	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
 }
 
 type ServerTLSConfig struct {
-
-	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
-	// False by default
-	StartTLSOn bool `json:"start_tls_on,omitempty"`
-	// AlwaysOn run this server as a pure TLS server, i.e. SMTPS
-	AlwaysOn bool `json:"tls_always_on,omitempty"`
-	// PrivateKeyFile path to cert private key in PEM format.
-	PrivateKeyFile string `json:"private_key_file"`
-	// PublicKeyFile path to cert (public key) chain in PEM format.
-	PublicKeyFile string `json:"public_key_file"`
-
 	// TLS Protocols to use. [0] = min, [1]max
 	// Use Go's default if empty
 	Protocols []string `json:"protocols,omitempty"`
@@ -81,19 +70,27 @@ type ServerTLSConfig struct {
 	// TLS Curves to use.
 	// Use Go's default if empty
 	Curves []string `json:"curves,omitempty"`
+	// PrivateKeyFile path to cert private key in PEM format.
+	PrivateKeyFile string `json:"private_key_file"`
+	// PublicKeyFile path to cert (public key) chain in PEM format.
+	PublicKeyFile string `json:"public_key_file"`
 	// TLS Root cert authorities to use. "A PEM encoded CA's certificate file.
 	// Defaults to system's root CA file if empty
 	RootCAs string `json:"root_cas_file,omitempty"`
 	// declares the policy the server will follow for TLS Client Authentication.
 	// Use Go's default if empty
 	ClientAuthType string `json:"client_auth_type,omitempty"`
-	// controls whether the server selects the
-	// client's most preferred cipher suite
-	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
-
 	// The following used to watch certificate changes so that the TLS can be reloaded
 	_privateKeyFileMtime int64
 	_publicKeyFileMtime  int64
+	// controls whether the server selects the
+	// client's most preferred cipher suite
+	PreferServerCipherSuites bool `json:"prefer_server_cipher_suites,omitempty"`
+	// StartTLSOn should we offer STARTTLS command. Cert must be valid.
+	// False by default
+	StartTLSOn bool `json:"start_tls_on,omitempty"`
+	// AlwaysOn run this server as a pure TLS server, i.e. SMTPS
+	AlwaysOn bool `json:"tls_always_on,omitempty"`
 }
 
 // https://golang.org/pkg/crypto/tls/#pkg-constants
@@ -303,7 +300,7 @@ func (c *AppConfig) setDefaults() error {
 				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
 			}
 			if c.Servers[i].ListenInterface == "" {
-				return errors.New(fmt.Sprintf("Listen interface not specified for server at index %d", i))
+				return fmt.Errorf("listen interface not specified for server at index %d", i)
 			}
 			if c.Servers[i].LogFile == "" {
 				c.Servers[i].LogFile = c.LogFile
@@ -408,11 +405,10 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 // Loads in timestamps for the ssl keys
 func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 	var statErr = func(iface string, err error) error {
-		return errors.New(
-			fmt.Sprintf(
-				"could not stat key for server [%s], %s",
-				iface,
-				err.Error()))
+		return fmt.Errorf(
+			"could not stat key for server [%s], %s",
+			iface,
+			err.Error())
 	}
 	if sc.TLS.PrivateKeyFile == "" {
 		sc.TLS._privateKeyFileMtime = time.Now().Unix()
@@ -447,8 +443,7 @@ func (sc *ServerConfig) Validate() error {
 			errs = append(errs, errors.New("PrivateKeyFile is empty"))
 		}
 		if _, err := tls.LoadX509KeyPair(sc.TLS.PublicKeyFile, sc.TLS.PrivateKeyFile); err != nil {
-			errs = append(errs,
-				errors.New(fmt.Sprintf("cannot use TLS config for [%s], %v", sc.ListenInterface, err)))
+			errs = append(errs, fmt.Errorf("cannot use TLS config for [%s], %v", sc.ListenInterface, err))
 		}
 	}
 	if len(errs) > 0 {
@@ -504,7 +499,7 @@ func getChanges(a interface{}, b interface{}) map[string]interface{} {
 // only able to convert int, bool, slice-of-strings and string; not recursive
 // slices are marshal'd to json for convenient comparison later
 func structtomap(obj interface{}) map[string]interface{} {
-	ret := make(map[string]interface{}, 0)
+	ret := make(map[string]interface{})
 	v := reflect.ValueOf(obj)
 	t := v.Type()
 	for index := 0; index < v.NumField(); index++ {

@@ -6,13 +6,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"github.com/flashmob/go-guerrilla/response"
-	"net"
-	"sync"
-	"time"
 )
 
 // ClientState indicates which part of the SMTP transaction a given client is in.
@@ -180,9 +181,8 @@ func (c *client) getID() uint64 {
 
 // UpgradeToTLS upgrades a client connection to TLS
 func (c *client) upgradeToTLS(tlsConfig *tls.Config) error {
-	var tlsConn *tls.Conn
 	// wrap c.conn in a new TLS server side connection
-	tlsConn = tls.Server(c.conn, tlsConfig)
+	tlsConn := tls.Server(c.conn, tlsConfig)
 	// Call handshake here to get any handshake error before reading starts
 	err := tlsConn.Handshake()
 	if err != nil {
@@ -234,6 +234,6 @@ func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 	return address, err
 }
 
-func (s *server) rcptTo(in []byte) (address mail.Address, err error) {
+func (s *server) rcptTo() (address mail.Address, err error) {
 	return address, err
 }

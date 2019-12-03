@@ -86,8 +86,8 @@ func (c command) match(in []byte) bool {
 	return bytes.Index(in, []byte(c)) == 0
 }
 
-// Creates and returns a new ready-to-run Server from a configuration
-func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, error) {
+// Creates and returns a new ready-to-run Server from a ServerConfig configuration
+func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*server, error) {
 	server := &server{
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan bool, 1),
@@ -95,20 +95,21 @@ func newServer(sc *ServerConfig, b backends.Backend, l log.Logger) (*server, err
 		state:           ServerStateNew,
 		envelopePool:    mail.NewPool(sc.MaxClients),
 	}
-	server.logStore.Store(l)
-	server.backendStore.Store(b)
-	logFile := sc.LogFile
-	if logFile == "" {
-		// none set, use the same log file as mainlog
-		logFile = server.mainlog().GetLogDest()
-	}
-	// set level to same level as mainlog level
-	mainlog, logOpenError := log.GetLogger(logFile, server.mainlog().GetLevel())
 	server.mainlogStore.Store(mainlog)
-	if logOpenError != nil {
-		server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+	server.backendStore.Store(b)
+	if sc.LogFile == "" {
+		// none set, use the mainlog for the server log
+		server.logStore.Store(mainlog)
+		server.log().Info("server [" + sc.ListenInterface + "] did not configure a separate log file, so using the main log")
+	} else {
+		// set level to same level as mainlog level
+		if l, logOpenError := log.GetLogger(sc.LogFile, server.mainlog().GetLevel()); logOpenError != nil {
+			server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+			return server, logOpenError
+		} else {
+			server.logStore.Store(l)
+		}
 	}
-
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
 	if err := server.configureSSL(); err != nil {
@@ -214,7 +215,7 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	s.hosts.table = make(map[string]bool, len(allowedHosts))
 	s.hosts.wildcards = nil
 	for _, h := range allowedHosts {
-		if strings.Index(h, "*") != -1 {
+		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
@@ -454,14 +455,14 @@ func (s *server) handleClient(client *client) {
 				if toks := bytes.Split(input[8:], []byte{' '}); len(toks) > 0 {
 					for i := range toks {
 						if vals := bytes.Split(toks[i], []byte{'='}); len(vals) == 2 {
-							if bytes.Compare(vals[1], []byte("[UNAVAILABLE]")) == 0 {
+							if bytes.Equal(vals[1], []byte("[UNAVAILABLE]")) {
 								// skip
 								continue
 							}
-							if bytes.Compare(vals[0], []byte("ADDR")) == 0 {
+							if bytes.Equal(vals[0], []byte("ADDR")) {
 								client.RemoteIP = string(vals[1])
 							}
-							if bytes.Compare(vals[0], []byte("HELO")) == 0 {
+							if bytes.Equal(vals[0], []byte("HELO")) {
 								client.Helo = string(vals[1])
 							}
 						}
@@ -473,7 +474,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailNestedMailCmd)
 					break
 				}
-				client.MailFrom, err = client.parsePath([]byte(input[10:]), client.parser.MailFrom)
+				client.MailFrom, err = client.parsePath(input[10:], client.parser.MailFrom)
 				if err != nil {
 					s.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
 					client.sendResponse(err)
@@ -499,7 +500,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.ErrorTooManyRecipients)
 					break
 				}
-				to, err := client.parsePath([]byte(input[8:]), client.parser.RcptTo)
+				to, err := client.parsePath(input[8:], client.parser.RcptTo)
 				if err != nil {
 					s.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
 					client.sendResponse(err.Error())
@@ -558,7 +559,7 @@ func (s *server) handleClient(client *client) {
 
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
-			client.bufin.setLimit(int64(sc.MaxSize) + 1024000) // This a hard limit.
+			client.bufin.setLimit(sc.MaxSize + 1024000) // This a hard limit.
 			be := s.backend()
 			var (
 				n   int64
@@ -652,23 +653,29 @@ func (s *server) handleClient(client *client) {
 }
 
 func (s *server) log() log.Logger {
-	if l, ok := s.logStore.Load().(log.Logger); ok {
-		return l
-	}
-	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
-	if err == nil {
-		s.logStore.Store(l)
-	}
-	return l
+	return s.loadLog(&s.logStore)
 }
 
 func (s *server) mainlog() log.Logger {
-	if l, ok := s.mainlogStore.Load().(log.Logger); ok {
+	return s.loadLog(&s.mainlogStore)
+}
+
+func (s *server) loadLog(value *atomic.Value) log.Logger {
+	if l, ok := value.Load().(log.Logger); ok {
 		return l
 	}
-	l, err := log.GetLogger(log.OutputStderr.String(), log.InfoLevel.String())
+	out := log.OutputStderr.String()
+	level := log.InfoLevel.String()
+	if value == &s.logStore {
+		if sc, ok := s.configStore.Load().(ServerConfig); ok && sc.LogFile != "" {
+			out = sc.LogFile
+		}
+		level = s.mainlog().GetLevel()
+	}
+
+	l, err := log.GetLogger(out, level)
 	if err == nil {
-		s.mainlogStore.Store(l)
+		value.Store(l)
 	}
 	return l
 }
