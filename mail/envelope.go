@@ -97,6 +97,8 @@ type Envelope struct {
 	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
+	// ESMTP: true if EHLO was used
+	ESMTP bool
 	// When locked, it means that the envelope is being processed by the backend
 	sync.Mutex
 }
@@ -191,6 +193,7 @@ func (e *Envelope) Reseed(remoteIP string, clientID uint64) {
 	e.QueuedId = queuedID(clientID)
 	e.Helo = ""
 	e.TLS = false
+	e.ESMTP = false
 }
 
 // PushRcpt adds a recipient email address to the envelope

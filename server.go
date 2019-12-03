@@ -443,6 +443,7 @@ func (s *server) handleClient(client *client) {
 
 			case cmdEHLO.match(cmd):
 				client.Helo = string(bytes.Trim(input[4:], " "))
+				client.ESMTP = true
 				client.resetTransaction()
 				client.sendResponse(ehlo,
 					messageSize,
