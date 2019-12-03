@@ -297,14 +297,14 @@ func TestReopenServerLog(t *testing.T) {
 	if err != nil {
 		t.Error("start error", err)
 	} else {
-		if err := talkToServer("127.0.0.1:2526"); err != nil {
+		if err := talkToServer("127.0.0.1:2526", ""); err != nil {
 			t.Error(err)
 		}
 		if err = d.ReopenLogs(); err != nil {
 			t.Error(err)
 		}
 		time.Sleep(time.Second * 2)
-		if err := talkToServer("127.0.0.1:2526"); err != nil {
+		if err := talkToServer("127.0.0.1:2526", ""); err != nil {
 			t.Error(err)
 		}
 		d.Shutdown()
