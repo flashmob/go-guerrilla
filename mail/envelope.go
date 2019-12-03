@@ -230,14 +230,18 @@ func MimeHeaderDecode(str string) string {
 			}
 
 		case 2:
-			if str[i] == ' ' {
+			if str[i] == ' ' || str[i] == '\t' {
 				d, err := Dec.Decode(buf.String())
 				if err == nil {
 					out = append(out, []byte(d)...)
 				} else {
 					out = append(out, buf.Bytes()...)
 				}
-				out = append(out, ' ')
+				if skip := hasEncodedWordAhead(str, i); skip != -1 {
+					i = skip
+				} else {
+					out = append(out, str[i])
+				}
 				buf.Reset()
 				state = 0
 			} else {
@@ -254,6 +258,18 @@ func MimeHeaderDecode(str string) string {
 		}
 	}
 	return string(out)
+}
+
+func hasEncodedWordAhead(str string, i int) int {
+	for ; i+2 < len(str); i++ {
+		if str[i] != ' ' && str[i] != '\t' {
+			return -1
+		}
+		if str[i+1] == '=' && str[i+2] == '?' {
+			return i
+		}
+	}
+	return -1
 }
 
 // Envelopes have their own pool

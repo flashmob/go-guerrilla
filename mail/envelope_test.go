@@ -73,3 +73,21 @@ func TestEnvelope(t *testing.T) {
 	}
 
 }
+
+func TestEncodedWordAhead(t *testing.T) {
+	str := "=?ISO-8859-1?Q?Andr=E9?= Pirard <PIRARD@vm1.ulg.ac.be>"
+	if hasEncodedWordAhead(str, 24) != -1 {
+		t.Error("expecting no encoded word ahead")
+	}
+
+	str = "=?ISO-8859-1?Q?Andr=E9?= ="
+	if hasEncodedWordAhead(str, 24) != -1 {
+		t.Error("expecting no encoded word ahead")
+	}
+
+	str = "=?ISO-8859-1?Q?Andr=E9?= =?ISO-8859-1?Q?Andr=E9?="
+	if hasEncodedWordAhead(str, 24) == -1 {
+		t.Error("expecting an encoded word ahead")
+	}
+
+}
