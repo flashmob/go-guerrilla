@@ -107,7 +107,7 @@ func Redis() Decorator {
 					if doErr != nil {
 						Log().WithError(doErr).Warn("Error while SETEX to redis")
 						result := NewResult(response.Canned.FailBackendTransaction)
-						return result, redisErr
+						return result, doErr
 					}
 					e.Values["redis"] = "redis" // the next processor will know to look in redis for the message data
 				} else {
