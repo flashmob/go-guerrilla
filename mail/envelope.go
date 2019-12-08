@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/mail"
 	"net/textproto"
 	"strings"
@@ -41,10 +42,36 @@ type Address struct {
 	PathParams [][]string
 	// NullPath is true if <> was received
 	NullPath bool
+	// Quoted indicates if the local-part needs quotes
+	Quoted bool
+	// IP stores the IP Address, if the Host is an IP
+	IP net.IP
 }
 
 func (ep *Address) String() string {
-	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
+	var local string
+	if ep.IsEmpty() {
+		return ""
+	}
+	if ep.Quoted {
+		var sb bytes.Buffer
+		sb.WriteByte('"')
+		for i := 0; i < len(ep.User); i++ {
+			if ep.User[i] == '\\' || ep.User[i] == '"' {
+				// escape
+				sb.WriteByte('\\')
+			}
+			sb.WriteByte(ep.User[i])
+		}
+		sb.WriteByte('"')
+		local = sb.String()
+	} else {
+		local = ep.User
+	}
+	if ep.Host != "" {
+		return fmt.Sprintf("%s@%s", local, ep.Host)
+	}
+	return local
 }
 
 func (ep *Address) IsEmpty() bool {
@@ -55,20 +82,46 @@ var ap = mail.AddressParser{}
 
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
-func NewAddress(str string) (Address, error) {
-	a, err := ap.Parse(str)
+// TODO its not parsing ip addresses properly
+func NewAddress(str string) (*Address, error) {
+	var isQuoted, isIP bool
+	var pos int
+	var a *mail.Address
+	var err error
+	address := new(Address)
+	if pos = strings.LastIndex(str, "@"); pos > 0 && str[pos-1] == '"' {
+		isQuoted = true
+	}
+	if pos > 0 && pos+1 < len(str) && str[pos+1] == '[' {
+		isIP = true
+	}
+
+	a, err = ap.Parse(str)
+
 	if err != nil {
-		return Address{}, err
+		return nil, err
 	}
-	pos := strings.Index(a.Address, "@")
+	pos = strings.LastIndex(a.Address, "@")
+
 	if pos > 0 {
-		return Address{
-				User: a.Address[0:pos],
-				Host: a.Address[pos+1:],
-			},
-			nil
+		address.User = a.Address[0:pos]
+		address.Host = a.Address[pos+1:]
+		if isQuoted {
+			address.Quoted = true
+		}
+		if isIP {
+			// check if the ip address is valid
+			if v := net.ParseIP(address.Host); v == nil {
+				return nil, errors.New("invalid ip")
+			} else {
+				address.IP = v
+				// this will normalize ipv6 addresses
+				address.Host = v.String()
+			}
+		}
+		return address, nil
 	}
-	return Address{}, errors.New("invalid address")
+	return nil, errors.New("invalid address")
 }
 
 // Envelope of Email represents a single SMTP message.

@@ -502,7 +502,7 @@ func (s *server) handleClient(client *client) {
 					break
 				}
 				if !s.allowsHost(to.Host) {
-					client.sendResponse(r.ErrorRelayDenied, " ", to.Host)
+					client.sendResponse(r.ErrorRelayDenied, " ", to.String())
 				} else {
 					client.PushRcpt(to)
 					rcptError := s.backend().ValidateRcpt(client.Envelope)

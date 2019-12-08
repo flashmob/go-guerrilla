@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -21,17 +22,21 @@ const (
 	LimitRecipients = 100
 )
 
+var atExpected = errors.New("@ expected as part of mailbox")
+
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
-	accept     bytes.Buffer
-	buf        []byte
-	PathParams [][]string
-	ADL        []string
-	LocalPart  string
-	Domain     string
-	pos        int
-	NullPath   bool
-	ch         byte
+	accept          bytes.Buffer
+	buf             []byte
+	PathParams      [][]string
+	ADL             []string
+	LocalPart       string
+	LocalPartQuoted bool   // is the local part quoted?
+	Domain          string // can be an ip-address, enclosed in square brackets if it is
+	IP              net.IP
+	pos             int
+	NullPath        bool
+	ch              byte
 }
 
 func NewParser(buf []byte) *Parser {
@@ -51,6 +56,8 @@ func (s *Parser) Reset() {
 		s.LocalPart = ""
 		s.Domain = ""
 		s.accept.Reset()
+		s.LocalPartQuoted = false
+		s.IP = nil
 	}
 }
 
@@ -93,14 +100,15 @@ func (s *Parser) forwardPath() (err error) {
 	if s.peek() == ' ' {
 		s.next() // tolerate a space at the front
 	}
-	if i := bytes.Index(bytes.ToLower(s.buf[s.pos+1:]), []byte(postmasterPath)); i == 0 {
-		s.LocalPart = postmasterLocalPart
-		return nil
-	}
-	if err = s.path(); err != nil {
+	if err = s.path(); err != nil && err != atExpected {
 		return err
 	}
-	return nil
+	// special case for forwardPath only - can just be addressed to postmaster
+	if i := strings.Index(strings.ToLower(s.LocalPart), postmasterLocalPart); i == 0 {
+		s.LocalPart = postmasterLocalPart
+		return nil // atExpected will be ignored, postmaster doesn't need @
+	}
+	return err // it may return atExpected
 }
 
 //MailFrom accepts the following syntax: Reverse-path [SP Mail-parameters] CRLF
@@ -123,8 +131,7 @@ func (s *Parser) MailFrom(input []byte) (err error) {
 	return nil
 }
 
-const postmasterPath = "<postmaster>"
-const postmasterLocalPart = "Postmaster"
+const postmasterLocalPart = "postmaster"
 
 //RcptTo accepts the following syntax: ( "<Postmaster@" Domain ">" / "<Postmaster>" /
 //                  Forward-path ) [SP Rcpt-parameters] CRLF
@@ -337,7 +344,7 @@ func (s *Parser) mailbox() error {
 		return err
 	}
 	if s.ch != '@' {
-		return errors.New("@ expected as part of mailbox")
+		return atExpected
 	}
 	if p := s.peek(); p == '[' {
 		return s.addressLiteral()
@@ -384,6 +391,11 @@ func (s *Parser) ipv4AddressLiteral() error {
 		}
 		s.accept.WriteByte(s.ch)
 	}
+	ip := net.ParseIP(s.accept.String())
+	if ip == nil {
+		return errors.New("invalid ip")
+	}
+	s.IP = ip
 	return nil
 }
 
@@ -433,7 +445,8 @@ func (s *Parser) ipv6AddressLiteral() error {
 			c != ':' && c != '.' {
 			ipstr := ip.String()
 			if v := net.ParseIP(ipstr); v != nil {
-				s.accept.WriteString(ipstr)
+				s.accept.WriteString(v.String())
+				s.IP = v
 				return nil
 			}
 			return errors.New("invalid ipv6")
@@ -453,6 +466,7 @@ func (s *Parser) localPart() error {
 	}()
 	p := s.peek()
 	if p == '"' {
+		s.LocalPartQuoted = true
 		return s.quotedString()
 	} else {
 		return s.dotString()
@@ -486,7 +500,7 @@ func (s *Parser) QcontentSMTP() error {
 		case 0:
 			if ch == '\\' {
 				state = 1
-				s.accept.WriteByte(ch)
+				//	s.accept.WriteByte(ch)
 				continue
 			} else if ch == 32 || ch == 33 ||
 				(ch >= 35 && ch <= 91) ||
@@ -567,7 +581,8 @@ atext           =       ALPHA / DIGIT / ; Any character except controls,
 
 func (s *Parser) isAtext(c byte) bool {
 	if ('0' <= c && c <= '9') ||
-		('A' <= c && c <= 'z') ||
+		('a' <= c && c <= 'z') ||
+		('A' <= c && c <= 'Z') ||
 		c == '!' || c == '#' ||
 		c == '$' || c == '%' ||
 		c == '&' || c == '\'' ||
