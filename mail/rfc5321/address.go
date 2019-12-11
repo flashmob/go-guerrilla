@@ -27,6 +27,17 @@ type SingleAddress struct {
 	NullPath          bool
 }
 
+var (
+	errNotAtom               = errors.New("not atom")
+	errExpectingAngleAddress = errors.New("not angle address")
+	errNotAWord              = errors.New("not a word")
+	errExpectingColon        = errors.New("expecting : ")
+	errExpectingSemicolon    = errors.New("expecting ; ")
+	errExpectingAngleClose   = errors.New("expecting >")
+	errExpectingAngleOpen    = errors.New("< expected")
+	errQuotedUnclosed        = errors.New("quoted string not closed")
+)
+
 // Address parses the "address" production specified in RFC5322
 // address         =   mailbox / group
 func (s *RFC5322) Address(input []byte) (AddressList, error) {
@@ -48,7 +59,7 @@ func (s *RFC5322) Address(input []byte) (AddressList, error) {
 	return s.AddressList, nil
 }
 
-// group           =   display-name ":" [group-list] ";" [CFWS]
+// group  =  display-name ":" [group-list] ";" [CFWS]
 func (s *RFC5322) group() error {
 	if s.addr.DisplayName == "" {
 		if err := s.displayName(); err != nil {
@@ -58,26 +69,23 @@ func (s *RFC5322) group() error {
 		s.Group = s.addr.DisplayName
 		s.addr.DisplayName = ""
 	}
-
 	if s.ch != ':' {
-		return errors.New("expecting : ")
+		return errExpectingColon
 	}
 	s.next()
 	_ = s.groupList()
 	s.skipSpace()
 	if s.ch != ';' {
-		return errors.New("expecting ; ")
+		return errExpectingSemicolon
 	}
-	//s.skipSpace()
 	return nil
 }
 
-// mailbox         =   name-addr / addr-spec
-
+// mailbox  =   name-addr / addr-spec
 func (s *RFC5322) mailbox() error {
 	pos := s.pos // save the position
 	if err := s.nameAddr(); err != nil {
-		if err == expectingAngleAddress && s.ch != ':' { // ':' means it's a group
+		if err == errExpectingAngleAddress && s.ch != ':' { // ':' means it's a group
 			// we'll attempt to parse as an email address without angle brackets
 			s.addr.DisplayName = ""
 			s.addr.DisplayNameQuoted = false
@@ -85,7 +93,6 @@ func (s *RFC5322) mailbox() error {
 			if s.pos > -1 {
 				s.ch = s.buf[s.pos]
 			}
-
 			if err = s.Parser.mailbox(); err != nil {
 				return err
 			}
@@ -93,7 +100,6 @@ func (s *RFC5322) mailbox() error {
 		} else {
 			return err
 		}
-
 	}
 	return nil
 }
@@ -108,34 +114,32 @@ func (s *RFC5322) addAddress() {
 	s.addr = SingleAddress{}
 }
 
-var expectingAngleAddress = errors.New("not angle address")
-
-// name-addr       =   [display-name] angle-addr
+// nameAddr consumes the name-addr production.
+// name-addr =  [display-name] angle-addr
 func (s *RFC5322) nameAddr() error {
 	_ = s.displayName()
-
 	if s.ch == '<' {
 		if err := s.angleAddr(); err != nil {
 			return err
 		}
 		s.next()
 		if s.ch != '>' {
-			return errors.New("expecting >")
+			return errExpectingAngleClose
 		}
 		s.addAddress()
 		return nil
 	} else {
-		return expectingAngleAddress
+		return errExpectingAngleAddress
 	}
 
 }
 
-// mailbox-list    =   (mailbox *("," mailbox)) / obs-mbox-list
+// angleAddr consumes the angle-addr production
 // angle-addr      =   [CFWS] "<" addr-spec ">" [CFWS] / obs-angle-addr
 func (s *RFC5322) angleAddr() error {
 	s.skipSpace()
 	if s.ch != '<' {
-		return errors.New("< expected")
+		return errExpectingAngleOpen
 	}
 	// addr-spec       =   local-part "@" domain
 	if err := s.Parser.mailbox(); err != nil {
@@ -143,14 +147,9 @@ func (s *RFC5322) angleAddr() error {
 	}
 	s.skipSpace()
 	return nil
-
 }
 
-// addr-spec       =   local-part "@" domain
-func (s *RFC5322) addrSpec() error {
-	return nil
-}
-
+// displayName consumes the display-name production:
 // display-name    =   phrase
 // phrase          =   1*word / obs-phrase
 func (s *RFC5322) displayName() error {
@@ -160,6 +159,7 @@ func (s *RFC5322) displayName() error {
 			s.accept.Reset()
 		}
 	}()
+	// phrase
 	if err := s.word(); err != nil {
 		return err
 	}
@@ -171,13 +171,14 @@ func (s *RFC5322) displayName() error {
 	}
 }
 
+// quotedString consumes a quoted-string production
 func (s *RFC5322) quotedString() error {
 	if s.ch == '"' {
 		if err := s.Parser.QcontentSMTP(); err != nil {
 			return err
 		}
 		if s.ch != '"' {
-			return errors.New("quoted string not closed")
+			return errQuotedUnclosed
 		} else {
 			// accept the "
 			s.next()
@@ -194,17 +195,14 @@ func (s *RFC5322) word() error {
 	} else if s.isAtext(s.ch) || s.ch == ' ' || s.ch == '\t' {
 		return s.atom()
 	}
-	return errors.New("not a word")
+	return errNotAWord
 }
 
-/*
-   atom            =   [CFWS] 1*atext [CFWS]
-
-*/
+// atom = [CFWS] 1*atext [CFWS]
 func (s *RFC5322) atom() error {
 	s.skipSpace()
 	if !s.isAtext(s.ch) {
-		return errors.New("not atom")
+		return errNotAtom
 	}
 	for {
 		if s.isAtext(s.ch) {
@@ -225,6 +223,7 @@ func (s *RFC5322) atom() error {
 
 }
 
+// groupList consumes the "group-list" production:
 // group-list      =   mailbox-list / CFWS / obs-group-list
 func (s *RFC5322) groupList() error {
 	// mailbox-list    =   (mailbox *("," mailbox))

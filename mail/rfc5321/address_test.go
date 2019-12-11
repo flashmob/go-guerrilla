@@ -1,7 +1,6 @@
 package rfc5321
 
 import (
-	"fmt"
 	"testing"
 )
 
