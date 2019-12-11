@@ -298,7 +298,7 @@ func TestParseMailbox(t *testing.T) {
 
 	s := NewParser([]byte("jsmith@[IPv6:2001:db8::1]"))
 	err := s.mailbox()
-	if s.Domain != "[IPv6:2001:db8::1]" {
+	if s.Domain != "2001:db8::1" {
 		t.Error("expected domain: 2001:db8::1, got:", s.Domain)
 	}
 	if err != nil {

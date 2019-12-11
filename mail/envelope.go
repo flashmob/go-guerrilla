@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 )
 
 // A WordDecoder decodes MIME headers containing RFC 2047 encoded-words.
@@ -48,37 +50,39 @@ type Address struct {
 	IP net.IP
 }
 
-func (ep *Address) String() string {
+func (a *Address) String() string {
 	var local string
-	if ep.IsEmpty() {
+	if a.IsEmpty() {
 		return ""
 	}
-	if ep.Quoted {
+	if a.Quoted {
 		var sb bytes.Buffer
 		sb.WriteByte('"')
-		for i := 0; i < len(ep.User); i++ {
-			if ep.User[i] == '\\' || ep.User[i] == '"' {
+		for i := 0; i < len(a.User); i++ {
+			if a.User[i] == '\\' || a.User[i] == '"' {
 				// escape
 				sb.WriteByte('\\')
 			}
-			sb.WriteByte(ep.User[i])
+			sb.WriteByte(a.User[i])
 		}
 		sb.WriteByte('"')
 		local = sb.String()
 	} else {
-		local = ep.User
+		local = a.User
 	}
-	if ep.Host != "" {
-		return fmt.Sprintf("%s@%s", local, ep.Host)
+	if a.Host != "" {
+		return fmt.Sprintf("%s@%s", local, a.Host)
 	}
 	return local
 }
 
-func (ep *Address) IsEmpty() bool {
-	return ep.User == "" && ep.Host == ""
+func (a *Address) IsEmpty() bool {
+	return a.User == "" && a.Host == ""
 }
 
 var ap = mail.AddressParser{}
+
+var ap2 = rfc5321.RFC5322{}
 
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
@@ -88,6 +92,9 @@ func NewAddress(str string) (*Address, error) {
 	var pos int
 	var a *mail.Address
 	var err error
+	// TODO use the new parser
+	_, _ = ap2.Address([]byte(str))
+
 	address := new(Address)
 	if pos = strings.LastIndex(str, "@"); pos > 0 && str[pos-1] == '"' {
 		isQuoted = true

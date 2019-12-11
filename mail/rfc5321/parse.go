@@ -315,7 +315,7 @@ func (s *Parser) subdomain() error {
 				state = 1
 				continue
 			}
-			return errors.New("parse err")
+			return errors.New("subdomain parse err")
 		case 1:
 			p := s.peek()
 			if isLetDig(c) || c == '-' {
@@ -323,7 +323,7 @@ func (s *Parser) subdomain() error {
 			}
 			if !isLetDig(p) && p != '-' {
 				if c == '-' {
-					return errors.New("parse err")
+					return errors.New("subdomain parse err")
 				}
 				return nil
 			}
@@ -409,7 +409,7 @@ func (s *Parser) snum() error {
 		c := s.next()
 		if state == 0 {
 			if !(c >= 48 && c <= 57) {
-				return errors.New("parse error")
+				return errors.New("snum parse error")
 			} else {
 				num.WriteByte(s.ch)
 				s.accept.WriteByte(s.ch)
@@ -542,7 +542,7 @@ func (s *Parser) atom() error {
 	for {
 		if state == 0 {
 			if !s.isAtext(s.next()) {
-				return errors.New("parse error")
+				return errors.New("atom parse error")
 			} else {
 				s.accept.WriteByte(s.ch)
 				state = 1
