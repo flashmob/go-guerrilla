@@ -9,7 +9,6 @@ import (
 	"io"
 	"mime"
 	"net"
-	"net/mail"
 	"net/textproto"
 	"strings"
 	"sync"
@@ -48,6 +47,10 @@ type Address struct {
 	Quoted bool
 	// IP stores the IP Address, if the Host is an IP
 	IP net.IP
+	// DisplayName is a label before the address (RFC5322)
+	DisplayName string
+	// DisplayNameQuoted is true when DisplayName was quoted
+	DisplayNameQuoted bool
 }
 
 func (a *Address) String() string {
@@ -80,55 +83,26 @@ func (a *Address) IsEmpty() bool {
 	return a.User == "" && a.Host == ""
 }
 
-var ap = mail.AddressParser{}
-
-var ap2 = rfc5321.RFC5322{}
-
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
-// TODO its not parsing ip addresses properly
 func NewAddress(str string) (*Address, error) {
-	var isQuoted, isIP bool
-	var pos int
-	var a *mail.Address
-	var err error
-	// TODO use the new parser
-	_, _ = ap2.Address([]byte(str))
-
-	address := new(Address)
-	if pos = strings.LastIndex(str, "@"); pos > 0 && str[pos-1] == '"' {
-		isQuoted = true
-	}
-	if pos > 0 && pos+1 < len(str) && str[pos+1] == '[' {
-		isIP = true
-	}
-
-	a, err = ap.Parse(str)
-
+	var ap rfc5321.RFC5322
+	l, err := ap.Address([]byte(str))
 	if err != nil {
 		return nil, err
 	}
-	pos = strings.LastIndex(a.Address, "@")
-
-	if pos > 0 {
-		address.User = a.Address[0:pos]
-		address.Host = a.Address[pos+1:]
-		if isQuoted {
-			address.Quoted = true
-		}
-		if isIP {
-			// check if the ip address is valid
-			if v := net.ParseIP(address.Host); v == nil {
-				return nil, errors.New("invalid ip")
-			} else {
-				address.IP = v
-				// this will normalize ipv6 addresses
-				address.Host = v.String()
-			}
-		}
-		return address, nil
+	if len(l.List) == 0 {
+		return nil, errors.New("no email address matched")
 	}
-	return nil, errors.New("invalid address")
+	a := new(Address)
+	a.User = l.List[0].LocalPart
+	a.Quoted = l.List[0].LocalPartQuoted
+	a.Host = l.List[0].Domain
+	a.IP = l.List[0].IP
+	a.DisplayName = l.List[0].DisplayName
+	a.DisplayNameQuoted = l.List[0].DisplayNameQuoted
+	a.NullPath = l.List[0].NullPath
+	return a, nil
 }
 
 // Envelope of Email represents a single SMTP message.

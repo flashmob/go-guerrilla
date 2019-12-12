@@ -13,7 +13,7 @@ func TestParseRFC5322(t *testing.T) {
 	if a, err := s.Address([]byte("test@tdomain.com")); err != nil {
 		t.Error(err)
 	} else {
-		if len(a.list) != 1 {
+		if len(a.List) != 1 {
 			t.Error("expecting 1 address")
 		} else {
 			// display name should be empty
@@ -38,20 +38,20 @@ func TestParseRFC5322IP(t *testing.T) {
 	if a, err := s.Address([]byte("\"Mike Jones\" <\"testing 123\"@[IPv6:2001:db8::1]>")); err != nil {
 		t.Error(err)
 	} else {
-		if len(a.list) != 1 {
-			t.Error("expecting 1 address, but got", len(a.list))
+		if len(a.List) != 1 {
+			t.Error("expecting 1 address, but got", len(a.List))
 		} else {
-			if a.list[0].DisplayNameQuoted == false {
-				t.Error(".list[0].DisplayNameQuoted is false, expecting true")
+			if a.List[0].DisplayNameQuoted == false {
+				t.Error(".List[0].DisplayNameQuoted is false, expecting true")
 			}
-			if a.list[0].LocalPartQuoted == false {
-				t.Error(".list[0].LocalPartQuoted is false, expecting true")
+			if a.List[0].LocalPartQuoted == false {
+				t.Error(".List[0].LocalPartQuoted is false, expecting true")
 			}
-			if a.list[0].IP == nil {
-				t.Error("a.list[0].IP should not be nil")
+			if a.List[0].IP == nil {
+				t.Error("a.List[0].IP should not be nil")
 			}
-			if a.list[0].Domain != "2001:db8::1" {
-				t.Error("a.list[0].Domain should be, but got", a.list[0].Domain)
+			if a.List[0].Domain != "2001:db8::1" {
+				t.Error("a.List[0].Domain should be, but got", a.List[0].Domain)
 			}
 		}
 	}
@@ -66,17 +66,17 @@ func TestParseRFC5322Group(t *testing.T) {
 		if a.Group != "A Group" {
 			t.Error("expecting a.Group to be \"A Group\" but got:", a.Group)
 		}
-		if len(a.list) != 4 {
-			t.Error("expecting 4 addresses, but got", len(a.list))
+		if len(a.List) != 4 {
+			t.Error("expecting 4 addresses, but got", len(a.List))
 		} else {
-			if a.list[0].DisplayName != "Ed Jones" {
-				t.Error("expecting a.list[0].DisplayName 'Ed Jones' but got:", a.list[0].DisplayName)
+			if a.List[0].DisplayName != "Ed Jones" {
+				t.Error("expecting a.List[0].DisplayName 'Ed Jones' but got:", a.List[0].DisplayName)
 			}
-			if a.list[0].LocalPart != "c" {
-				t.Error("expecting a.list[0].LocalPart 'c' but got:", a.list[0].LocalPart)
+			if a.List[0].LocalPart != "c" {
+				t.Error("expecting a.List[0].LocalPart 'c' but got:", a.List[0].LocalPart)
 			}
-			if a.list[0].Domain != "a.test" {
-				t.Error("expecting a.list[0].Domain 'a.test' but got:", a.list[0].Domain)
+			if a.List[0].Domain != "a.test" {
+				t.Error("expecting a.List[0].Domain 'a.test' but got:", a.List[0].Domain)
 			}
 		}
 

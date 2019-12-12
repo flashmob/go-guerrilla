@@ -13,7 +13,7 @@ type RFC5322 struct {
 }
 
 type AddressList struct {
-	list  []SingleAddress
+	List  []SingleAddress
 	Group string
 }
 
@@ -43,7 +43,7 @@ var (
 func (s *RFC5322) Address(input []byte) (AddressList, error) {
 	s.set(input)
 	s.next()
-	s.list = nil
+	s.List = nil
 	s.addr = SingleAddress{}
 	if err := s.mailbox(); err != nil {
 		if s.ch == ':' {
@@ -59,7 +59,7 @@ func (s *RFC5322) Address(input []byte) (AddressList, error) {
 	return s.AddressList, nil
 }
 
-// group  =  display-name ":" [group-list] ";" [CFWS]
+// group  =  display-name ":" [group-List] ";" [CFWS]
 func (s *RFC5322) group() error {
 	if s.addr.DisplayName == "" {
 		if err := s.displayName(); err != nil {
@@ -104,13 +104,13 @@ func (s *RFC5322) mailbox() error {
 	return nil
 }
 
-// addAddress ads the current address to the list
+// addAddress ads the current address to the List
 func (s *RFC5322) addAddress() {
 	s.addr.LocalPart = s.LocalPart
 	s.addr.LocalPartQuoted = s.LocalPartQuoted
 	s.addr.Domain = s.Domain
 	s.addr.IP = s.IP
-	s.list = append(s.list, s.addr)
+	s.List = append(s.List, s.addr)
 	s.addr = SingleAddress{}
 }
 
@@ -222,8 +222,8 @@ func (s *RFC5322) atom() error {
 	}
 }
 
-// groupList consumes the "group-list" production:
-// group-list      =   mailbox-list / CFWS / obs-group-list
+// groupList consumes the "group-List" production:
+// group-List      =   mailbox-List / CFWS / obs-group-List
 func (s *RFC5322) groupList() error {
 	// mailbox-list    =   (mailbox *("," mailbox))
 	if err := s.mailbox(); err != nil {
