@@ -268,61 +268,111 @@ func (e *Envelope) PopRcpt() Address {
 	return ret
 }
 
+const (
+	statePlainText = iota
+	stateStartEncodedWord
+	stateEncodedWord
+)
+
 // MimeHeaderDecode converts 7 bit encoded mime header strings to UTF-8
 func MimeHeaderDecode(str string) string {
-	state := 0
-	var out []byte
-	var wordStart int
-	var wordLen int
+	// optimized to only create an output buffer if there's need to
+	// the `out` buffer is only made if an encoded word was decoded without error
+	// `out` is made with the capacity of len(str)
+	// a simple state machine is used to detect the start & end of encoded word and plain-text
+	state := statePlainText
+	var (
+		out        []byte
+		wordStart  int  // start of an encoded word
+		wordLen    int  // end of an encoded
+		ptextStart = -1 // start of plan-text
+		ptextLen   int  // end of plain-text
+	)
 	for i := 0; i < len(str); i++ {
 		switch state {
-		case 0:
+		case statePlainText:
+			if ptextStart == -1 {
+				ptextStart = i
+			}
 			if str[i] == '=' {
-				state = 1
+				state = stateStartEncodedWord
 				wordStart = i
 				wordLen = 1
 			} else {
-				out = append(out, str[i])
+				ptextLen++
 			}
-		case 1:
+		case stateStartEncodedWord:
 			if str[i] == '?' {
 				wordLen++
-				state = 2
+				state = stateEncodedWord
 			} else {
 				wordLen = 0
-				out = append(out, str[i])
-				state = 0
+				state = statePlainText
+				ptextLen++
 			}
-		case 2:
+		case stateEncodedWord:
 			if str[i] == ' ' || str[i] == '\t' {
 				d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
+				if ptextLen > 0 {
+					out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+				}
 				if err == nil {
-					out = append(out, []byte(d)...)
+					out = makeAppend(out, len(str), []byte(d))
+				} else if out != nil {
+					out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
 				} else {
-					out = append(out, str[wordStart:wordLen+wordStart]...)
+					// special case: there was an error with decoding and `out` wasn't created
+					// we can assume the encoded word as plaintext
+					ptextLen += wordLen + 1 // add 1 for the space/tab
+					wordLen = 0
+					wordStart = 0
+					state = statePlainText
+					continue
 				}
 				if skip := hasEncodedWordAhead(str, i); skip != -1 {
 					i = skip
 				} else {
-					out = append(out, str[i])
+					out = makeAppend(out, len(str), []byte{str[i]})
 				}
+				ptextStart = -1
+				ptextLen = 0
 				wordLen = 0
 				wordStart = 0
-				state = 0
+				state = statePlainText
+
 			} else {
 				wordLen++
 			}
 		}
 	}
+	if out != nil && ptextLen > 0 {
+		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+		ptextLen = 0
+	}
 	if wordLen > 0 {
+		if ptextLen > 0 {
+			out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+		}
 		d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
 		if err == nil {
-			out = append(out, []byte(d)...)
-		} else {
-			out = append(out, str[wordStart:wordLen+wordStart]...)
+			out = makeAppend(out, len(str), []byte(d))
+		} else if out != nil {
+			out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
 		}
 	}
+	if out == nil {
+		// best case: there was nothing to encode
+		return str
+	}
 	return string(out)
+}
+
+func makeAppend(out []byte, size int, in []byte) []byte {
+	if out == nil {
+		out = make([]byte, 0, size)
+	}
+	out = append(out, in...)
+	return out
 }
 
 func hasEncodedWordAhead(str string, i int) int {

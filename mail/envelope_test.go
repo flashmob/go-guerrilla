@@ -27,6 +27,16 @@ func TestMimeHeaderDecode(t *testing.T) {
 		t.Error("expecting André Pirard, got:", str)
 	}
 }
+
+// TestMimeHeaderDecodeNone tests strings without any encoded words
+func TestMimeHeaderDecodeNone(t *testing.T) {
+	// in the best case, there will be nothing to decode
+	str := MimeHeaderDecode("Andre Pirard <PIRARD@vm1.ulg.ac.be>")
+	if strings.Index(str, "Andre Pirard") != 0 {
+		t.Error("expecting Andre Pirard, got:", str)
+	}
+
+}
 func TestNewAddress(t *testing.T) {
 
 	addr, err := NewAddress("<hoop>")

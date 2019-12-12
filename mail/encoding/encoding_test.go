@@ -26,6 +26,30 @@ func TestEncodingMimeHeaderDecode(t *testing.T) {
 
 }
 
+// TestEncodingMimeHeaderDecodeEnding tests when the encoded word is at the end
+func TestEncodingMimeHeaderDecodeEnding(t *testing.T) {
+
+	// plaintext at the beginning
+	str := mail.MimeHeaderDecode("What about this one? =?ISO-8859-1?Q?Andr=E9?=")
+	if str != "What about this one? André" {
+		t.Error("expecting: What about this one? André, but got:", str)
+
+	}
+
+	// not plaintext at beginning
+	str = mail.MimeHeaderDecode("=?ISO-8859-1?Q?Andr=E9?= What about this one? =?ISO-8859-1?Q?Andr=E9?=")
+	if str != "André What about this one? André" {
+		t.Error("expecting: André What about this one? André, but got:", str)
+
+	}
+	// plaintext at beginning corruped
+	str = mail.MimeHeaderDecode("=?ISO-8859-1?B?Andr=E9?= What about this one? =?ISO-8859-1?Q?Andr=E9?=")
+	if strings.Index(str, "=?ISO-8859-1?B?Andr=E9?= What about this one? André") != 0 {
+		t.Error("expecting:=?ISO-8859-1?B?Andr=E9?= What about this one? André, but got:", str)
+
+	}
+}
+
 // TestEncodingMimeHeaderDecodeBad tests the case of a malformed encoding
 func TestEncodingMimeHeaderDecodeBad(t *testing.T) {
 	// bad base64 encoding, it should return the string unencoded
