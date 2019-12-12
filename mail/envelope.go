@@ -312,15 +312,9 @@ func MimeHeaderDecode(str string) string {
 			}
 		case stateEncodedWord:
 			if str[i] == ' ' || str[i] == '\t' {
-				d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
-				if ptextLen > 0 {
-					out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
-				}
-				if err == nil {
-					out = makeAppend(out, len(str), []byte(d))
-				} else if out != nil {
-					out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
-				} else {
+				var err error
+				out, err = decodeWordAppend(ptextLen, out, str, ptextStart, wordStart, wordLen)
+				if err != nil && out == nil {
 					// special case: there was an error with decoding and `out` wasn't created
 					// we can assume the encoded word as plaintext
 					ptextLen += wordLen + 1 // add 1 for the space/tab
@@ -339,7 +333,6 @@ func MimeHeaderDecode(str string) string {
 				wordLen = 0
 				wordStart = 0
 				state = statePlainText
-
 			} else {
 				wordLen++
 			}
@@ -350,21 +343,26 @@ func MimeHeaderDecode(str string) string {
 		ptextLen = 0
 	}
 	if wordLen > 0 {
-		if ptextLen > 0 {
-			out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
-		}
-		d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
-		if err == nil {
-			out = makeAppend(out, len(str), []byte(d))
-		} else if out != nil {
-			out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
-		}
+		out, _ = decodeWordAppend(ptextLen, out, str, ptextStart, wordStart, wordLen)
 	}
 	if out == nil {
 		// best case: there was nothing to encode
 		return str
 	}
 	return string(out)
+}
+
+func decodeWordAppend(ptextLen int, out []byte, str string, ptextStart int, wordStart int, wordLen int) ([]byte, error) {
+	if ptextLen > 0 {
+		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+	}
+	d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
+	if err == nil {
+		out = makeAppend(out, len(str), []byte(d))
+	} else if out != nil {
+		out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
+	}
+	return out, err
 }
 
 func makeAppend(out []byte, size int, in []byte) []byte {
