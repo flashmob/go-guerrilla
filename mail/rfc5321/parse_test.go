@@ -483,6 +483,12 @@ func TestParseDomain(t *testing.T) {
 		t.Error("error not expected ")
 	}
 
+	s = NewParser([]byte("a^m.com"))
+	err = s.domain()
+	if err == nil {
+		t.Error("error was expected ")
+	}
+
 	s = NewParser([]byte("a.com.gov"))
 	err = s.domain()
 	if err != nil {
@@ -597,4 +603,46 @@ func TestParse(t *testing.T) {
 		t.Error("not expected parse error")
 	}
 
+}
+
+func TestEhlo(t *testing.T) {
+	var s Parser
+	domain, ip, err := s.Ehlo([]byte(" hello.com"))
+	if ip != nil {
+		t.Error("ip should be nil")
+	}
+	if err != nil {
+		t.Error(err)
+	}
+	if domain != "hello.com" {
+		t.Error("domain not hello.com")
+	}
+
+	domain, ip, err = s.Ehlo([]byte(" [211.0.0.3]"))
+	if err != nil {
+		t.Error(err)
+	}
+	if ip == nil {
+		t.Error("ip should not be nil")
+	}
+
+	if domain != "211.0.0.3" {
+		t.Error("expecting domain to be 211.0.0.3")
+	}
+}
+
+func TestHelo(t *testing.T) {
+	var s Parser
+	domain, err := s.Helo([]byte(" example.com"))
+	if err != nil {
+		t.Error(err)
+	}
+	if domain != "example.com" {
+		t.Error("expecting domain = example.com")
+	}
+
+	domain, err = s.Helo([]byte(" exam_ple.com"))
+	if err == nil {
+		t.Error("expecting domain exam_ple.com to be invalid")
+	}
 }

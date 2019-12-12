@@ -95,13 +95,14 @@ func NewAddress(str string) (*Address, error) {
 		return nil, errors.New("no email address matched")
 	}
 	a := new(Address)
-	a.User = l.List[0].LocalPart
-	a.Quoted = l.List[0].LocalPartQuoted
-	a.Host = l.List[0].Domain
-	a.IP = l.List[0].IP
-	a.DisplayName = l.List[0].DisplayName
-	a.DisplayNameQuoted = l.List[0].DisplayNameQuoted
-	a.NullPath = l.List[0].NullPath
+	addr := &l.List[0]
+	a.User = addr.LocalPart
+	a.Quoted = addr.LocalPartQuoted
+	a.Host = addr.Domain
+	a.IP = addr.IP
+	a.DisplayName = addr.DisplayName
+	a.DisplayNameQuoted = addr.DisplayNameQuoted
+	a.NullPath = addr.NullPath
 	return a, nil
 }
 

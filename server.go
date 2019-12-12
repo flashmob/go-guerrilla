@@ -437,12 +437,22 @@ func (s *server) handleClient(client *client) {
 			cmd := bytes.ToUpper(input[:cmdLen])
 			switch {
 			case cmdHELO.match(cmd):
-				client.Helo = string(bytes.Trim(input[4:], " "))
+				if h, err := client.parser.Helo(input[4:]); err == nil {
+					client.Helo = h
+				} else {
+					client.sendResponse(err)
+					break
+				}
 				client.resetTransaction()
 				client.sendResponse(helo)
 
 			case cmdEHLO.match(cmd):
-				client.Helo = string(bytes.Trim(input[4:], " "))
+				if h, _, err := client.parser.Ehlo(input[4:]); err == nil {
+					client.Helo = h
+				} else {
+					client.sendResponse(err)
+					break
+				}
 				client.ESMTP = true
 				client.resetTransaction()
 				client.sendResponse(ehlo,

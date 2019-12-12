@@ -600,8 +600,56 @@ func (s *Parser) isAtext(c byte) bool {
 
 func isLetDig(c byte) bool {
 	if ('0' <= c && c <= '9') ||
-		('A' <= c && c <= 'z') {
+		('A' <= c && c <= 'Z') ||
+		('a' <= c && c <= 'z') {
 		return true
 	}
 	return false
+}
+
+//ehlo = "EHLO" SP ( Domain / address-literal ) CRLF
+// Note: "HELO" is ignored here
+func (s *Parser) Ehlo(input []byte) (domain string, ip net.IP, err error) {
+	s.set(input)
+	s.next()
+	if s.ch == ' ' {
+		if p := s.peek(); p == '[' {
+			err = s.addressLiteral()
+			if err == nil {
+				domain = s.accept.String()
+				ip = net.ParseIP(domain)
+				if ip == nil {
+					err = errors.New("invalid ip")
+				}
+				return
+			}
+		} else {
+			err = s.domain()
+			if err == nil {
+				domain = s.accept.String()
+			}
+			return
+		}
+	} else {
+		err = errors.New("ehlo parse error")
+	}
+	return domain, ip, err
+
+}
+
+// helo  = "HELO" SP Domain CRLF
+// Note: "HELO" is ignored here, so is the CRLF at the end
+func (s *Parser) Helo(input []byte) (domain string, err error) {
+	s.set(input)
+	s.next()
+	if s.ch == ' ' {
+		err = s.domain()
+		if err == nil {
+			domain = s.accept.String()
+		}
+		return
+	} else {
+		err = errors.New("helo parse error")
+	}
+	return
 }
