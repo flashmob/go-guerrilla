@@ -271,53 +271,55 @@ func (e *Envelope) PopRcpt() Address {
 // MimeHeaderDecode converts 7 bit encoded mime header strings to UTF-8
 func MimeHeaderDecode(str string) string {
 	state := 0
-	var buf bytes.Buffer
 	var out []byte
+	var wordStart int
+	var wordLen int
 	for i := 0; i < len(str); i++ {
 		switch state {
 		case 0:
 			if str[i] == '=' {
-				buf.WriteByte(str[i])
 				state = 1
+				wordStart = i
+				wordLen = 1
 			} else {
 				out = append(out, str[i])
 			}
 		case 1:
 			if str[i] == '?' {
-				buf.WriteByte(str[i])
+				wordLen++
 				state = 2
 			} else {
+				wordLen = 0
 				out = append(out, str[i])
-				buf.Reset()
 				state = 0
 			}
-
 		case 2:
 			if str[i] == ' ' || str[i] == '\t' {
-				d, err := Dec.Decode(buf.String())
+				d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
 				if err == nil {
 					out = append(out, []byte(d)...)
 				} else {
-					out = append(out, buf.Bytes()...)
+					out = append(out, str[wordStart:wordLen+wordStart]...)
 				}
 				if skip := hasEncodedWordAhead(str, i); skip != -1 {
 					i = skip
 				} else {
 					out = append(out, str[i])
 				}
-				buf.Reset()
+				wordLen = 0
+				wordStart = 0
 				state = 0
 			} else {
-				buf.WriteByte(str[i])
+				wordLen++
 			}
 		}
 	}
-	if buf.Len() > 0 {
-		d, err := Dec.Decode(buf.String())
+	if wordLen > 0 {
+		d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
 		if err == nil {
 			out = append(out, []byte(d)...)
 		} else {
-			out = append(out, buf.Bytes()...)
+			out = append(out, str[wordStart:wordLen+wordStart]...)
 		}
 	}
 	return string(out)

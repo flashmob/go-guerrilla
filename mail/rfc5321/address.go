@@ -220,7 +220,6 @@ func (s *RFC5322) atom() error {
 			s.next()
 		}
 	}
-
 }
 
 // groupList consumes the "group-list" production:

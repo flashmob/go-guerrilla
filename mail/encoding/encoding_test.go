@@ -26,6 +26,16 @@ func TestEncodingMimeHeaderDecode(t *testing.T) {
 
 }
 
+// TestEncodingMimeHeaderDecodeBad tests the case of a malformed encoding
+func TestEncodingMimeHeaderDecodeBad(t *testing.T) {
+	// bad base64 encoding, it should return the string unencoded
+	str := mail.MimeHeaderDecode("=?ISO-8859-1?B?Andr=E9?=\tPirard <PIRARD@vm1.ulg.ac.be>")
+	if strings.Index(str, "=?ISO-8859-1?B?Andr=E9?=\tPirard <PIRARD@vm1.ulg.ac.be>") != 0 {
+		t.Error("expecting =?ISO-8859-1?B?Andr=E9?=\tPirard <PIRARD@vm1.ulg.ac.be>, got:", str)
+
+	}
+}
+
 func TestEncodingMimeHeaderDecodeMulti(t *testing.T) {
 
 	str := mail.MimeHeaderDecode("=?iso-2022-jp?B?GyRCIVpLXEZ8Om89fCFbPEIkT0lUOk5NUSROJU0lPyROSn0bKEI=?= =?iso-2022-jp?B?GyRCJCxCPyQkJEckORsoQg==?=")

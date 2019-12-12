@@ -21,6 +21,13 @@ func TestParseRFC5322(t *testing.T) {
 	}
 }
 
+func TestParseRFC5322Decoder(t *testing.T) {
+	var s RFC5322
+	if _, err := s.Address([]byte("=?ISO-8859-1?Q?Andr=E9?= =?ISO-8859-1?Q?Andr=E9?= <test@tdomain.com>")); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestParseRFC5322IP(t *testing.T) {
 	var s RFC5322
 	// this is an incorrect IPv6 address
