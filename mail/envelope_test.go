@@ -46,6 +46,14 @@ func TestAddressPostmaster(t *testing.T) {
 	}
 }
 
+func TestAddressNull(t *testing.T) {
+	addr := &Address{NullPath: true}
+	str := addr.String()
+	if str != "" {
+		t.Error("it was not empty", str)
+	}
+}
+
 func TestNewAddress(t *testing.T) {
 
 	addr, err := NewAddress("<hoop>")
