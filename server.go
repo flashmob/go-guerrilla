@@ -441,7 +441,8 @@ func (s *server) handleClient(client *client) {
 				if h, err := client.parser.Helo(input[4:]); err == nil {
 					client.Helo = h
 				} else {
-					client.sendResponse(err)
+					s.log().WithFields(logrus.Fields{"helo": h, "client": client.ID}).Warn("invalid helo")
+					client.sendResponse(r.FailSyntaxError)
 					break
 				}
 				client.resetTransaction()
@@ -451,7 +452,9 @@ func (s *server) handleClient(client *client) {
 				if h, _, err := client.parser.Ehlo(input[4:]); err == nil {
 					client.Helo = h
 				} else {
-					client.sendResponse(err)
+					client.sendResponse(r.FailSyntaxError)
+					s.log().WithFields(logrus.Fields{"ehlo": h, "client": client.ID}).Warn("invalid ehlo")
+					client.sendResponse(r.FailSyntaxError)
 					break
 				}
 				client.ESMTP = true
