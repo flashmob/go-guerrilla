@@ -42,6 +42,8 @@ type ServerConfig struct {
 	LogFile string `json:"log_file,omitempty"`
 	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
 	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
+	// Hostname will also be used to fill the 'Host' property when the "RCPT TO" address is
+	// addressed to just <postmaster>
 	Hostname string `json:"host_name"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`

@@ -83,6 +83,13 @@ func (a *Address) IsEmpty() bool {
 	return a.User == "" && a.Host == ""
 }
 
+func (a *Address) IsPostmaster() bool {
+	if a.User == "postmaster" {
+		return true
+	}
+	return false
+}
+
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
 func NewAddress(str string) (*Address, error) {

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -511,8 +512,9 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(err.Error())
 					break
 				}
+				s.defaultHost(&to)
 				if !s.allowsHost(to.Host) {
-					client.sendResponse(r.ErrorRelayDenied, " ", to.String())
+					client.sendResponse(r.ErrorRelayDenied, " ", to.Host)
 				} else {
 					client.PushRcpt(to)
 					rcptError := s.backend().ValidateRcpt(client.Envelope)
@@ -663,4 +665,17 @@ func (s *server) loadLog(value *atomic.Value) log.Logger {
 		value.Store(l)
 	}
 	return l
+}
+
+// defaultHost ensures that the host attribute is set, if addressed to Postmaster
+func (s *server) defaultHost(a *mail.Address) {
+	if a.Host == "" && a.IsPostmaster() {
+		sc := s.configStore.Load().(ServerConfig)
+		a.Host = sc.Hostname
+		if !s.allowsHost(a.Host) {
+			s.log().WithFields(
+				logrus.Fields{"hostname": sc.Hostname}).
+				Warn("the hostname is not present in AllowedHosts config setting")
+		}
+	}
 }
