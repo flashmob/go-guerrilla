@@ -37,11 +37,20 @@ func TestMimeHeaderDecodeNone(t *testing.T) {
 	}
 
 }
+
+func TestAddressPostmaster(t *testing.T) {
+	addr := &Address{User: "postmaster"}
+	str := addr.String()
+	if str != "postmaster" {
+		t.Error("it was not postmaster,", str)
+	}
+}
+
 func TestNewAddress(t *testing.T) {
 
 	addr, err := NewAddress("<hoop>")
 	if err == nil {
-		t.Error("there should be an error:", addr)
+		t.Error("there should be an error:", err)
 	}
 
 	addr, err = NewAddress(`Gogh Fir <tesst@test.com>`)

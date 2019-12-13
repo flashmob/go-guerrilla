@@ -58,6 +58,9 @@ func (a *Address) String() string {
 	if a.IsEmpty() {
 		return ""
 	}
+	if a.User == "postmaster" && a.Host == "" {
+		return "postmaster"
+	}
 	if a.Quoted {
 		var sb bytes.Buffer
 		sb.WriteByte('"')
