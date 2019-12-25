@@ -385,6 +385,58 @@ func TestGithubIssue197(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestGithubIssue200(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	defer cleanTestArtifacts(t)
+	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	server.backend().Start()
+	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
+
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+	//	fmt.Println(line)
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	if err := w.PrintfLine("HELO test\"><script>alert('hi')</script>test.com"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if line != "550 5.5.2 Syntax error" {
+		t.Error("line expected to be: 550 5.5.2 Syntax error, got", line)
+	}
+
+	if err := w.PrintfLine("HELO test.com"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if !strings.Contains(line, "250") {
+		t.Error("line did not have 250 code, got", line)
+	}
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	//fmt.Println("line is:", line)
+	expected := "221 2.0.0 Bye"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+	wg.Wait() // wait for handleClient to exit
+}
+
 func TestXClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
