@@ -63,7 +63,6 @@ type server struct {
 type allowedHosts struct {
 	table      map[string]bool // host lookup table
 	wildcards  []string        // host wildcard list (* is used as a wildcard)
-	hasIP      bool            // is one of the hosts an ipv6 address
 	sync.Mutex                 // guard access to the map
 }
 
@@ -219,10 +218,11 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	for _, h := range allowedHosts {
 		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
-		} else if ip := net.ParseIP(h); ip != nil {
-			// this will save the normalized ip, as ip.String always returns ipv6 in short form
-			s.hosts.table[ip.String()] = true
-			s.hosts.hasIP = true
+		} else if len(h) > 5 && h[0] == '[' && h[len(h)-1] == ']' {
+			if ip := net.ParseIP(h[1 : len(h)-1]); ip != nil {
+				// this will save the normalized ip, as ip.String always returns ipv6 in short form
+				s.hosts.table["["+ip.String()+"]"] = true
+			}
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
 		}
@@ -313,12 +313,6 @@ func (s *server) allowsHost(host string) bool {
 			return true
 		}
 	}
-	if s.hosts.hasIP {
-		if ip := net.ParseIP(host); ip != nil {
-			// normalize the ip address
-			host = ip.String()
-		}
-	}
 	if _, ok := s.hosts.table[strings.ToLower(host)]; ok {
 		return true
 	}
@@ -329,6 +323,11 @@ func (s *server) allowsHost(host string) bool {
 		}
 	}
 	return false
+}
+
+func (s *server) allowsIp(ip net.IP) bool {
+	ipStr := ip.String()
+	return s.allowsHost("[" + ipStr + "]")
 }
 
 const commandSuffix = "\r\n"
@@ -516,7 +515,7 @@ func (s *server) handleClient(client *client) {
 					break
 				}
 				s.defaultHost(&to)
-				if !s.allowsHost(to.Host) {
+				if (to.IP != nil && !s.allowsIp(to.IP)) || (to.IP == nil && !s.allowsHost(to.Host)) {
 					client.sendResponse(r.ErrorRelayDenied, " ", to.Host)
 				} else {
 					client.PushRcpt(to)

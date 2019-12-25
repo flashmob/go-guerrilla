@@ -231,6 +231,7 @@ func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 			PathParams: c.parser.PathParams,
 			NullPath:   c.parser.NullPath,
 			Quoted:     c.parser.LocalPartQuoted,
+			IP:         c.parser.IP,
 		}
 	}
 	return address, err

@@ -302,6 +302,89 @@ func TestHandleClient(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestGithubIssue197(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	defer cleanTestArtifacts(t)
+	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	server.backend().Start()
+	// we assume that 1.1.1.1 is a domain (ip-literal syntax is incorrect)
+	// [2001:DB8::FF00:42:8329] is an address literal
+	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
+
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+	//	fmt.Println(line)
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	if err := w.PrintfLine("HELO test.test.com"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// Case 1
+	if err := w.PrintfLine("rcpt to: <hi@[1.1.1.1]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if client.parser.IP == nil {
+		t.Error("[1.1.1.1] not parsed as address-liteal")
+	}
+
+	// case 2, should be parsed as domain
+	if err := w.PrintfLine("rcpt to: <hi@1.1.1.1>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if client.parser.IP != nil {
+		t.Error("1.1.1.1 should not be parsed as an IP (syntax requires IP addresses to be in braces, eg <hi@[1.1.1.1]>")
+	}
+
+	// case 3
+	// prefix ipv6 is case insensitive
+	if err := w.PrintfLine("rcpt to: <hi@[ipv6:2001:DB8::FF00:42:8329]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if client.parser.IP == nil {
+		t.Error("[ipv6:2001:DB8::FF00:42:8329] should be parsed as an address-literal, it wasnt")
+	}
+
+	// case 4
+	if err := w.PrintfLine("rcpt to: <hi@[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if client.parser.Domain != "2001:DB8::FF00:42:8329" && client.parser.IP == nil {
+		t.Error("[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329] is same as 2001:DB8::FF00:42:8329, lol")
+	}
+
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	//fmt.Println("line is:", line)
+	expected := "221 2.0.0 Bye"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+	wg.Wait() // wait for handleClient to exit
+}
+
 func TestXClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
@@ -552,9 +635,9 @@ func TestAllowsHosts(t *testing.T) {
 		"*.test",
 		"wild*.card",
 		"multiple*wild*cards.*",
-		"::FFFF:C0A8:1",          // ip4 in ipv6 format. It's actually 192.168.0.1
-		"2001:db8::ff00:42:8329", // same as 2001:0db8:0000:0000:0000:ff00:0042:8329
-		"127.0.0.1",
+		"[::FFFF:C0A8:1]",          // ip4 in ipv6 format. It's actually 192.168.0.1
+		"[2001:db8::ff00:42:8329]", // same as 2001:0db8:0000:0000:0000:ff00:0042:8329
+		"[127.0.0.1]",
 	}
 	s.setAllowedHosts(allowedHosts)
 
@@ -567,13 +650,23 @@ func TestAllowsHosts(t *testing.T) {
 		"wild.card":               true,
 		"wild.card.com":           false,
 		"multipleXwildXcards.com": true,
-		"192.168.0.1":             true,
-		"2001:0db8:0000:0000:0000:ff00:0042:8329": true,
-		"127.0.0.1": true,
 	}
 
 	for host, allows := range testTable {
 		if res := s.allowsHost(host); res != allows {
+			t.Error(host, ": expected", allows, "but got", res)
+		}
+	}
+
+	testTableIP := map[string]bool{
+
+		"192.168.0.1": true,
+		"2001:0db8:0000:0000:0000:ff00:0042:8329": true,
+		"127.0.0.1": true,
+	}
+
+	for host, allows := range testTableIP {
+		if res := s.allowsIp(net.ParseIP(host)); res != allows {
 			t.Error(host, ": expected", allows, "but got", res)
 		}
 	}
