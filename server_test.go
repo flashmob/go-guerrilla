@@ -437,6 +437,93 @@ func TestGithubIssue200(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestGithubIssue201(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	defer cleanTestArtifacts(t)
+	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	server.backend().Start()
+	// note that saggydimes.test.com is the hostname of the server, it comes form the config
+	// it will be used for rcpt to:<postmaster> which does not specify a host
+	server.setAllowedHosts([]string{"a.com", "saggydimes.test.com"})
+
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+	//	fmt.Println(line)
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	if err := w.PrintfLine("HELO test"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// case 1
+	if err := w.PrintfLine("RCPT TO: <postMaStER@a.com>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if line != "250 2.1.5 OK" {
+		t.Error("line did not have: 250 2.1.5 OK, got", line)
+	}
+	// case 2
+	if err := w.PrintfLine("RCPT TO: <Postmaster@not-a.com>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if line != "454 4.1.1 Error: Relay access denied: not-a.com" {
+		t.Error("line is not:454 4.1.1 Error: Relay access denied: not-a.com, got", line)
+	}
+	// case 3 (no host specified)
+
+	if err := w.PrintfLine("RCPT TO: <poSTmAsteR>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if line != "250 2.1.5 OK" {
+		t.Error("line is not:[250 2.1.5 OK], got", line)
+	}
+
+	// case 4
+	if err := w.PrintfLine("RCPT TO: <\"po\\ST\\mAs\\t\\eR\">"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if line != "250 2.1.5 OK" {
+		t.Error("line is not:[250 2.1.5 OK], got", line)
+	}
+	// the local part should be just "postmaster" (normalized)
+	if client.parser.LocalPart != "postmaster" {
+		t.Error("client.parser.LocalPart was not postmaster, got:", client.parser.LocalPart)
+	}
+
+	if !client.parser.LocalPartQuoted {
+		t.Error("client.parser.LocalPartQuoted was false, expecting true")
+	}
+
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	//fmt.Println("line is:", line)
+	expected := "221 2.0.0 Bye"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+	wg.Wait() // wait for handleClient to exit
+}
+
 func TestXClient(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
