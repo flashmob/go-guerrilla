@@ -367,7 +367,7 @@ func TestParseLocalPart(t *testing.T) {
 	if s.LocalPart != "qu{oted" {
 		t.Error("expected qu\\{oted, got:", s.LocalPart)
 	}
-	if s.LocalPartQuoted == false {
+	if s.LocalPartQuotes == false {
 		t.Error("local part was not quoted")
 	}
 	if err != nil {

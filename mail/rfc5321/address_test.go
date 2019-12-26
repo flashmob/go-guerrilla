@@ -45,7 +45,7 @@ func TestParseRFC5322IP(t *testing.T) {
 				t.Error(".List[0].DisplayNameQuoted is false, expecting true")
 			}
 			if a.List[0].LocalPartQuoted == false {
-				t.Error(".List[0].LocalPartQuoted is false, expecting true")
+				t.Error(".List[0].LocalPartQuotes is false, expecting true")
 			}
 			if a.List[0].IP == nil {
 				t.Error("a.List[0].IP should not be nil")

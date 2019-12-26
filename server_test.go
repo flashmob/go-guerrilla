@@ -385,6 +385,185 @@ func TestGithubIssue197(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+func TestGithubIssue199(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	defer cleanTestArtifacts(t)
+	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	server.backend().Start()
+
+	server.setAllowedHosts([]string{"grr.la", "fake.com", "[1.1.1.1]", "[2001:db8::8a2e:370:7334]", "saggydimes.test.com"})
+
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+	//	fmt.Println(line)
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	if err := w.PrintfLine("HELO test"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// case 1
+	if err := w.PrintfLine(
+		"MAIL FROM: <\"  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com \"@example.com>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	// [SPACE][SPACE]yo--[SPACE]man[SPACE]wazz'''up?[SPACE]surprise[SPACE]surprise,[SPACE]this[SPACE]is[SPACE]POSSIBLE@fake.com[SPACE]
+	if client.parser.LocalPart != "  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com " {
+		t.Error("expecting local part: [  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com ], got client.parser.LocalPart")
+	}
+	if !client.parser.LocalPartQuotes {
+		t.Error("was expecting client.parser.LocalPartQuotes true, got false")
+	}
+	// from should just as above but without angle brackets <>
+	if from := client.MailFrom.String(); from != "\"  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com \"@example.com" {
+		t.Error("mail from was:", from)
+	}
+	if line != "250 2.1.0 OK" {
+		t.Error("line did not have: 250 2.1.0 OK, got", line)
+	}
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// case 2, address literal mailboxes
+	if err := w.PrintfLine("MAIL FROM: <hi@[1.1.1.1]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// stringer should be aware its an ip and return the host part in angle brackets
+	if from := client.MailFrom.String(); from != "hi@[1.1.1.1]" {
+		t.Error("mail from was:", from)
+	}
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// case 3
+
+	if err := w.PrintfLine("MAIL FROM: <hi@[IPv6:2001:0db8:0000:0000:0000:8a2e:0370:7334]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// stringer should be aware its an ip and return the host part in angle brackets, and ipv6 should be normalized
+	if from := client.MailFrom.String(); from != "hi@[2001:db8::8a2e:370:7334]" {
+		t.Error("mail from was:", from)
+	}
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// case 4
+	// rcpt to: <hi@[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329]>
+
+	if err := w.PrintfLine("MAIL FROM: <>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("RCPT TO: <Postmaster>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// stringer should return an empty string
+	if from := client.MailFrom.String(); from != "" {
+		t.Error("mail from was:", from)
+	}
+
+	// note here the saggydimes.test.com was added because no host was specified in the RCPT TO command
+	if rcpt := client.RcptTo[0].String(); rcpt != "postmaster@saggydimes.test.com" {
+		t.Error("mail from was:", rcpt)
+	}
+
+	// additional cases
+
+	/*
+		user part:
+		" al\ph\a "@grr.la should be " alpha "@grr.la.
+		"alpha"@grr.la should be alpha@grr.la.
+		"alp\h\a"@grr.la should be alpha@grr.la.
+	*/
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("RCPT TO: <\" al\\ph\\a \"@grr.la>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	if client.RcptTo[0].User != " alpha " {
+		t.Error(client.RcptTo[0].User)
+	}
+
+	// the unnecessary \\ should be removed
+	if rcpt := client.RcptTo[0].String(); rcpt != "\" alpha \"@grr.la" {
+		t.Error(rcpt)
+	}
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("RCPT TO: <\"alpha\"@grr.la>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// we don't need to quote, so stringer should return without the quotes
+	if rcpt := client.RcptTo[0].String(); rcpt != "alpha@grr.la" {
+		t.Error(rcpt)
+	}
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("RCPT TO: <\"a\\l\\pha\"@grr.la>"); err != nil {
+		t.Error(err)
+	}
+
+	line, _ = r.ReadLine()
+
+	// we don't need to quote, so stringer should return without the quotes
+	if rcpt := client.RcptTo[0].String(); rcpt != "alpha@grr.la" {
+		t.Error(rcpt)
+	}
+
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	wg.Wait() // wait for handleClient to exit
+}
+
 func TestGithubIssue200(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
@@ -508,8 +687,8 @@ func TestGithubIssue201(t *testing.T) {
 		t.Error("client.parser.LocalPart was not postmaster, got:", client.parser.LocalPart)
 	}
 
-	if !client.parser.LocalPartQuoted {
-		t.Error("client.parser.LocalPartQuoted was false, expecting true")
+	if client.parser.LocalPartQuotes {
+		t.Error("client.parser.LocalPartQuotes was true, expecting false")
 	}
 
 	if err := w.PrintfLine("QUIT"); err != nil {

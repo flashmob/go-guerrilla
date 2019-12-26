@@ -107,7 +107,7 @@ func (s *RFC5322) mailbox() error {
 // addAddress ads the current address to the List
 func (s *RFC5322) addAddress() {
 	s.addr.LocalPart = s.LocalPart
-	s.addr.LocalPartQuoted = s.LocalPartQuoted
+	s.addr.LocalPartQuoted = s.LocalPartQuotes
 	s.addr.Domain = s.Domain
 	s.addr.IP = s.IP
 	s.List = append(s.List, s.addr)

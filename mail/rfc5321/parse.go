@@ -31,7 +31,7 @@ type Parser struct {
 	PathParams      [][]string
 	ADL             []string
 	LocalPart       string
-	LocalPartQuoted bool   // is the local part quoted?
+	LocalPartQuotes bool   // does the local part need quotes?
 	Domain          string // can be an ip-address, enclosed in square brackets if it is
 	IP              net.IP
 	pos             int
@@ -56,7 +56,7 @@ func (s *Parser) Reset() {
 		s.LocalPart = ""
 		s.Domain = ""
 		s.accept.Reset()
-		s.LocalPartQuoted = false
+		s.LocalPartQuotes = false
 		s.IP = nil
 	}
 }
@@ -466,7 +466,6 @@ func (s *Parser) localPart() error {
 	}()
 	p := s.peek()
 	if p == '"' {
-		s.LocalPartQuoted = true
 		return s.quotedString()
 	} else {
 		return s.dotString()
@@ -496,6 +495,7 @@ func (s *Parser) QcontentSMTP() error {
 	state := 0
 	for {
 		ch := s.next()
+
 		switch state {
 		case 0:
 			if ch == '\\' {
@@ -505,6 +505,9 @@ func (s *Parser) QcontentSMTP() error {
 			} else if ch == 32 || ch == 33 ||
 				(ch >= 35 && ch <= 91) ||
 				(ch >= 93 && ch <= 126) {
+				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+					s.LocalPartQuotes = true
+				}
 				s.accept.WriteByte(ch)
 				continue
 			}
@@ -512,6 +515,9 @@ func (s *Parser) QcontentSMTP() error {
 		case 1:
 			// escaped character state
 			if ch >= 32 && ch <= 126 {
+				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+					s.LocalPartQuotes = true
+				}
 				s.accept.WriteByte(ch)
 				state = 0
 				continue

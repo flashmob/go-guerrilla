@@ -77,6 +77,9 @@ func (a *Address) String() string {
 		local = a.User
 	}
 	if a.Host != "" {
+		if a.IP != nil {
+			return fmt.Sprintf("%s@[%s]", local, a.Host)
+		}
 		return fmt.Sprintf("%s@%s", local, a.Host)
 	}
 	return local
