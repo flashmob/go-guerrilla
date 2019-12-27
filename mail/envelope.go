@@ -260,6 +260,10 @@ const (
 	statePlainText = iota
 	stateStartEncodedWord
 	stateEncodedWord
+	stateEncoding
+	stateCharset
+	statePayload
+	statePayloadEnd
 )
 
 // MimeHeaderDecode converts 7 bit encoded mime header strings to UTF-8
@@ -292,29 +296,65 @@ func MimeHeaderDecode(str string) string {
 		case stateStartEncodedWord:
 			if str[i] == '?' {
 				wordLen++
-				state = stateEncodedWord
+				state = stateCharset
 			} else {
 				wordLen = 0
 				state = statePlainText
 				ptextLen++
 			}
-		case stateEncodedWord:
-			if str[i] == ' ' || str[i] == '\t' {
+		case stateCharset:
+			if str[i] == '?' {
+				wordLen++
+				state = stateEncoding
+			} else if str[i] >= 'a' && str[i] <= 'z' ||
+				str[i] >= 'A' && str[i] <= 'Z' ||
+				str[i] >= '0' && str[i] <= '9' || str[i] == '-' {
+				wordLen++
+			} else {
+				// error
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
+			}
+		case stateEncoding:
+			if str[i] == '?' {
+				wordLen++
+				state = statePayload
+			} else if str[i] == 'Q' || str[i] == 'q' || str[i] == 'b' || str[i] == 'B' {
+				wordLen++
+			} else {
+				// abort
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
+			}
+
+		case statePayload:
+			if str[i] == '?' {
+				wordLen++
+				state = statePayloadEnd
+			} else {
+				wordLen++
+			}
+
+		case statePayloadEnd:
+			if str[i] == '=' {
+				wordLen++
 				var err error
 				out, err = decodeWordAppend(ptextLen, out, str, ptextStart, wordStart, wordLen)
 				if err != nil && out == nil {
 					// special case: there was an error with decoding and `out` wasn't created
 					// we can assume the encoded word as plaintext
-					ptextLen += wordLen + 1 // add 1 for the space/tab
+					ptextLen += wordLen //+ 1 // add 1 for the space/tab
 					wordLen = 0
 					wordStart = 0
 					state = statePlainText
 					continue
 				}
-				if skip := hasEncodedWordAhead(str, i); skip != -1 {
+				if skip := hasEncodedWordAhead(str, i+1); skip != -1 {
 					i = skip
 				} else {
-					out = makeAppend(out, len(str), []byte{str[i]})
+					out = makeAppend(out, len(str), []byte{})
 				}
 				ptextStart = -1
 				ptextLen = 0
@@ -322,17 +362,20 @@ func MimeHeaderDecode(str string) string {
 				wordStart = 0
 				state = statePlainText
 			} else {
-				wordLen++
+				// abort
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
 			}
+
 		}
 	}
+
 	if out != nil && ptextLen > 0 {
 		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
 		ptextLen = 0
 	}
-	if wordLen > 0 {
-		out, _ = decodeWordAppend(ptextLen, out, str, ptextStart, wordStart, wordLen)
-	}
+
 	if out == nil {
 		// best case: there was nothing to encode
 		return str

@@ -58,6 +58,16 @@ func TestEncodingMimeHeaderDecodeBad(t *testing.T) {
 		t.Error("expecting =?ISO-8859-1?B?Andr=E9?=\tPirard <PIRARD@vm1.ulg.ac.be>, got:", str)
 
 	}
+
+}
+
+func TestEncodingMimeHeaderDecodeNoSpace(t *testing.T) {
+	// there is no space
+	str := mail.MimeHeaderDecode("A =?ISO-8859-1?Q?Andr=E9?=WORLD IN YOUR POCKET")
+	if str != "A AndréWORLD IN YOUR POCKET" {
+		// in this case, if it's QP and ?= is found at the end then we can assume no space?
+		t.Error("Did not get [A AndréWORLD IN YOUR POCKET]")
+	}
 }
 
 func TestEncodingMimeHeaderDecodeMulti(t *testing.T) {
