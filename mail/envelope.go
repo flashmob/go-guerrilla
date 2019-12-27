@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"net/mail"
+	"net"
 	"net/textproto"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 )
 
 // A WordDecoder decodes MIME headers containing RFC 2047 encoded-words.
@@ -41,34 +43,80 @@ type Address struct {
 	PathParams [][]string
 	// NullPath is true if <> was received
 	NullPath bool
+	// Quoted indicates if the local-part needs quotes
+	Quoted bool
+	// IP stores the IP Address, if the Host is an IP
+	IP net.IP
+	// DisplayName is a label before the address (RFC5322)
+	DisplayName string
+	// DisplayNameQuoted is true when DisplayName was quoted
+	DisplayNameQuoted bool
 }
 
-func (ep *Address) String() string {
-	return fmt.Sprintf("%s@%s", ep.User, ep.Host)
+func (a *Address) String() string {
+	var local string
+	if a.IsEmpty() {
+		return ""
+	}
+	if a.User == "postmaster" && a.Host == "" {
+		return "postmaster"
+	}
+	if a.Quoted {
+		var sb bytes.Buffer
+		sb.WriteByte('"')
+		for i := 0; i < len(a.User); i++ {
+			if a.User[i] == '\\' || a.User[i] == '"' {
+				// escape
+				sb.WriteByte('\\')
+			}
+			sb.WriteByte(a.User[i])
+		}
+		sb.WriteByte('"')
+		local = sb.String()
+	} else {
+		local = a.User
+	}
+	if a.Host != "" {
+		if a.IP != nil {
+			return fmt.Sprintf("%s@[%s]", local, a.Host)
+		}
+		return fmt.Sprintf("%s@%s", local, a.Host)
+	}
+	return local
 }
 
-func (ep *Address) IsEmpty() bool {
-	return ep.User == "" && ep.Host == ""
+func (a *Address) IsEmpty() bool {
+	return a.User == "" && a.Host == ""
 }
 
-var ap = mail.AddressParser{}
+func (a *Address) IsPostmaster() bool {
+	if a.User == "postmaster" {
+		return true
+	}
+	return false
+}
 
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
-func NewAddress(str string) (Address, error) {
-	a, err := ap.Parse(str)
+func NewAddress(str string) (*Address, error) {
+	var ap rfc5321.RFC5322
+	l, err := ap.Address([]byte(str))
 	if err != nil {
-		return Address{}, err
+		return nil, err
 	}
-	pos := strings.Index(a.Address, "@")
-	if pos > 0 {
-		return Address{
-				User: a.Address[0:pos],
-				Host: a.Address[pos+1:],
-			},
-			nil
+	if len(l.List) == 0 {
+		return nil, errors.New("no email address matched")
 	}
-	return Address{}, errors.New("invalid address")
+	a := new(Address)
+	addr := &l.List[0]
+	a.User = addr.LocalPart
+	a.Quoted = addr.LocalPartQuoted
+	a.Host = addr.Domain
+	a.IP = addr.IP
+	a.DisplayName = addr.DisplayName
+	a.DisplayNameQuoted = addr.DisplayNameQuoted
+	a.NullPath = addr.NullPath
+	return a, nil
 }
 
 // Envelope of Email represents a single SMTP message.
@@ -97,6 +145,8 @@ type Envelope struct {
 	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
+	// ESMTP: true if EHLO was used
+	ESMTP bool
 	// When locked, it means that the envelope is being processed by the backend
 	sync.Mutex
 }
@@ -191,6 +241,7 @@ func (e *Envelope) Reseed(remoteIP string, clientID uint64) {
 	e.QueuedId = queuedID(clientID)
 	e.Helo = ""
 	e.TLS = false
+	e.ESMTP = false
 }
 
 // PushRcpt adds a recipient email address to the envelope
@@ -205,55 +256,164 @@ func (e *Envelope) PopRcpt() Address {
 	return ret
 }
 
+const (
+	statePlainText = iota
+	stateStartEncodedWord
+	stateEncodedWord
+	stateEncoding
+	stateCharset
+	statePayload
+	statePayloadEnd
+)
+
 // MimeHeaderDecode converts 7 bit encoded mime header strings to UTF-8
 func MimeHeaderDecode(str string) string {
-	state := 0
-	var buf bytes.Buffer
-	var out []byte
+	// optimized to only create an output buffer if there's need to
+	// the `out` buffer is only made if an encoded word was decoded without error
+	// `out` is made with the capacity of len(str)
+	// a simple state machine is used to detect the start & end of encoded word and plain-text
+	state := statePlainText
+	var (
+		out        []byte
+		wordStart  int  // start of an encoded word
+		wordLen    int  // end of an encoded
+		ptextStart = -1 // start of plan-text
+		ptextLen   int  // end of plain-text
+	)
 	for i := 0; i < len(str); i++ {
 		switch state {
-		case 0:
-			if str[i] == '=' {
-				buf.WriteByte(str[i])
-				state = 1
-			} else {
-				out = append(out, str[i])
+		case statePlainText:
+			if ptextStart == -1 {
+				ptextStart = i
 			}
-		case 1:
-			if str[i] == '?' {
-				buf.WriteByte(str[i])
-				state = 2
+			if str[i] == '=' {
+				state = stateStartEncodedWord
+				wordStart = i
+				wordLen = 1
 			} else {
-				out = append(out, str[i])
-				buf.Reset()
-				state = 0
+				ptextLen++
+			}
+		case stateStartEncodedWord:
+			if str[i] == '?' {
+				wordLen++
+				state = stateCharset
+			} else {
+				wordLen = 0
+				state = statePlainText
+				ptextLen++
+			}
+		case stateCharset:
+			if str[i] == '?' {
+				wordLen++
+				state = stateEncoding
+			} else if str[i] >= 'a' && str[i] <= 'z' ||
+				str[i] >= 'A' && str[i] <= 'Z' ||
+				str[i] >= '0' && str[i] <= '9' || str[i] == '-' {
+				wordLen++
+			} else {
+				// error
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
+			}
+		case stateEncoding:
+			if str[i] == '?' {
+				wordLen++
+				state = statePayload
+			} else if str[i] == 'Q' || str[i] == 'q' || str[i] == 'b' || str[i] == 'B' {
+				wordLen++
+			} else {
+				// abort
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
 			}
 
-		case 2:
-			if str[i] == ' ' {
-				d, err := Dec.Decode(buf.String())
-				if err == nil {
-					out = append(out, []byte(d)...)
-				} else {
-					out = append(out, buf.Bytes()...)
-				}
-				out = append(out, ' ')
-				buf.Reset()
-				state = 0
+		case statePayload:
+			if str[i] == '?' {
+				wordLen++
+				state = statePayloadEnd
 			} else {
-				buf.WriteByte(str[i])
+				wordLen++
 			}
+
+		case statePayloadEnd:
+			if str[i] == '=' {
+				wordLen++
+				var err error
+				out, err = decodeWordAppend(ptextLen, out, str, ptextStart, wordStart, wordLen)
+				if err != nil && out == nil {
+					// special case: there was an error with decoding and `out` wasn't created
+					// we can assume the encoded word as plaintext
+					ptextLen += wordLen //+ 1 // add 1 for the space/tab
+					wordLen = 0
+					wordStart = 0
+					state = statePlainText
+					continue
+				}
+				if skip := hasEncodedWordAhead(str, i+1); skip != -1 {
+					i = skip
+				} else {
+					out = makeAppend(out, len(str), []byte{})
+				}
+				ptextStart = -1
+				ptextLen = 0
+				wordLen = 0
+				wordStart = 0
+				state = statePlainText
+			} else {
+				// abort
+				state = statePlainText
+				ptextLen += wordLen
+				wordLen = 0
+			}
+
 		}
 	}
-	if buf.Len() > 0 {
-		d, err := Dec.Decode(buf.String())
-		if err == nil {
-			out = append(out, []byte(d)...)
-		} else {
-			out = append(out, buf.Bytes()...)
-		}
+
+	if out != nil && ptextLen > 0 {
+		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+		ptextLen = 0
+	}
+
+	if out == nil {
+		// best case: there was nothing to encode
+		return str
 	}
 	return string(out)
+}
+
+func decodeWordAppend(ptextLen int, out []byte, str string, ptextStart int, wordStart int, wordLen int) ([]byte, error) {
+	if ptextLen > 0 {
+		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
+	}
+	d, err := Dec.Decode(str[wordStart : wordLen+wordStart])
+	if err == nil {
+		out = makeAppend(out, len(str), []byte(d))
+	} else if out != nil {
+		out = makeAppend(out, len(str), []byte(str[wordStart:wordLen+wordStart]))
+	}
+	return out, err
+}
+
+func makeAppend(out []byte, size int, in []byte) []byte {
+	if out == nil {
+		out = make([]byte, 0, size)
+	}
+	out = append(out, in...)
+	return out
+}
+
+func hasEncodedWordAhead(str string, i int) int {
+	for ; i+2 < len(str); i++ {
+		if str[i] != ' ' && str[i] != '\t' {
+			return -1
+		}
+		if str[i+1] == '=' && str[i+2] == '?' {
+			return i
+		}
+	}
+	return -1
 }
 
 // Envelopes have their own pool

@@ -684,7 +684,7 @@ func TestServerAddEvent(t *testing.T) {
 	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
 		t.Error("Could not connect to new server", newServer.ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -766,7 +766,7 @@ func TestServerStartEvent(t *testing.T) {
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 enable.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -845,7 +845,7 @@ func TestServerStopEvent(t *testing.T) {
 	if conn, buffin, err := test.Connect(newConf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", newConf.Servers[1].ListenInterface)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 enable.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -958,7 +958,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 secure.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -997,7 +997,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	if conn, buffin, err := test.Connect(conf.Servers[1], 20); err != nil {
 		t.Error("Could not connect to new server", conf.Servers[1].ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 secure.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -1068,7 +1068,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 			t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 		} else {
-			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 				expect := "250 mail.test.com Hello"
 				if strings.Index(result, expect) != 0 {
 					t.Error("Expected", expect, "but got", result)
@@ -1254,7 +1254,7 @@ func TestBadTLSReload(t *testing.T) {
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -1294,7 +1294,7 @@ func TestBadTLSReload(t *testing.T) {
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)
@@ -1373,7 +1373,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	} else {
 		waitTimeout.Add(1)
 		go func() {
-			if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+			if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 				expect := "250 mail.test.com Hello"
 				if strings.Index(result, expect) != 0 {
 					t.Error("Expected", expect, "but got", result)
@@ -1442,7 +1442,7 @@ func TestDebugLevelChange(t *testing.T) {
 	if conn, buffin, err := test.Connect(conf.Servers[0], 20); err != nil {
 		t.Error("Could not connect to server", conf.Servers[0].ListenInterface, err)
 	} else {
-		if result, err := test.Command(conn, buffin, "HELO"); err == nil {
+		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
 			if strings.Index(result, expect) != 0 {
 				t.Error("Expected", expect, "but got", result)

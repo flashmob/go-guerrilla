@@ -54,11 +54,18 @@ func Header() Decorator {
 				if len(e.Hashes) > 0 {
 					hash = e.Hashes[0]
 				}
+				protocol := "SMTP"
+				if e.ESMTP {
+					protocol = "E" + protocol
+				}
+				if e.TLS {
+					protocol = protocol + "S"
+				}
 				var addHead string
 				addHead += "Delivered-To: " + to + "\n"
-				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\n"
+				addHead += "Received: from " + e.RemoteIP + " ([" + e.RemoteIP + "])\n"
 				if len(e.RcptTo) > 0 {
-					addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
+					addHead += "	by " + e.RcptTo[0].Host + " with " + protocol + " id " + hash + "@" + e.RcptTo[0].Host + ";\n"
 				}
 				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
 				// save the result

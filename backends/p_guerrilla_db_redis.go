@@ -435,11 +435,19 @@ func GuerrillaDbRedis() Decorator {
 					e.Subject,
 					ts)
 				e.QueuedId = hash
+
 				// Add extra headers
+				protocol := "SMTP"
+				if e.ESMTP {
+					protocol = "E" + protocol
+				}
+				if e.TLS {
+					protocol = protocol + "S"
+				}
 				var addHead string
 				addHead += "Delivered-To: " + to + "\r\n"
-				addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\r\n"
-				addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
+				addHead += "Received: from " + e.RemoteIP + " ([" + e.RemoteIP + "])\r\n"
+				addHead += "	by " + e.RcptTo[0].Host + " with " + protocol + " id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
 				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
 				// data will be compressed when printed, with addHead added to beginning
