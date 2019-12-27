@@ -385,6 +385,149 @@ func TestGithubIssue197(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
+var githubIssue198data string
+
+var customBackend = func() backends.Decorator {
+	return func(p backends.Processor) backends.Processor {
+		return backends.ProcessWith(
+			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
+				if task == backends.TaskSaveMail {
+					githubIssue198data = e.DeliveryHeader + e.Data.String()
+				}
+				return p.Process(e, task)
+			})
+	}
+}
+
+// TestGithubIssue198 is an interesting test because it shows how to do an integration test for
+// a backend using a custom backend.
+func TestGithubIssue198(t *testing.T) {
+	var mainlog log.Logger
+	var logOpenError error
+	defer cleanTestArtifacts(t)
+	sc := getMockServerConfig()
+	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
+
+	backends.Svc.AddProcessor("custom", customBackend)
+
+	if logOpenError != nil {
+		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+	}
+	conn, server := getMockServerConn(sc, t)
+	be, err := backends.New(map[string]interface{}{
+		"save_process": "HeadersParser|Header|custom", "primary_mail_host": "example.com"},
+		mainlog)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	server.setBackend(be)
+	if err := server.backend().Start(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
+
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client.RemoteIP = "127.0.0.1"
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.handleClient(client)
+		wg.Done()
+	}()
+	// Wait for the greeting from the server
+	r := textproto.NewReader(bufio.NewReader(conn.Client))
+	line, _ := r.ReadLine()
+
+	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
+	// Test with HELO greeting
+	line = sendMessage("HELO", true, w, t, line, r, err, client)
+	if !strings.Contains(githubIssue198data, " SMTPS ") {
+		t.Error("'with SMTPS' not present")
+	}
+
+	if !strings.Contains(githubIssue198data, "from 127.0.0.1") {
+		t.Error("'from 127.0.0.1' not present")
+	}
+
+	/////////////////////
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	// Test with EHLO
+	line, _ = r.ReadLine()
+	line = sendMessage("EHLO", true, w, t, line, r, err, client)
+	if !strings.Contains(githubIssue198data, " ESMTPS ") {
+		t.Error("'with ESMTPS' not present")
+	}
+	/////////////////////
+
+	if err := w.PrintfLine("RSET"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	// Test with EHLO & no TLS
+
+	line = sendMessage("EHLO", false, w, t, line, r, err, client)
+
+	/////////////////////
+
+	if !strings.Contains(githubIssue198data, " ESMTP ") {
+		t.Error("'with ESTMP' not present")
+	}
+
+	if err := w.PrintfLine("QUIT"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	expected := "221 2.0.0 Bye"
+	if strings.Index(line, expected) != 0 {
+		t.Error("expected", expected, "but got:", line)
+	}
+	wg.Wait() // wait for handleClient to exit
+}
+
+func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line string, r *textproto.Reader, err error, client *client) string {
+	if err := w.PrintfLine(greet + " test.test.com"); err != nil {
+		t.Error(err)
+	}
+	for {
+		line, _ = r.ReadLine()
+		if strings.Index(line, "250 ") == 0 {
+			break
+		}
+		if strings.Index(line, "250") != 0 {
+			t.Error(err)
+		}
+	}
+
+	if err := w.PrintfLine("MAIL FROM: test@example.com>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("RCPT TO: <hi@[ipv6:2001:DB8::FF00:42:8329]>"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	client.Hashes = append(client.Hashes, "abcdef1526777763")
+	client.TLS = TLS
+	if err := w.PrintfLine("DATA"); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+
+	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
+		t.Error(err)
+	}
+	line, _ = r.ReadLine()
+	return line
+}
+
 func TestGithubIssue199(t *testing.T) {
 	var mainlog log.Logger
 	var logOpenError error
