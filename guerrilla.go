@@ -320,7 +320,7 @@ func (g *guerrilla) subscribeEvents() {
 	// TLS changes
 	events[EventConfigServerTLSConfig] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
-			if err := server.configureSSL(); err == nil {
+			if err := server.configureTLS(); err == nil {
 				g.mainlog().Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
 			} else {
 				g.mainlog().WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)

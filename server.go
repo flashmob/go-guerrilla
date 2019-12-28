@@ -113,13 +113,13 @@ func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*serve
 	}
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
-	if err := server.configureSSL(); err != nil {
+	if err := server.configureTLS(); err != nil {
 		return server, err
 	}
 	return server, nil
 }
 
-func (s *server) configureSSL() error {
+func (s *server) configureTLS() error {
 	sConfig := s.configStore.Load().(ServerConfig)
 	if sConfig.TLS.AlwaysOn || sConfig.TLS.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(sConfig.TLS.PublicKeyFile, sConfig.TLS.PrivateKeyFile)

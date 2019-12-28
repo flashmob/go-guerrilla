@@ -222,7 +222,7 @@ func TestTLSConfig(t *testing.T) {
 			Protocols:      []string{"tls1.0", "tls1.2"},
 		},
 	})
-	if err := s.configureSSL(); err != nil {
+	if err := s.configureTLS(); err != nil {
 		t.Error(err)
 	}
 
