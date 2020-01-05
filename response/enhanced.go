@@ -127,6 +127,7 @@ type Responses struct {
 	FailNoRecipientsDataCmd      *Response
 	FailUnrecognizedCmd          *Response
 	FailMaxUnrecognizedCmd       *Response
+	FailSyntaxError              *Response
 	FailReadLimitExceededDataCmd *Response
 	FailMessageSizeExceeded      *Response
 	FailReadErrorDataCmd         *Response
@@ -267,16 +268,23 @@ func init() {
 		Comment:      "Server is shutting down. Please try again later. Sayonara!",
 	}
 
-	Canned.FailReadLimitExceededDataCmd = &Response{
+	Canned.FailSyntaxError = &Response{
 		EnhancedCode: SyntaxError,
+		BasicCode:    550,
+		Class:        ClassPermanentFailure,
+		Comment:      "Syntax error",
+	}
+
+	Canned.FailReadLimitExceededDataCmd = &Response{
+		EnhancedCode: MessageLengthExceedsAdministrativeLimit,
 		BasicCode:    550,
 		Class:        ClassPermanentFailure,
 		Comment:      "Error:",
 	}
 
 	Canned.FailMessageSizeExceeded = &Response{
-		EnhancedCode: SyntaxError,
-		BasicCode:    550,
+		EnhancedCode: OtherOrUndefinedNetworkOrRoutingStatus,
+		BasicCode:    552,
 		Class:        ClassPermanentFailure,
 		Comment:      "Error:",
 	}

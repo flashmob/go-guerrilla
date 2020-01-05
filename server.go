@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -112,13 +113,13 @@ func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*serve
 	}
 	server.setConfig(sc)
 	server.setTimeout(sc.Timeout)
-	if err := server.configureSSL(); err != nil {
+	if err := server.configureTLS(); err != nil {
 		return server, err
 	}
 	return server, nil
 }
 
-func (s *server) configureSSL() error {
+func (s *server) configureTLS() error {
 	sConfig := s.configStore.Load().(ServerConfig)
 	if sConfig.TLS.AlwaysOn || sConfig.TLS.StartTLSOn {
 		cert, err := tls.LoadX509KeyPair(sConfig.TLS.PublicKeyFile, sConfig.TLS.PrivateKeyFile)
@@ -217,6 +218,11 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	for _, h := range allowedHosts {
 		if strings.Contains(h, "*") {
 			s.hosts.wildcards = append(s.hosts.wildcards, strings.ToLower(h))
+		} else if len(h) > 5 && h[0] == '[' && h[len(h)-1] == ']' {
+			if ip := net.ParseIP(h[1 : len(h)-1]); ip != nil {
+				// this will save the normalized ip, as ip.String always returns ipv6 in short form
+				s.hosts.table["["+ip.String()+"]"] = true
+			}
 		} else {
 			s.hosts.table[strings.ToLower(h)] = true
 		}
@@ -317,6 +323,11 @@ func (s *server) allowsHost(host string) bool {
 		}
 	}
 	return false
+}
+
+func (s *server) allowsIp(ip net.IP) bool {
+	ipStr := ip.String()
+	return s.allowsHost("[" + ipStr + "]")
 }
 
 const commandSuffix = "\r\n"
@@ -432,12 +443,26 @@ func (s *server) handleClient(client *client) {
 			cmd := bytes.ToUpper(input[:cmdLen])
 			switch {
 			case cmdHELO.match(cmd):
-				client.Helo = string(bytes.Trim(input[4:], " "))
+				if h, err := client.parser.Helo(input[4:]); err == nil {
+					client.Helo = h
+				} else {
+					s.log().WithFields(logrus.Fields{"helo": h, "client": client.ID}).Warn("invalid helo")
+					client.sendResponse(r.FailSyntaxError)
+					break
+				}
 				client.resetTransaction()
 				client.sendResponse(helo)
 
 			case cmdEHLO.match(cmd):
-				client.Helo = string(bytes.Trim(input[4:], " "))
+				if h, _, err := client.parser.Ehlo(input[4:]); err == nil {
+					client.Helo = h
+				} else {
+					client.sendResponse(r.FailSyntaxError)
+					s.log().WithFields(logrus.Fields{"ehlo": h, "client": client.ID}).Warn("invalid ehlo")
+					client.sendResponse(r.FailSyntaxError)
+					break
+				}
+				client.ESMTP = true
 				client.resetTransaction()
 				client.sendResponse(ehlo,
 					messageSize,
@@ -506,7 +531,8 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(err.Error())
 					break
 				}
-				if !s.allowsHost(to.Host) {
+				s.defaultHost(&to)
+				if (to.IP != nil && !s.allowsIp(to.IP)) || (to.IP == nil && !s.allowsHost(to.Host)) {
 					client.sendResponse(r.ErrorRelayDenied, " ", to.Host)
 				} else {
 					client.PushRcpt(to)
@@ -678,4 +704,17 @@ func (s *server) loadLog(value *atomic.Value) log.Logger {
 		value.Store(l)
 	}
 	return l
+}
+
+// defaultHost ensures that the host attribute is set, if addressed to Postmaster
+func (s *server) defaultHost(a *mail.Address) {
+	if a.Host == "" && a.IsPostmaster() {
+		sc := s.configStore.Load().(ServerConfig)
+		a.Host = sc.Hostname
+		if !s.allowsHost(a.Host) {
+			s.log().WithFields(
+				logrus.Fields{"hostname": sc.Hostname}).
+				Warn("the hostname is not present in AllowedHosts config setting")
+		}
+	}
 }

@@ -21,7 +21,6 @@ const (
 	// The minimum total number of recipients that must be buffered is 100
 	LimitRecipients = 100
 )
-
 type PathParam []string
 
 type TransportType int
@@ -50,11 +49,16 @@ func (p PathParam) Transport() TransportType {
 	return TransportTypeInvalid
 }
 
+var atExpected = errors.New("@ expected as part of mailbox")
+
+
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
 	NullPath  bool
 	LocalPart string
+	LocalPartQuotes bool   // does the local part need quotes?
 	Domain    string
+	IP              net.IP
 
 	ADL        []string
 	PathParams []PathParam
@@ -83,6 +87,8 @@ func (s *Parser) Reset() {
 		s.LocalPart = ""
 		s.Domain = ""
 		s.accept.Reset()
+		s.LocalPartQuotes = false
+		s.IP = nil
 	}
 }
 
@@ -125,14 +131,15 @@ func (s *Parser) forwardPath() (err error) {
 	if s.peek() == ' ' {
 		s.next() // tolerate a space at the front
 	}
-	if i := bytes.Index(bytes.ToLower(s.buf[s.pos+1:]), []byte(postmasterPath)); i == 0 {
-		s.LocalPart = postmasterLocalPart
-		return nil
-	}
-	if err = s.path(); err != nil {
+	if err = s.path(); err != nil && err != atExpected {
 		return err
 	}
-	return nil
+	// special case for forwardPath only - can just be addressed to postmaster
+	if i := strings.Index(strings.ToLower(s.LocalPart), postmasterLocalPart); i == 0 {
+		s.LocalPart = postmasterLocalPart
+		return nil // atExpected will be ignored, postmaster doesn't need @
+	}
+	return err // it may return atExpected
 }
 
 //MailFrom accepts the following syntax: Reverse-path [SP Mail-parameters] CRLF
@@ -155,8 +162,7 @@ func (s *Parser) MailFrom(input []byte) (err error) {
 	return nil
 }
 
-const postmasterPath = "<postmaster>"
-const postmasterLocalPart = "Postmaster"
+const postmasterLocalPart = "postmaster"
 
 //RcptTo accepts the following syntax: ( "<Postmaster@" Domain ">" / "<Postmaster>" /
 //                  Forward-path ) [SP Rcpt-parameters] CRLF
@@ -340,7 +346,7 @@ func (s *Parser) subdomain() error {
 				state = 1
 				continue
 			}
-			return errors.New("parse err")
+			return errors.New("subdomain parse err")
 		case 1:
 			p := s.peek()
 			if isLetDig(c) || c == '-' {
@@ -348,7 +354,7 @@ func (s *Parser) subdomain() error {
 			}
 			if !isLetDig(p) && p != '-' {
 				if c == '-' {
-					return errors.New("parse err")
+					return errors.New("subdomain parse err")
 				}
 				return nil
 			}
@@ -369,7 +375,7 @@ func (s *Parser) mailbox() error {
 		return err
 	}
 	if s.ch != '@' {
-		return errors.New("@ expected as part of mailbox")
+		return atExpected
 	}
 	if p := s.peek(); p == '[' {
 		return s.addressLiteral()
@@ -416,6 +422,11 @@ func (s *Parser) ipv4AddressLiteral() error {
 		}
 		s.accept.WriteByte(s.ch)
 	}
+	ip := net.ParseIP(s.accept.String())
+	if ip == nil {
+		return errors.New("invalid ip")
+	}
+	s.IP = ip
 	return nil
 }
 
@@ -429,7 +440,7 @@ func (s *Parser) snum() error {
 		c := s.next()
 		if state == 0 {
 			if !(c >= 48 && c <= 57) {
-				return errors.New("parse error")
+				return errors.New("snum parse error")
 			} else {
 				num.WriteByte(s.ch)
 				s.accept.WriteByte(s.ch)
@@ -465,7 +476,8 @@ func (s *Parser) ipv6AddressLiteral() error {
 			c != ':' && c != '.' {
 			ipstr := ip.String()
 			if v := net.ParseIP(ipstr); v != nil {
-				s.accept.WriteString(ipstr)
+				s.accept.WriteString(v.String())
+				s.IP = v
 				return nil
 			}
 			return errors.New("invalid ipv6")
@@ -514,15 +526,19 @@ func (s *Parser) QcontentSMTP() error {
 	state := 0
 	for {
 		ch := s.next()
+
 		switch state {
 		case 0:
 			if ch == '\\' {
 				state = 1
-				s.accept.WriteByte(ch)
+				//	s.accept.WriteByte(ch)
 				continue
 			} else if ch == 32 || ch == 33 ||
 				(ch >= 35 && ch <= 91) ||
 				(ch >= 93 && ch <= 126) {
+				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+					s.LocalPartQuotes = true
+				}
 				s.accept.WriteByte(ch)
 				continue
 			}
@@ -530,6 +546,9 @@ func (s *Parser) QcontentSMTP() error {
 		case 1:
 			// escaped character state
 			if ch >= 32 && ch <= 126 {
+				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+					s.LocalPartQuotes = true
+				}
 				s.accept.WriteByte(ch)
 				state = 0
 				continue
@@ -560,7 +579,7 @@ func (s *Parser) atom() error {
 	for {
 		if state == 0 {
 			if !s.isAtext(s.next()) {
-				return errors.New("parse error")
+				return errors.New("atom parse error")
 			} else {
 				s.accept.WriteByte(s.ch)
 				state = 1
@@ -599,7 +618,8 @@ atext           =       ALPHA / DIGIT / ; Any character except controls,
 
 func (s *Parser) isAtext(c byte) bool {
 	if ('0' <= c && c <= '9') ||
-		('A' <= c && c <= 'z') ||
+		('a' <= c && c <= 'z') ||
+		('A' <= c && c <= 'Z') ||
 		c == '!' || c == '#' ||
 		c == '$' || c == '%' ||
 		c == '&' || c == '\'' ||
@@ -617,8 +637,56 @@ func (s *Parser) isAtext(c byte) bool {
 
 func isLetDig(c byte) bool {
 	if ('0' <= c && c <= '9') ||
-		('A' <= c && c <= 'z') {
+		('A' <= c && c <= 'Z') ||
+		('a' <= c && c <= 'z') {
 		return true
 	}
 	return false
+}
+
+//ehlo = "EHLO" SP ( Domain / address-literal ) CRLF
+// Note: "HELO" is ignored here
+func (s *Parser) Ehlo(input []byte) (domain string, ip net.IP, err error) {
+	s.set(input)
+	s.next()
+	if s.ch == ' ' {
+		if p := s.peek(); p == '[' {
+			err = s.addressLiteral()
+			if err == nil {
+				domain = s.accept.String()
+				ip = net.ParseIP(domain)
+				if ip == nil {
+					err = errors.New("invalid ip")
+				}
+				return
+			}
+		} else {
+			err = s.domain()
+			if err == nil {
+				domain = s.accept.String()
+			}
+			return
+		}
+	} else {
+		err = errors.New("ehlo parse error")
+	}
+	return domain, ip, err
+
+}
+
+// helo  = "HELO" SP Domain CRLF
+// Note: "HELO" is ignored here, so is the CRLF at the end
+func (s *Parser) Helo(input []byte) (domain string, err error) {
+	s.set(input)
+	s.next()
+	if s.ch == ' ' {
+		err = s.domain()
+		if err == nil {
+			domain = s.accept.String()
+		}
+		return
+	} else {
+		err = errors.New("helo parse error")
+	}
+	return
 }

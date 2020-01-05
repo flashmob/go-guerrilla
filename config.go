@@ -42,6 +42,8 @@ type ServerConfig struct {
 	LogFile string `json:"log_file,omitempty"`
 	// Hostname will be used in the server's reply to HELO/EHLO. If TLS enabled
 	// make sure that the Hostname matches the cert. Defaults to os.Hostname()
+	// Hostname will also be used to fill the 'Host' property when the "RCPT TO" address is
+	// addressed to just <postmaster>
 	Hostname string `json:"host_name"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
@@ -96,9 +98,13 @@ type ServerTLSConfig struct {
 // https://golang.org/pkg/crypto/tls/#pkg-constants
 // Ciphers introduced before Go 1.7 are listed here,
 // ciphers since Go 1.8, see tls_go1.8.go
+// ....... since Go 1.13, see tls_go1.13.go
 var TLSCiphers = map[string]uint16{
 
-	// // Note: Generally avoid using CBC unless for compatibility
+	// Note: Generally avoid using CBC unless for compatibility
+	// The following ciphersuites are not configurable for TLS 1.3
+	// see tls_go1.13.go for a list of ciphersuites always used in TLS 1.3
+
 	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":        tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
 	"TLS_RSA_WITH_AES_128_CBC_SHA":         tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 	"TLS_RSA_WITH_AES_256_CBC_SHA":         tls.TLS_RSA_WITH_AES_256_CBC_SHA,
@@ -118,13 +124,12 @@ var TLSCiphers = map[string]uint16{
 	"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384":   tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 	"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384": tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 
-	// Include to prevent downgrade attacks
-	"TLS_FALLBACK_SCSV": tls.TLS_FALLBACK_SCSV,
+	// see tls_go1.13 for new TLS 1.3 ciphersuites
+	// Note that TLS 1.3 ciphersuites are not configurable
 }
 
 // https://golang.org/pkg/crypto/tls/#pkg-constants
 var TLSProtocols = map[string]uint16{
-	"ssl3.0": tls.VersionSSL30,
 	"tls1.0": tls.VersionTLS10,
 	"tls1.1": tls.VersionTLS11,
 	"tls1.2": tls.VersionTLS12,
@@ -172,7 +177,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 		}
 	}
 
-	// read the timestamps for the ssl keys, to determine if they need to be reloaded
+	// read the timestamps for the TLS keys, to determine if they need to be reloaded
 	for i := 0; i < len(c.Servers); i++ {
 		if err := c.Servers[i].loadTlsKeyTimestamps(); err != nil {
 			return err
@@ -402,7 +407,7 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	}
 }
 
-// Loads in timestamps for the ssl keys
+// Loads in timestamps for the TLS keys
 func (sc *ServerConfig) loadTlsKeyTimestamps() error {
 	var statErr = func(iface string, err error) error {
 		return fmt.Errorf(
