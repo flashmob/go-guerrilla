@@ -521,7 +521,7 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 	}
 	line, _ = r.ReadLine()
 
-	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n.\r"); err != nil {
+	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
