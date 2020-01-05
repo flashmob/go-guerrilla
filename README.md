@@ -1,7 +1,7 @@
 
 [![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
 
-Note: Latest release, v1.6.0, has moved from Glide to Dep dependency management tool. 
+Latest: v1.6.1, tagged on Dec 28, 2019 (Pull requests from #129 to #203)
 
 Go-Guerrilla SMTP Daemon
 ====================
