@@ -1,4 +1,4 @@
-package rfc5321
+package smtp
 
 import (
 	"errors"

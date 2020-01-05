@@ -92,14 +92,12 @@ func (a *Address) IsPostmaster() bool {
 	}
 	return false
 }
-var ap = mail.AddressParser{}
-var apLock sync.Mutex // guards mail.AddressParser
 
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
 func NewAddress(str string) (*Address, error) {
-	apLock.Lock()
-	defer apLock.Unlock()
+
+	var ap smtp.RFC5322
 	l, err := ap.Address([]byte(str))
 	if err != nil {
 		return nil, err

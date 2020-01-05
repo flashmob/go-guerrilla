@@ -647,7 +647,6 @@ func TestHelo(t *testing.T) {
 	}
 }
 
-
 func TestTransport(t *testing.T) {
 
 	path := PathParam([]string{"BODY", "8bitmime"})

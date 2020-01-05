@@ -21,6 +21,7 @@ const (
 	// The minimum total number of recipients that must be buffered is 100
 	LimitRecipients = 100
 )
+
 type PathParam []string
 
 type TransportType int
@@ -51,13 +52,12 @@ func (p PathParam) Transport() TransportType {
 
 var atExpected = errors.New("@ expected as part of mailbox")
 
-
 // Parse Email Addresses according to https://tools.ietf.org/html/rfc5321
 type Parser struct {
-	NullPath  bool
-	LocalPart string
-	LocalPartQuotes bool   // does the local part need quotes?
-	Domain    string
+	NullPath        bool
+	LocalPart       string
+	LocalPartQuotes bool // does the local part need quotes?
+	Domain          string
 	IP              net.IP
 
 	ADL        []string
