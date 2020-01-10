@@ -24,28 +24,26 @@ func (r *MimeDotReader) Read(p []byte) (n int, err error) {
 			r.mimeErr = r.p.Parse(p)
 		}
 	}
-	if err != nil {
-		if r.mimeErr == nil {
-			r.mimeErr = r.p.Close()
-		}
-		return
-	}
+
 	return
 }
 
 // Close closes the underlying reader if it's a ReadCloser and closes the mime parser
 func (r MimeDotReader) Close() (err error) {
+	defer func() {
+		if err == nil && r.mimeErr != nil {
+			err = r.mimeErr
+		}
+	}()
 	if rc, t := r.R.(io.ReadCloser); t {
 		err = rc.Close()
 	}
 	// parser already closed?
 	if r.mimeErr != nil {
-		return r.mimeErr
+		return
 	}
-	// close the parser, only care about parse errors
-	if pErr := r.p.Close(); r.p.ParseError(pErr) {
-		err = pErr
-	}
+	// close the parser
+	r.mimeErr = r.p.Close()
 	return
 }
 

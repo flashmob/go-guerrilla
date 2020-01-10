@@ -46,6 +46,7 @@ func Debugger() Decorator {
 				if config.LogReceivedMails {
 					Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
 					Log().Info("Headers are:", e.Header)
+					Log().Info("Body:", e.Data.String())
 				}
 
 				if config.SleepSec > 0 {

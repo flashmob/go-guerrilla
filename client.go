@@ -117,6 +117,7 @@ func (c *client) sendResponse(r ...interface{}) {
 // -End of DATA command
 // TLS handshake
 func (c *client) resetTransaction() {
+	c.smtpReader = mail.NewMimeDotReader(c.bufin.Reader, 1)
 	c.Envelope.ResetTransaction()
 }
 

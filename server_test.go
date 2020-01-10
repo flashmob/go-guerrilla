@@ -3,6 +3,7 @@ package guerrilla
 import (
 	"os"
 	"testing"
+	"time"
 
 	"bufio"
 	"net/textproto"
@@ -415,7 +416,7 @@ func TestGithubIssue198(t *testing.T) {
 	}
 	conn, server := getMockServerConn(sc, t)
 	be, err := backends.New(map[string]interface{}{
-		"save_process": "HeadersParser|Header|custom", "primary_mail_host": "example.com"},
+		"save_process": "HeadersParser|Header|debugger|custom", "primary_mail_host": "example.com", "log_received_mails": true},
 		mainlog)
 	if err != nil {
 		t.Error(err)
@@ -504,6 +505,9 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 			t.Error(err)
 		}
 	}
+	if r.R.Buffered() > 0 {
+		line, _ = r.ReadLine()
+	}
 
 	if err := w.PrintfLine("MAIL FROM: test@example.com>"); err != nil {
 		t.Error(err)
@@ -514,17 +518,25 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
-	client.Hashes = append(client.Hashes, "abcdef1526777763")
+	client.Hashes = append(client.Hashes, "abcdef1526777763"+greet)
 	client.TLS = TLS
+	client.QueuedId = time.Now().String()
 	if err := w.PrintfLine("DATA"); err != nil {
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
+	if greet == "EHLO" {
+	}
 
-	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
+	if err := w.PrintfLine("Subject: Test subject" + greet + "\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
 		t.Error(err)
 	}
+	if r.R.Buffered() > 0 {
+		line, _ = r.ReadLine()
+	}
+
 	line, _ = r.ReadLine()
+
 	return line
 }
 
