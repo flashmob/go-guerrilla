@@ -828,6 +828,10 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 		part = newPart()
 		p.addPart(part, first)
 		defer func() {
+			// err is io.EOF if nothing went with parsing
+			if err == io.EOF {
+				err = nil
+			}
 			if err != MaxNodesErr {
 				part.EndingPosBody = p.lastBoundaryPos
 				part.EndingPos = p.msgPos
@@ -835,6 +839,13 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 				// remove the unfinished node (edge case)
 				var parts []*Part
 				p.Parts = append(parts, p.Parts[:p.maxNodes]...)
+			}
+			// not a mime email (but is an rfc5322 message)
+			if len(p.Parts) == 1 &&
+				len(part.Headers) > 0 &&
+				part.Headers.Get("MIME-Version") == "" &&
+				err == nil {
+				err = NotMime
 			}
 		}()
 	}
