@@ -610,8 +610,9 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 	// place the parse result in an envelope
 	e := mail.NewEnvelope("127.0.0.1", 1)
 	to, _ := mail.NewAddress("test@test.com")
-	e.RcptTo = append(e.RcptTo, to)
-	e.MailFrom, _ = mail.NewAddress("test@test.com")
+	e.RcptTo = append(e.RcptTo, *to)
+	from, _ := mail.NewAddress("test@test.com")
+	e.MailFrom = *from
 	store := new(StoreMemory)
 	chunkBuffer := NewChunkedBytesBufferMime()
 	//chunkBuffer.setDatabase(store)
@@ -631,7 +632,7 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 			transformer.Decorate(
 				//debug.Decorate(
 				chunksaver.Decorate(
-					backends.DefaultStreamProcessor{}, store, chunkBuffer))) //)
+					backends.DefaultStreamProcessor{}, store, chunkBuffer)))
 	} else {
 		stream = mimeanalyzer.Decorate(
 			//debug.Decorate(

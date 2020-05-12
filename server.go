@@ -606,6 +606,10 @@ func (s *server) handleClient(client *client) {
 						client.Envelope.Header = p[0].Headers
 					}
 				}
+				// All done. we can close the smtpReader, the protocol will reset the transaction, expecting a new message
+				if err := client.smtpReader.Close(); err != nil {
+					s.log().WithError(err).Error("could not close DATA reader")
+				}
 			}
 
 			if err != nil {
