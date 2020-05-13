@@ -16,8 +16,11 @@ import (
 var (
 	Svc *service
 
-	// Store the constructor for making an new processor decorator.
+	// processors store the constructors for for composing a new processor using a decorator pattern.
 	processors map[string]ProcessorConstructor
+
+	// Streamers store the constructors for composing a new stream-based processor using a decorator pattern.
+	Streamers map[string]StreamProcessorConstructor
 
 	b Backend
 )
@@ -29,6 +32,8 @@ func init() {
 }
 
 type ProcessorConstructor func() Decorator
+
+type StreamProcessorConstructor func() *StreamDecorator
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
