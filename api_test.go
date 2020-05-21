@@ -609,11 +609,11 @@ func TestReloadConfig(t *testing.T) {
 }
 
 func TestPubSubAPI(t *testing.T) {
-
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := truncateIfExists("tests/testlog"); err != nil {
 		t.Error(err)
 	}
-	if err := os.Truncate("tests/pidfilex.pid", 0); err != nil {
+
+	if err := truncateIfExists("tests/pidfilex.pid"); err != nil {
 		t.Error(err)
 	}
 

@@ -32,7 +32,7 @@ test:
 	$(GO_VARS) $(GO) test -v ./response
 	$(GO_VARS) $(GO) test -v ./backends
 	$(GO_VARS) $(GO) test -v ./mail
-	$(GO_VARS) $(GO) test -v ./mail/mime
+	$(GO_VARS) $(GO) test -v ./mail/mimeparse
 	$(GO_VARS) $(GO) test -v ./mail/encoding
 	$(GO_VARS) $(GO) test -v ./mail/iconv
 	$(GO_VARS) $(GO) test -v ./mail/smtp
