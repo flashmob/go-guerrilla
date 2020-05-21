@@ -295,7 +295,7 @@ func Transformer() *StreamDecorator {
 				if parts != nil && len(*parts) > 0 {
 
 					// we are going to change envelope.MimeParts to our own copy with our own counts
-					parts = reWriter.swap()
+					envelope.MimeParts = reWriter.swap()
 					defer func() {
 						reWriter.unswap()
 						total += int64(written)
