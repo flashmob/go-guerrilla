@@ -8,7 +8,7 @@ import (
 
 	"github.com/flashmob/go-guerrilla/chunk/transfer"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/mime"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 )
 
 // ----------------------------------------------------------------------------------
@@ -18,11 +18,11 @@ import (
 // ----------------------------------------------------------------------------------
 // Config Options:
 // --------------:-------------------------------------------------------------------
-// Input         : envelope.Values["MimeParts"]
+// Input         : envelope.MimeParts
 // ----------------------------------------------------------------------------------
 // Output        : 8bit mime message, with charsets decoded to UTF-8
 //               : Note that this processor changes the body counts. Therefore, it makes
-//               : a new instance of envelope.Values["MimeParts"] which is then populated
+//               : a new instance of envelope.MimeParts which is then populated
 //               : by parsing the new re-written message
 // ----------------------------------------------------------------------------------
 
@@ -37,42 +37,43 @@ type TransformerConfig struct {
 
 }
 
+// Transform stream processor: convert an email to UTF-8
 type Transform struct {
 	sp                  io.Writer
 	isBody              bool // the next bytes to be sent are body?
 	buf                 bytes.Buffer
-	current             *mime.Part
+	current             *mimeparse.Part
 	decoder             io.Reader
 	pr                  *io.PipeReader
 	pw                  *io.PipeWriter
-	partsCachedOriginal *mime.Parts
+	partsCachedOriginal *mimeparse.Parts
 	envelope            *mail.Envelope
 
 	// we re-parse the output since the counts have changed
 	// parser implements the io.Writer interface, here output will be sent to it and then forwarded to the next processor
-	parser *mime.Parser
+	parser *mimeparse.Parser
 }
 
-// cache the original parts from envelope.Values
+// swap caches the original parts from envelope.MimeParts
 // and point them to our parts
-func (t *Transform) swap() *mime.Parts {
-
-	if parts, ok := t.envelope.Values["MimeParts"].(*mime.Parts); ok {
+func (t *Transform) swap() *mimeparse.Parts {
+	parts := t.envelope.MimeParts
+	if parts != nil {
 		t.partsCachedOriginal = parts
 		parts = &t.parser.Parts
 		return parts
 	}
 	return nil
-
 }
 
-// point the parts from envelope.Values back to the original ones
+// unswap points the parts from MimeParts back to the original ones
 func (t *Transform) unswap() {
-	if _, ok := t.envelope.Values["MimeParts"].(*mime.Parts); ok {
-		t.envelope.Values["MimeParts"] = t.partsCachedOriginal
+	if t.envelope.MimeParts != nil {
+		t.envelope.MimeParts = t.partsCachedOriginal
 	}
 }
 
+// regexpCharset captures the charset value
 var regexpCharset = regexp.MustCompile("(?i)charset=\"?(.+)\"?") // (?i) is a flag for case-insensitive
 
 func (t *Transform) ReWrite(b []byte, last bool, offset uint) (count int, err error) {
@@ -139,7 +140,7 @@ func (t *Transform) ReWrite(b []byte, last bool, offset uint) (count int, err er
 		// Body Decode, how it works:
 		// First, the decoder is setup, depending on the source encoding type.
 		// Next, since the decoder is an io.Reader, we need to use a pipe to connect it.
-		// Subsequent calls write to the pipe in a gouritine and the parent-thread copies the result to the output stream
+		// Subsequent calls write to the pipe in a goroutine and the parent-thread copies the result to the output stream
 		// The routine stops feeding the decoder data before EndingPosBody, and not decoding anything after, but still
 		// outputting the un-decoded remainder.
 		// The decoder is destroyed at the end of the body (when last == true)
@@ -260,7 +261,7 @@ func Transformer() *StreamDecorator {
 			sd.Open = func(e *mail.Envelope) error {
 				envelope = e
 				if reWriter.parser == nil {
-					reWriter.parser = mime.NewMimeParserWriter(sp)
+					reWriter.parser = mimeparse.NewMimeParserWriter(sp)
 					reWriter.parser.Open()
 				}
 				reWriter.envelope = envelope
@@ -272,7 +273,7 @@ func Transformer() *StreamDecorator {
 				return reWriter.parser.Close()
 			}
 
-			end := func(part *mime.Part, offset uint, p []byte, start uint) (int, error) {
+			end := func(part *mimeparse.Part, offset uint, p []byte, start uint) (int, error) {
 				var err error
 				var count int
 
@@ -290,10 +291,11 @@ func Transformer() *StreamDecorator {
 			return StreamProcessWith(func(p []byte) (count int, err error) {
 				pos = 0
 				written = 0
-				if parts, ok := envelope.Values["MimeParts"].(*mime.Parts); ok && len(*parts) > 0 {
+				parts := envelope.MimeParts
+				if parts != nil && len(*parts) > 0 {
 
-					// we are going to change envelope.Values["MimeParts"] to our own copy with our own counts
-					envelope.Values["MimeParts"] = reWriter.swap()
+					// we are going to change envelope.MimeParts to our own copy with our own counts
+					parts = reWriter.swap()
 					defer func() {
 						reWriter.unswap()
 						total += int64(written)

@@ -71,4 +71,5 @@ func (w DefaultStreamProcessor) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// NoopStreamProcessor does nothing, it's a placeholder when no stream processors have been configured
 type NoopStreamProcessor struct{ DefaultStreamProcessor }

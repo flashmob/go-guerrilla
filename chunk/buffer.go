@@ -6,7 +6,7 @@ import (
 	"hash"
 	"strings"
 
-	"github.com/flashmob/go-guerrilla/mail/mime"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 )
 
 type flushEvent func() error
@@ -74,7 +74,7 @@ func (c *chunkingBuffer) CapTo(n int) {
 // ChunkingBufferMime decorates chunkingBuffer, specifying that to do when a flush event is triggered
 type ChunkingBufferMime struct {
 	chunkingBuffer
-	current  *mime.Part
+	current  *mimeparse.Part
 	Info     PartsInfo
 	md5      hash.Hash
 	database Storage
@@ -159,7 +159,7 @@ func (b *ChunkingBufferMime) Reset() {
 	b.chunkingBuffer.Reset()
 }
 
-func (b *ChunkingBufferMime) CurrentPart(cp *mime.Part) {
+func (b *ChunkingBufferMime) CurrentPart(cp *mimeparse.Part) {
 	if b.current == nil {
 		b.Info = *NewPartsInfo()
 		b.Info.Parts = make([]ChunkedPart, 0, 3)

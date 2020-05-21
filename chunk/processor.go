@@ -6,7 +6,7 @@ import (
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/mime"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 )
 
 // ----------------------------------------------------------------------------------
@@ -26,9 +26,10 @@ import (
 // ----------------------------------------------------------------------------------
 // Config Options: chunksaver_chunk_size - maximum chunk size, in bytes
 // --------------:-------------------------------------------------------------------
-// Input         : e.Values["MimeParts"] Which is of type *mime.Parts, as populated by "mimeanalyzer"
+// Input         : e.MimeParts Which is of type *mime.Parts, as populated by "mimeanalyzer"
 // ----------------------------------------------------------------------------------
-// Output        :
+// Output        : Messages are saved using the Storage interface
+//               : See store_sql.go and store_sql.go as examples
 // ----------------------------------------------------------------------------------
 
 func init() {
@@ -151,7 +152,7 @@ func Chunksaver() *backends.StreamDecorator {
 				if err != nil {
 					return err
 				}
-				e.Values["messageID"] = mid
+				e.MessageID = mid
 				envelope = e
 				return nil
 			}
@@ -163,9 +164,9 @@ func Chunksaver() *backends.StreamDecorator {
 					return err
 				}
 				defer chunkBuffer.Reset()
-				if mid, ok := envelope.Values["messageID"].(uint64); ok {
+				if envelope.MessageID > 0 {
 					err = database.CloseMessage(
-						mid,
+						envelope.MessageID,
 						written,
 						&chunkBuffer.Info,
 						subject,
@@ -180,7 +181,7 @@ func Chunksaver() *backends.StreamDecorator {
 				return nil
 			}
 
-			fillVars := func(parts *mime.Parts, subject, to, from string) (string, string, string) {
+			fillVars := func(parts *mimeparse.Parts, subject, to, from string) (string, string, string) {
 				if len(*parts) > 0 {
 					if subject == "" {
 						if val, ok := (*parts)[0].Headers["Subject"]; ok {
@@ -208,7 +209,7 @@ func Chunksaver() *backends.StreamDecorator {
 			}
 
 			// end() triggers a buffer flush, at the end of a header or part-boundary
-			end := func(part *mime.Part, offset uint, p []byte, start uint) (int, error) {
+			end := func(part *mimeparse.Part, offset uint, p []byte, start uint) (int, error) {
 				var err error
 				var count int
 				// write out any unwritten bytes
@@ -237,11 +238,10 @@ func Chunksaver() *backends.StreamDecorator {
 
 			return backends.StreamProcessWith(func(p []byte) (count int, err error) {
 				pos = 0
-				if envelope.Values == nil {
+				if envelope.MimeParts == nil {
 					return count, errors.New("no message headers found")
-				}
-				if parts, ok := envelope.Values["MimeParts"].(*mime.Parts); ok && len(*parts) > 0 {
-
+				} else if len(*envelope.MimeParts) > 0 {
+					parts := envelope.MimeParts
 					subject, to, from = fillVars(parts, subject, to, from)
 					offset := msgPos
 					chunkBuffer.CurrentPart((*parts)[0])

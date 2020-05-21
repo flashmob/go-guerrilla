@@ -5,13 +5,13 @@ import (
 	"io"
 	"net/textproto"
 
-	"github.com/flashmob/go-guerrilla/mail/mime"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 )
 
 // MimeDotReader parses the mime structure while reading using the underlying reader
 type MimeDotReader struct {
 	R       io.Reader
-	p       *mime.Parser
+	p       *mimeparse.Parser
 	mimeErr error
 }
 
@@ -48,7 +48,7 @@ func (r MimeDotReader) Close() (err error) {
 }
 
 // Parts returns the mime-header parts built by the parser
-func (r *MimeDotReader) Parts() mime.Parts {
+func (r *MimeDotReader) Parts() mimeparse.Parts {
 	return r.p.Parts
 }
 
@@ -65,9 +65,9 @@ func NewMimeDotReader(br *bufio.Reader, maxNodes int) *MimeDotReader {
 	r := new(MimeDotReader)
 	r.R = textproto.NewReader(br).DotReader()
 	if maxNodes > 0 {
-		r.p = mime.NewMimeParserLimited(maxNodes)
+		r.p = mimeparse.NewMimeParserLimited(maxNodes)
 	} else {
-		r.p = mime.NewMimeParser()
+		r.p = mimeparse.NewMimeParser()
 	}
 	r.p.Open()
 	return r

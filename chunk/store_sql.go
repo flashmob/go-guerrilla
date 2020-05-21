@@ -43,6 +43,7 @@ func (s *StoreSQL) prepareSql() error {
 		s.statements = make(map[string]*sql.Stmt)
 	}
 
+	// begin inserting an email (before saving chunks)
 	if stmt, err := s.db.Prepare(`INSERT INTO ` +
 		s.config.EmailTable +
 		` (from, helo, recipient, ipv4_addr, ipv6_addr, return_path, is_tls, is_8bit) 
@@ -52,7 +53,7 @@ func (s *StoreSQL) prepareSql() error {
 		s.statements["insertEmail"] = stmt
 	}
 
-	// begin inserting an email (before saving chunks)
+	// insert a chunk of email's data
 	if stmt, err := s.db.Prepare(`INSERT INTO ` +
 		s.config.ChunkTable +
 		` (data, hash) 
@@ -74,6 +75,7 @@ func (s *StoreSQL) prepareSql() error {
 
 	// Check the existence of a chunk (the reference_count col is incremented if it exists)
 	// This means we can avoid re-inserting an existing chunk, only update its reference_count
+	// check the "affected rows" count after executing query
 	if stmt, err := s.db.Prepare(`
 		UPDATE ` + s.config.ChunkTable + ` 
 			SET reference_count=reference_count+1 

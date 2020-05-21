@@ -54,7 +54,6 @@ type GuerrillaDBAndRedisBackend struct {
 type stmtCache [GuerrillaDBAndRedisBatchMax]*sql.Stmt
 
 type guerrillaDBAndRedisConfig struct {
-	NumberOfWorkers    int    `json:"save_workers_size"`
 	Table              string `json:"mail_table"`
 	Driver             string `json:"sql_driver"`
 	DSN                string `json:"sql_dsn"`
@@ -76,10 +75,6 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (er
 	m := bcfg.(*guerrillaDBAndRedisConfig)
 	g.config = m
 	return nil
-}
-
-func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
-	return g.config.NumberOfWorkers
 }
 
 type redisClient struct {

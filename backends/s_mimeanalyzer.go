@@ -2,19 +2,21 @@ package backends
 
 import (
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/mime"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 )
 
 // ----------------------------------------------------------------------------------
 // Name          : Mime Analyzer
 // ----------------------------------------------------------------------------------
-// Description   : analyse the MIME structure of a stream
+// Description   : Analyse the MIME structure of a stream.
+//               : Headers of each part are unfolded and saved in a *mime.Parts struct.
+//               : No decoding or any other processing.
 // ----------------------------------------------------------------------------------
 // Config Options:
 // --------------:-------------------------------------------------------------------
 // Input         :
 // ----------------------------------------------------------------------------------
-// Output        : MimeParts (of type *mime.Parts) stored in the envelope.Values map
+// Output        : MimeParts (of type *mime.Parts) stored in the envelope.MimeParts field
 // ----------------------------------------------------------------------------------
 
 func init() {
@@ -32,10 +34,10 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			var (
 				envelope *mail.Envelope
 				parseErr error
-				parser   *mime.Parser
+				parser   *mimeparse.Parser
 			)
 			Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-				parser = mime.NewMimeParser()
+				parser = mimeparse.NewMimeParser()
 				return nil
 			}))
 
@@ -63,8 +65,8 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			}
 
 			return StreamProcessWith(func(p []byte) (int, error) {
-				if _, ok := envelope.Values["MimeParts"]; !ok {
-					envelope.Values["MimeParts"] = &parser.Parts
+				if envelope.MimeParts == nil {
+					envelope.MimeParts = &parser.Parts
 				}
 				if parseErr == nil {
 					parseErr = parser.Parse(p)

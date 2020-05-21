@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 )
 
@@ -127,7 +128,7 @@ type Envelope struct {
 	MailFrom Address
 	// Recipients
 	RcptTo []Address
-	// Data stores the header and message body
+	// Data stores the header and message body (when using the non-streaming processor)
 	Data bytes.Buffer
 	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
 	Subject string
@@ -145,6 +146,12 @@ type Envelope struct {
 	QueuedId string
 	// TransportType indicates whenever 8BITMIME extension has been signaled
 	TransportType smtp.TransportType
+	// Size is the length of message, after being written
+	Size int64
+	// MimeParts contain the information about the mime-parts after they have been parsed
+	MimeParts *mimeparse.Parts
+	// MessageID contains the id of the message after it has been written
+	MessageID uint64
 	// ESMTP: true if EHLO was used
 	ESMTP bool
 	// When locked, it means that the envelope is being processed by the backend
@@ -218,6 +225,9 @@ func (e *Envelope) ResetTransaction() {
 	e.Header = nil
 	e.Hashes = make([]string, 0)
 	e.DeliveryHeader = ""
+	e.Size = 0
+	e.MessageID = 0
+	e.MimeParts = nil
 	e.Values = make(map[string]interface{})
 }
 

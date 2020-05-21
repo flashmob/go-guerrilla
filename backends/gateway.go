@@ -468,7 +468,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 
 		gw.streamers = append(gw.streamers, s)
 	}
-	// Initialize processors
+	// Initialize processors & stream processors
 	if err := Svc.Initialize(cfg); err != nil {
 		gw.State = BackendStateError
 		return err
@@ -614,7 +614,7 @@ func (gw *BackendGateway) workDispatcher(
 			} else if msg.task == TaskSaveMailStream {
 				err := stream.open(msg.e)
 				if err == nil {
-					if msg.e.Values["size"], err = io.CopyBuffer(stream, msg.r, gw.buf); err != nil {
+					if msg.e.Size, err = io.CopyBuffer(stream, msg.r, gw.buf); err != nil {
 						Log().WithError(err).Error("stream writing failed")
 					}
 					if err = stream.close(); err != nil {
