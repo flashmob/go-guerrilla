@@ -68,7 +68,7 @@ type guerrillaDBAndRedisConfig struct {
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+	bcfg, err := Svc.ExtractConfig(ConfigProcessors, "guerrillaredisdb", backendConfig, configType)
 	if err != nil {
 		return err
 	}
@@ -360,7 +360,8 @@ func GuerrillaDbRedis() Decorator {
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 
 		configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(
+			ConfigProcessors, "guerrillaredisdb", backendConfig, configType)
 		if err != nil {
 			return err
 		}

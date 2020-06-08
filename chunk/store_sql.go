@@ -182,7 +182,7 @@ func (s *StoreSQL) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo,
 // Initialize loads the specific database config, connects to the db, prepares statements
 func (s *StoreSQL) Initialize(cfg backends.BackendConfig) error {
 	configType := backends.BaseConfig(&sqlConfig{})
-	bcfg, err := backends.Svc.ExtractConfig(cfg, configType)
+	bcfg, err := backends.Svc.ExtractConfig(backends.ConfigStreamProcessors, "chunksaver", cfg, configType)
 	if err != nil {
 		return err
 	}

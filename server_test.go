@@ -51,8 +51,18 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	if logOpenError != nil {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
-	backend, err := backends.New(
-		backends.BackendConfig{"log_received_mails": true, "save_workers_size": 1},
+
+	bcfg := backends.BackendConfig{
+		backends.ConfigProcessors.String(): {
+			"debugger": {"log_received_mails": true},
+		},
+		backends.ConfigGateways.String(): {
+			backends.DefaultGateway: {"save_workers_size": 1},
+		},
+	}
+
+	backend, err := backends.New(backends.DefaultGateway,
+		bcfg,
 		mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
@@ -415,8 +425,12 @@ func TestGithubIssue198(t *testing.T) {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
-	be, err := backends.New(map[string]interface{}{
-		"save_process": "HeadersParser|Header|debugger|custom", "primary_mail_host": "example.com", "log_received_mails": true},
+	cfg := backends.BackendConfig{}
+	cfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Header|debugger|custom")
+	cfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	cfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+
+	be, err := backends.New("default", cfg,
 		mainlog)
 	if err != nil {
 		t.Error(err)
@@ -923,15 +937,15 @@ func TestXClient(t *testing.T) {
 // a second transaction
 func TestGatewayTimeout(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	bcfg := backends.BackendConfig{
-		"save_workers_size":   1,
-		"save_process":        "HeadersParser|Debugger",
-		"log_received_mails":  true,
-		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "1s",
-		"gw_val_rcpt_timeout": "1s",
-		"sleep_seconds":       2,
-	}
+
+	bcfg := backends.BackendConfig{}
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_save_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_val_rcpt_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
+	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "sleep_seconds", 2)
 
 	cfg := &AppConfig{
 		LogFile:      log.OutputOff.String(),
@@ -1010,15 +1024,15 @@ func TestGatewayTimeout(t *testing.T) {
 // The processor will panic and gateway should recover from it
 func TestGatewayPanic(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	bcfg := backends.BackendConfig{
-		"save_workers_size":   1,
-		"save_process":        "HeadersParser|Debugger",
-		"log_received_mails":  true,
-		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "2s",
-		"gw_val_rcpt_timeout": "2s",
-		"sleep_seconds":       1,
-	}
+
+	bcfg := backends.BackendConfig{}
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_save_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_val_rcpt_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
+	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "sleep_seconds", 1)
 
 	cfg := &AppConfig{
 		LogFile:      log.OutputOff.String(),

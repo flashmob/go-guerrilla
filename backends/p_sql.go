@@ -194,7 +194,7 @@ func SQL() Decorator {
 	// open the database connection (it will also check if we can select the table)
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&SQLProcessorConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "sql", backendConfig, configType)
 		if err != nil {
 			return err
 		}

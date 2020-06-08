@@ -64,7 +64,7 @@ type cachedChunks struct {
 	db        Storage
 }
 
-// chunkCachePreload controls how many to pre-load in the
+// chunkCachePreload controls how many chunks to pre-load in the cache
 const chunkCachePreload = 2
 
 // warm allocates the chunk cache, and gets the first few and stores them in the cache

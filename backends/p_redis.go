@@ -61,7 +61,7 @@ func Redis() Decorator {
 	// read the config into RedisProcessorConfig
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&RedisProcessorConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "redis", backendConfig, configType)
 		if err != nil {
 			return err
 		}

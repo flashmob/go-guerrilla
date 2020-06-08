@@ -20,7 +20,9 @@ const (
 	// when log level changed
 	EventConfigLogLevel
 	// when the backend's config changed
-	EventConfigBackendConfig
+	EventConfigBackendConfigChanged
+	EventConfigBackendConfigAdded
+	EventConfigBackendConfigRemoved
 	// when a new server was added
 	EventConfigServerNew
 	// when an existing server was removed
@@ -41,6 +43,8 @@ const (
 	EventConfigServerMaxClients
 	// when a server's TLS config changed
 	EventConfigServerTLSConfig
+	// when the server's backend config changed
+	EventConfigServerGatewayConfig
 )
 
 var eventList = [...]string{
@@ -50,7 +54,7 @@ var eventList = [...]string{
 	"config_change:log_file",
 	"config_change:reopen_log_file",
 	"config_change:log_level",
-	"config_change:backend_config",
+	"config_change:backend_config", // todo change to 'backend;
 	"server_change:new_server",
 	"server_change:remove_server",
 	"server_change:update_config",

@@ -31,6 +31,8 @@ func init() {
 	Streamers = make(map[string]StreamProcessorConstructor)
 }
 
+const DefaultGateway = "default"
+
 type ProcessorConstructor func() Decorator
 
 type StreamProcessorConstructor func() *StreamDecorator
@@ -56,12 +58,9 @@ type Backend interface {
 	Shutdown() error
 	// Start Starts a backend that has been initialized
 	Start() error
+	// returns the name of the backend
+	Name() string
 }
-
-type BackendConfig map[string]interface{}
-
-// All config structs extend from this
-type BaseConfig interface{}
 
 type notifyMsg struct {
 	err      error
@@ -262,12 +261,21 @@ func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) 
 }
 
 // extractConfig loads the backend config. It has already been unmarshalled
-// configData contains data from the main config file's "backend_config" value
+// "group" refers
+// cfg contains data from the main config file's "backend_config" value
 // configType is a Processor's specific config value.
 // The reason why using reflection is because we'll get a nice error message if the field is missing
 // the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
 // error messages
-func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
+func (s *service) ExtractConfig(ns configNameSpace, group string, cfg BackendConfig, configType BaseConfig) (interface{}, error) {
+	group = strings.ToLower(group)
+
+	var configData ConfigGroup
+	if v, ok := cfg[ns.String()][group]; ok {
+		configData = v
+	} else {
+		return configData, nil
+	}
 	// Use reflection so that we can provide a nice error message
 	v := reflect.ValueOf(configType).Elem() // so that we can set the values
 	//m := reflect.ValueOf(configType).Elem()

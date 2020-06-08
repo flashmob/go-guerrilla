@@ -20,10 +20,19 @@ var configJsonA = `
     "log_level" : "debug",
     "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_config" :
-        {
-            "log_received_mails" : true
-        },
+	"backends" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails": true
+			},
+		"gateways" : {
+			"default" : {
+				"save_workers_size":  1,
+				"save_process":  "HeadersParser|Header|Hasher|Debugger"
+			}
+		}
+	},
+   
     "servers" : [
         {
             "is_enabled" : true,
@@ -97,10 +106,13 @@ var configJsonB = `
     "log_level" : "debug",
     "pid_file" : "tests/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
-    "backend_config" :
-        {
-            "log_received_mails" : true
-        },
+    "backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : true
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -230,12 +242,16 @@ func TestConfigChangeEvents(t *testing.T) {
 		t.Error(err)
 	}
 	logger, _ := log.GetLogger(oldconf.LogFile, oldconf.LogLevel)
-	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, err := backends.New(bcfg, logger)
-	if err != nil {
-		t.Error("cannot create backend", err)
+
+	oldconf.BackendConfig = backends.BackendConfig{
+		"processors": {"debugger": {"log_received_mails": true}},
 	}
-	app, err := New(oldconf, backend, logger)
+
+	backend, err := backends.New("default", oldconf.BackendConfig, logger)
+	if err != nil {
+		t.Error("failed to create backend", err)
+	}
+	app, err := New(oldconf, logger, backend)
 	if err != nil {
 		t.Error("cannot create daemon", err)
 	}

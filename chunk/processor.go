@@ -90,7 +90,8 @@ func Chunksaver() *backends.StreamDecorator {
 			backends.Svc.AddInitializer(backends.InitializeWith(func(backendConfig backends.BackendConfig) error {
 
 				configType := backends.BaseConfig(&Config{})
-				bcfg, err := backends.Svc.ExtractConfig(backendConfig, configType)
+				bcfg, err := backends.Svc.ExtractConfig(
+					backends.ConfigStreamProcessors, "chunksaver", backendConfig, configType)
 				if err != nil {
 					return err
 				}

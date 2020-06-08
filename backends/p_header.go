@@ -38,7 +38,7 @@ func Header() Decorator {
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&HeaderConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "header", backendConfig, configType)
 		if err != nil {
 			return err
 		}

@@ -63,7 +63,8 @@ func StreamHeader() *StreamDecorator {
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&HeaderConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(
+			ConfigStreamProcessors, "header", backendConfig, configType)
 		if err != nil {
 			return err
 		}

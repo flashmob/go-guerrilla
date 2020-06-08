@@ -37,11 +37,19 @@ var configJsonA = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-    	"save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": true
-    },
+	"backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : true
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -90,11 +98,19 @@ var configJsonB = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-    	"save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": false
-    },
+    "backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : false
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -128,19 +144,24 @@ var configJsonC = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config" :
-        {
-            "sql_driver": "mysql",
-            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
-            "mail_table":"new_mail",
-            "redis_interface" : "127.0.0.1:6379",
-            "redis_expire_seconds" : 7200,
-            "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com",
-            "save_workers_size" : 1,
-	    	"save_process": "HeadersParser|Debugger",
-	    	"log_received_mails": true
-        },
+	"backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : true
+			},
+            "sql" : {
+ 				"sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"primary_mail_host":"sharklasers.com",
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 3,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -189,11 +210,19 @@ var configJsonD = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-        "save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": false
-    },
+	"backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : false
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -242,19 +271,31 @@ var configJsonE = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config" :
-        {
-            "save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
-            "save_process": "GuerrillaRedisDB",
-            "log_received_mails" : true,
-            "sql_driver": "mysql",
-            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
-            "mail_table":"new_mail",
-            "redis_interface" : "127.0.0.1:6379",
-            "redis_expire_seconds" : 7200,
-            "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com"
-        },
+	"backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : true
+			},
+            "sql" : {
+ 				"sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"sql_driver": "mysql",
+				"primary_mail_host":"sharklasers.com",
+			},
+			"GuerrillaRedisDB" : {
+				"redis_interface" : "127.0.0.1:6379",
+            	"redis_expire_seconds" : 7200,
+				"primary_mail_host":"sharklasers.com"
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 3,
+    			"save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
+				"save_process": "GuerrillaRedisDB",
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -496,8 +537,8 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	expectedEvents := map[guerrilla.Event]bool{
-		guerrilla.EventConfigBackendConfig: false,
-		guerrilla.EventConfigServerNew:     false,
+		guerrilla.EventConfigBackendConfigChanged: false,
+		guerrilla.EventConfigServerNew:            false,
 	}
 	mainlog, err = getTestLog()
 	if err != nil {
@@ -505,9 +546,16 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		t.FailNow()
 	}
 
-	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, err := backends.New(bcfg, mainlog)
-	app, err := guerrilla.New(oldconf, backend, mainlog)
+	oldconf.BackendConfig = backends.BackendConfig{
+		"processors": {"debugger": {"log_received_mails": true}},
+	}
+
+	backend, err := backends.New(backends.DefaultGateway, oldconf.BackendConfig, mainlog)
+	if err != nil {
+		t.Error("failed to create backend", err)
+	}
+
+	app, err := guerrilla.New(oldconf, mainlog, backend)
 	if err != nil {
 		t.Error("Failed to create new app", err)
 	}

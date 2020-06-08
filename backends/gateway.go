@@ -8,12 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"runtime/debug"
-	"strings"
-
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
+	"runtime/debug"
 )
 
 var ErrProcessorNotFound error
@@ -23,6 +21,8 @@ var ErrProcessorNotFound error
 // via a channel. Shutting down via Shutdown() will stop all workers.
 // The rest of this program always talks to the backend via this gateway.
 type BackendGateway struct {
+	// name is the name of the gateway given in the config
+	name string
 	// channel for distributing envelopes to workers
 	conveyor chan *workerMsg
 
@@ -152,17 +152,15 @@ func (s backendState) String() string {
 
 // New makes a new default BackendGateway backend, and initializes it using
 // backendConfig and stores the logger
-func New(backendConfig BackendConfig, l log.Logger) (Backend, error) {
+func New(name string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	Svc.SetMainlog(l)
-	gateway := &BackendGateway{}
+	gateway := &BackendGateway{name: name}
 	err := gateway.Initialize(backendConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
-	// keep the config known to be good.
+	// keep the a copy of the config
 	gateway.config = backendConfig
-
-	b = Backend(gateway)
 	return b, nil
 }
 
@@ -180,6 +178,10 @@ func (w *workerMsg) reset(e *mail.Envelope, task SelectTask) {
 	}
 	w.e = e
 	w.task = task
+}
+
+func (gw *BackendGateway) Name() string {
+	return gw.name
 }
 
 // Process distributes an envelope to one of the backend workers with a TaskSaveMail task
@@ -370,18 +372,15 @@ func (gw *BackendGateway) Reinitialize() error {
 // This function uses the config value save_process or validate_process to figure out which Decorator to use
 func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
-	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
-	if len(cfg) == 0 {
+	c := newStackProcessorConfig(stackConfig)
+	if len(c.list) == 0 {
 		return NoopProcessor{}, nil
 	}
-	items := strings.Split(cfg, "|")
-	for i := range items {
-		name := items[len(items)-1-i] // reverse order, since decorators are stacked
-		if makeFunc, ok := processors[name]; ok {
+	for i := range c.list {
+		if makeFunc, ok := processors[c.list[i].name]; ok {
 			decorators = append(decorators, makeFunc())
 		} else {
-			ErrProcessorNotFound = fmt.Errorf("processor [%s] not found", name)
-			return nil, ErrProcessorNotFound
+			return nil, c.notFound(c.list[i].name)
 		}
 	}
 	// build the call-stack of decorators
@@ -391,21 +390,17 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 
 func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	var decorators []*StreamDecorator
-	cfg := strings.ToLower(strings.TrimSpace(stackConfig))
-	if len(cfg) == 0 {
+	c := newStackStreamProcessorConfig(stackConfig)
+	if len(c.list) == 0 {
 		return streamer{NoopStreamProcessor{}, decorators}, nil
 	}
-	items := strings.Split(cfg, "|")
-	for i := range items {
-		name := items[len(items)-1-i] // reverse order, since decorators are stacked
-		if makeFunc, ok := Streamers[name]; ok {
+	for i := range c.list {
+		if makeFunc, ok := Streamers[c.list[i].name]; ok {
 			decorators = append(decorators, makeFunc())
 		} else {
-			ErrProcessorNotFound = errors.New(fmt.Sprintf("stream processor [%s] not found", name))
-			return streamer{nil, decorators}, ErrProcessorNotFound
+			return streamer{nil, decorators}, c.notFound(c.list[i].name)
 		}
 	}
-
 	// build the call-stack of decorators
 	sp, decorators := DecorateStream(&DefaultStreamProcessor{}, decorators)
 	return streamer{sp, decorators}, nil
@@ -417,7 +412,13 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	// Note: treat config values as immutable
 	// if you need to change a config value, change in the file then
 	// send a SIGHUP
-	bcfg, err := Svc.ExtractConfig(cfg, configType)
+	if gw.name == "" {
+		gw.name = DefaultGateway
+	}
+	if _, ok := cfg["gateways"][gw.name]; !ok {
+		return errors.New("no such gateway configured: " + gw.name)
+	}
+	bcfg, err := Svc.ExtractConfig(ConfigGateways, gw.name, cfg, configType)
 	if err != nil {
 		return err
 	}

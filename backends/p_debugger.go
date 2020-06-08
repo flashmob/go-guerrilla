@@ -32,7 +32,8 @@ func Debugger() Decorator {
 	var config *debuggerConfig
 	initFunc := InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&debuggerConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(
+			ConfigProcessors, defaultProcessor, backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -57,7 +58,6 @@ func Debugger() Decorator {
 					if config.SleepSec == 1 {
 						panic("panic on purpose")
 					}
-
 				}
 
 				// continue to the next Processor in the decorator stack

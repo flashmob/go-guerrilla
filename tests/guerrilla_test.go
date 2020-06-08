@@ -41,7 +41,7 @@ import (
 
 type TestConfig struct {
 	guerrilla.AppConfig
-	BackendConfig map[string]interface{} `json:"backend_config"`
+	BackendConfig backends.BackendConfig `json:"backend"`
 }
 
 var (
@@ -68,7 +68,7 @@ func init() {
 			return
 		}
 		backend, _ := getBackend(config.BackendConfig, logger)
-		app, initErr = guerrilla.New(&config.AppConfig, backend, logger)
+		app, initErr = guerrilla.New(&config.AppConfig, logger, backend)
 	}
 
 }
@@ -80,10 +80,14 @@ var configJson = `
     "log_level" : "debug",
     "pid_file" : "go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-    "backend_config" :
-        {
-            "log_received_mails" : true
-        },
+	
+    "backend" : {
+		"processors" : {
+			"debugger" {
+				"log_received_mails" : true
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -120,8 +124,8 @@ var configJson = `
 }
 `
 
-func getBackend(backendConfig map[string]interface{}, l log.Logger) (backends.Backend, error) {
-	b, err := backends.New(backendConfig, l)
+func getBackend(backendConfig backends.BackendConfig, l log.Logger) (backends.Backend, error) {
+	b, err := backends.New(backends.DefaultGateway, backendConfig, l)
 	if err != nil {
 		fmt.Println("backend init error", err)
 		os.Exit(1)
