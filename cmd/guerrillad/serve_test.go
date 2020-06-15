@@ -39,7 +39,7 @@ var configJsonA = `
     ],
 	"backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			}
 		},
@@ -100,7 +100,7 @@ var configJsonB = `
     ],
     "backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : false
 			}
 		},
@@ -146,7 +146,7 @@ var configJsonC = `
     ],
 	"backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			},
             "sql" : {
@@ -212,7 +212,7 @@ var configJsonD = `
     ],
 	"backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : false
 			}
 		},
@@ -273,7 +273,7 @@ var configJsonE = `
     ],
 	"backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			},
             "sql" : {

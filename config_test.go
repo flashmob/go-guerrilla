@@ -108,7 +108,7 @@ var configJsonB = `
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
     "backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger": {
 				"log_received_mails" : true
 			}
 		}

@@ -55,6 +55,7 @@ func (d *Daemon) Start() (err error) {
 		if err != nil {
 			return err
 		}
+
 		for i := range d.subs {
 			_ = d.Subscribe(d.subs[i].topic, d.subs[i].fn)
 

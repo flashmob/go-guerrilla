@@ -87,11 +87,10 @@ func (ls *logStore) setMainlog(log log.Logger) {
 func (g *guerrilla) makeConfiguredBackends(l log.Logger) ([]backends.Backend, error) {
 	var list []backends.Backend
 	config := g.Config.BackendConfig[backends.ConfigGateways.String()]
-	count := len(config)
-	if count == 0 {
+	if len(config) == 0 {
 		return list, errors.New("no backends configured")
 	}
-	list = make([]backends.Backend, count)
+	list = make([]backends.Backend, 0)
 	for name := range config {
 		if b, err := backends.New(name, g.Config.BackendConfig, l); err != nil {
 			return nil, err
@@ -116,6 +115,9 @@ func New(ac *AppConfig, l log.Logger, b ...backends.Backend) (Guerrilla, error) 
 		if err != nil {
 			return g, err
 		}
+	}
+	if g.backends == nil {
+		g.backends = make(BackendContainer)
 	}
 	for i := range b {
 		g.storeBackend(b[i])
@@ -251,6 +253,9 @@ func (g *guerrilla) mapBackends(callback func(backend backends.Backend) error) (
 		if err := callback(g.backends[name]); err != nil {
 			e = append(e, err)
 		}
+	}
+	if len(e) == 0 {
+		return g.backends, nil
 	}
 	return g.backends, e
 }
@@ -625,6 +630,7 @@ func (g *guerrilla) Shutdown() {
 	if _, err := g.mapBackends(func(b backends.Backend) error {
 		return b.Shutdown()
 	}); err != nil {
+		fmt.Println(err)
 		g.mainlog().WithError(err).Warn("Backend failed to shutdown")
 	} else {
 		g.mainlog().Infof("Backend shutdown completed")

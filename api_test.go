@@ -139,7 +139,7 @@ func TestSMTPLoadFile(t *testing.T) {
     "allowed_hosts": ["spam4.me","grr.la"],
 	"backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			}
 		},
@@ -177,7 +177,7 @@ func TestSMTPLoadFile(t *testing.T) {
     "allowed_hosts": ["spam4.me","grr.la"],
     "backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			}
 		},

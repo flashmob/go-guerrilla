@@ -21,8 +21,6 @@ var (
 
 	// Streamers store the constructors for composing a new stream-based processor using a decorator pattern.
 	Streamers map[string]StreamProcessorConstructor
-
-	b Backend
 )
 
 func init() {
@@ -274,7 +272,7 @@ func (s *service) ExtractConfig(ns configNameSpace, group string, cfg BackendCon
 	if v, ok := cfg[ns.String()][group]; ok {
 		configData = v
 	} else {
-		return configData, nil
+		return configType, nil
 	}
 	// Use reflection so that we can provide a nice error message
 	v := reflect.ValueOf(configType).Elem() // so that we can set the values

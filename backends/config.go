@@ -21,7 +21,7 @@ func (c *BackendConfig) SetValue(ns configNameSpace, name string, key string, va
 	if (*c)[nsKey][name] == nil {
 		(*c)[nsKey][name] = make(ConfigGroup)
 	}
-	(*c)[nsKey][name] = map[string]interface{}{key: value}
+	(*c)[nsKey][name][key] = value
 }
 
 func (c *BackendConfig) GetValue(ns configNameSpace, name string, key string) interface{} {
@@ -66,9 +66,11 @@ type stackConfigExpression struct {
 	name  string
 }
 
+type notFoundError func(s string) error
+
 type stackConfig struct {
 	list     []stackConfigExpression
-	notFound func(s string) error
+	notFound notFoundError
 }
 
 func NewStackConfig(config string) (ret *stackConfig) {

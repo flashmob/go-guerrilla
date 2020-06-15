@@ -83,7 +83,7 @@ var configJson = `
 	
     "backend" : {
 		"processors" : {
-			"debugger" {
+			"debugger" : {
 				"log_received_mails" : true
 			}
 		}

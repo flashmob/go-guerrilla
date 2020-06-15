@@ -14,8 +14,6 @@ import (
 	"runtime/debug"
 )
 
-var ErrProcessorNotFound error
-
 // A backend gateway is a proxy that implements the Backend interface.
 // It is used to start multiple goroutine workers for saving mail, and then distribute email saving to the workers
 // via a channel. Shutting down via Shutdown() will stop all workers.
@@ -161,7 +159,7 @@ func New(name string, backendConfig BackendConfig, l log.Logger) (Backend, error
 	}
 	// keep the a copy of the config
 	gateway.config = backendConfig
-	return b, nil
+	return gateway, nil
 }
 
 var workerMsgPool = sync.Pool{

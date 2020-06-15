@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"github.com/flashmob/go-guerrilla/mail"
 	"io"
+	"sync"
 )
 
 func init() {
@@ -26,12 +27,13 @@ func StreamDecompress() *StreamDecorator {
 				pr *io.PipeReader
 				pw *io.PipeWriter
 			)
-
+			var wg sync.WaitGroup
 			// consumer runs as a gorouitne.
 			// It connects the zlib reader with the read-end of the pipe
 			// then copies the output down to the next stream processor
 			// consumer will exit of the pipe gets closed or on error
 			consumer := func() {
+				defer wg.Done()
 				var err error
 				for {
 					if zr == nil {
@@ -53,16 +55,22 @@ func StreamDecompress() *StreamDecorator {
 			// start our consumer goroutine
 			sd.Open = func(e *mail.Envelope) error {
 				pr, pw = io.Pipe()
+				wg.Add(1)
 				go consumer()
 				return nil
 			}
 
 			// close both ends of the pipes when finished
 			sd.Close = func() error {
+				// stop the consumer
 				errR := pr.Close()
 				errW := pw.Close()
-				if err := zr.Close(); err != nil {
-					return err
+				// wait for the consumer to stop
+				wg.Wait()
+				if zr != nil {
+					if err := zr.Close(); err != nil {
+						return err
+					}
 				}
 				if errR != nil {
 					return errR
@@ -70,6 +78,9 @@ func StreamDecompress() *StreamDecorator {
 				if errW != nil {
 					return errW
 				}
+				pr = nil
+				pw = nil
+				zr = nil
 				return nil
 			}
 

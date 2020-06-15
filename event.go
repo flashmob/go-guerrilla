@@ -54,7 +54,9 @@ var eventList = [...]string{
 	"config_change:log_file",
 	"config_change:reopen_log_file",
 	"config_change:log_level",
-	"config_change:backend_config", // todo change to 'backend;
+	"config_change:backend_config",
+	"config_change:backend_config_added",
+	"config_change:backend_removed",
 	"server_change:new_server",
 	"server_change:remove_server",
 	"server_change:update_config",
@@ -65,6 +67,7 @@ var eventList = [...]string{
 	"server_change:timeout",
 	"server_change:max_clients",
 	"server_change:tls_config",
+	"server_change:gateway",
 }
 
 func (e Event) String() string {

@@ -304,6 +304,7 @@ func (c *AppConfig) setDefaults() error {
 		sc.MaxClients = defaultMaxClients
 		sc.Timeout = defaultTimeout
 		sc.MaxSize = defaultMaxSize
+		sc.Gateway = backends.DefaultGateway
 		c.Servers = append(c.Servers, sc)
 	} else {
 		// make sure each server has defaults correctly configured
