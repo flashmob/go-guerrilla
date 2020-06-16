@@ -20,19 +20,19 @@ var configJsonA = `
     "log_level" : "debug",
     "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
-	"backends" : {
-		"processors" : {
-			"debugger" : {
-				"log_received_mails": true
-			},
+	"backend": {
+		"processors": {
+		  "debugger": {
+			"log_received_mails": true
+		  }
+		},
 		"gateways" : {
-			"default" : {
-				"save_workers_size":  1,
-				"save_process":  "HeadersParser|Header|Hasher|Debugger"
-			}
+				"default" : {
+					"save_workers_size":  1,
+					"save_process":  "HeadersParser|Header|Hasher|Debugger"
+				}
 		}
 	},
-   
     "servers" : [
         {
             "is_enabled" : true,
@@ -90,9 +90,8 @@ var configJsonA = `
 				"start_tls_on":false,
 				"tls_always_on":false
 			}
-        }
-    ]
-  }
+    	}
+  	]
 }
 `
 
@@ -252,11 +251,17 @@ func TestConfigChangeEvents(t *testing.T) {
 
 	oldconf.BackendConfig = backends.BackendConfig{
 		"processors": {"debugger": {"log_received_mails": true}},
+		"gateways": {
+			"default": {
+				"save_process": "HeadersParser|Header|Hasher|Debugger",
+			},
+		},
 	}
 
 	backend, err := backends.New("default", oldconf.BackendConfig, logger)
 	if err != nil {
 		t.Error("failed to create backend", err)
+		return
 	}
 	app, err := New(oldconf, logger, backend)
 	if err != nil {
