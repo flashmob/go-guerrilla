@@ -1315,6 +1315,7 @@ func TestStreamChunkSaver(t *testing.T) {
 				"default": {
 					"save_process":        "HeadersParser|Debugger",
 					"stream_save_process": "mimeanalyzer|chunksaver",
+					"gw_save_timeout":     "5",
 				},
 			},
 		},

@@ -65,8 +65,6 @@ func StreamDecompress() *StreamDecorator {
 				// stop the consumer
 				errR := pr.Close()
 				errW := pw.Close()
-				// wait for the consumer to stop
-				wg.Wait()
 				if zr != nil {
 					if err := zr.Close(); err != nil {
 						return err
@@ -78,6 +76,8 @@ func StreamDecompress() *StreamDecorator {
 				if errW != nil {
 					return errW
 				}
+				// wait for the consumer to stop
+				wg.Wait()
 				pr = nil
 				pw = nil
 				zr = nil

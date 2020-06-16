@@ -30,7 +30,7 @@ type AppConfig struct {
 	// "info", "debug", "error", "panic". Default "info"
 	LogLevel string `json:"log_level,omitempty"`
 	// BackendConfig configures the email envelope processing backend
-	BackendConfig backends.BackendConfig `json:"backend"`
+	BackendConfig backends.BackendConfig `json:"backend,omitempty"`
 }
 
 // ServerConfig specifies config options for a single server
@@ -61,7 +61,7 @@ type ServerConfig struct {
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
 	// Gateway specifies which backend to use
-	Gateway string `json:"backend"`
+	Gateway string `json:"backend,omitempty"`
 }
 
 type ServerTLSConfig struct {

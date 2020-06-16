@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"sync"
 )
@@ -113,7 +114,9 @@ func (info *PartsInfo) UnmarshalJSONZlib(b []byte) error {
 
 // MarshalJSONZlib marshals and compresses the bytes using zlib
 func (info *PartsInfo) MarshalJSONZlib() ([]byte, error) {
-
+	if len(info.Parts) == 0 {
+		return []byte{}, errors.New("message contained no parts, was mime analyzer")
+	}
 	buf, err := json.Marshal(info)
 	if err != nil {
 		return buf, err

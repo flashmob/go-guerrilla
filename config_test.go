@@ -92,6 +92,7 @@ var configJsonA = `
 			}
         }
     ]
+  }
 }
 `
 
@@ -110,6 +111,12 @@ var configJsonB = `
 		"processors" : {
 			"debugger": {
 				"log_received_mails" : true
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size":  1,
+				"save_process":  "HeadersParser|Header|Hasher|Debugger"
 			}
 		}
 	},

@@ -8,7 +8,20 @@ import (
 )
 
 type ConfigGroup map[string]interface{}
+
 type BackendConfig map[string]map[string]ConfigGroup
+
+/*
+
+TODO change to thus
+
+type BackendConfig struct {
+	Processors map[string]ConfigGroup `json:"processors,omitempty"`
+	StreamProcessors map[string]ConfigGroup `json:"stream_processors,omitempty"`
+	Gateways map[string]ConfigGroup `json:"gateways,omitempty"`
+}
+
+*/
 
 func (c *BackendConfig) SetValue(ns configNameSpace, name string, key string, value interface{}) {
 	nsKey := ns.String()
@@ -84,7 +97,7 @@ func NewStackConfig(config string) (ret *stackConfig) {
 	pos := 0
 	for i := range items {
 		pos = len(items) - 1 - i // reverse order, since decorators are stacked
-		ret.list[pos] = stackConfigExpression{alias: "", name: items[pos]}
+		ret.list[i] = stackConfigExpression{alias: "", name: items[pos]}
 	}
 	return ret
 }
@@ -134,7 +147,6 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 				changed[key] = true
 			}
 		}
-
 		if o, ok := oldConfig[key]; ok {
 			delete(oldConfig, key)
 			if !reflect.DeepEqual(c[key], o) {
@@ -146,14 +158,11 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 			added[key] = true
 		}
 	}
-
 	// whats been removed
 	for p := range oldConfig {
 		removed[p] = true
 	}
-
 	return
-
 }
 
 func changedConfigGroups(old map[string]ConfigGroup, new map[string]ConfigGroup) map[string]bool {
