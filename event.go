@@ -21,7 +21,9 @@ const (
 	EventConfigLogLevel
 	// when the backend's config changed
 	EventConfigBackendConfigChanged
+	// when a gateway was added
 	EventConfigBackendConfigAdded
+	// when a gateway was removed
 	EventConfigBackendConfigRemoved
 	// when a new server was added
 	EventConfigServerNew
@@ -54,9 +56,9 @@ var eventList = [...]string{
 	"config_change:log_file",
 	"config_change:reopen_log_file",
 	"config_change:log_level",
-	"config_change:backend_config",
-	"config_change:backend_config_added",
-	"config_change:backend_removed",
+	"backend_change:backend",
+	"backend_change:backend_config_added",
+	"backend_change:backend_removed",
 	"server_change:new_server",
 	"server_change:remove_server",
 	"server_change:update_config",

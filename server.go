@@ -180,10 +180,7 @@ func (s *server) configureTLS() error {
 
 // setBackend sets the backend to use for processing email envelopes
 func (s *server) setBackend(b backends.Backend) {
-	sc := s.configStore.Load().(ServerConfig)
-	if b.Name() == sc.Gateway {
-		s.backendStore.Store(b)
-	}
+	s.backendStore.Store(b)
 }
 
 // backend gets the backend used to process email envelopes

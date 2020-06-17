@@ -152,7 +152,7 @@ var configJsonC = `
             "sql" : {
  				"sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             	"mail_table":"new_mail",
-				"primary_mail_host":"sharklasers.com",
+				"primary_mail_host":"sharklasers.com"
 			}
 		},
 		"gateways" : {
@@ -537,8 +537,8 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	expectedEvents := map[guerrilla.Event]bool{
-		guerrilla.EventConfigBackendConfigChanged: false,
-		guerrilla.EventConfigServerNew:            false,
+		guerrilla.EventConfigBackendConfigChanged: false, // backend_change:backend
+		guerrilla.EventConfigServerNew:            false, // server_change:new_server
 	}
 	mainlog, err = getTestLog()
 	if err != nil {
@@ -549,28 +549,34 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	oldconf.BackendConfig = backends.BackendConfig{
 		"processors": {"debugger": {"log_received_mails": true}},
 	}
+	oldconf.BackendConfig.ConfigureDefaults()
 
 	backend, err := backends.New(backends.DefaultGateway, oldconf.BackendConfig, mainlog)
 	if err != nil {
 		t.Error("failed to create backend", err)
+		return
 	}
-
 	app, err := guerrilla.New(oldconf, mainlog, backend)
 	if err != nil {
 		t.Error("Failed to create new app", err)
 	}
-	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
-	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
+	toUnsubscribe := map[guerrilla.Event]interface{}{}
 
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
 		func(e guerrilla.Event) {
-			if strings.Index(e.String(), "server_change") == 0 {
+			if strings.Index(e.String(), "backend_change") == 0 {
+				f := func(c *guerrilla.AppConfig, gateway string) {
+					expectedEvents[e] = true
+				}
+				_ = app.Subscribe(e, f)
+				toUnsubscribe[e] = f
+			} else if strings.Index(e.String(), "server_change") == 0 {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
 				_ = app.Subscribe(e, f)
-				toUnsubscribeS[e] = f
+				toUnsubscribe[e] = f
 			} else {
 				f := func(c *guerrilla.AppConfig) {
 					expectedEvents[e] = true
@@ -578,7 +584,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 				_ = app.Subscribe(e, f)
 				toUnsubscribe[e] = f
 			}
-
 		}(event)
 	}
 
@@ -589,10 +594,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	for unevent, unfun := range toUnsubscribe {
 		_ = app.Unsubscribe(unevent, unfun)
 	}
-	for unevent, unfun := range toUnsubscribeS {
-		_ = app.Unsubscribe(unevent, unfun)
-	}
-
 	for event, val := range expectedEvents {
 		if val == false {
 			t.Error("Did not fire config change event:", event)

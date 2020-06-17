@@ -120,6 +120,9 @@ func New(ac *AppConfig, l log.Logger, b ...backends.Backend) (Guerrilla, error) 
 		g.backends = make(BackendContainer)
 	}
 	for i := range b {
+		if b[i] == nil {
+			return g, errors.New("cannot use a nil backend")
+		}
 		g.storeBackend(b[i])
 	}
 	g.setMainlog(l)
@@ -538,7 +541,10 @@ func (g *guerrilla) storeBackend(b backends.Backend) {
 	defer g.beGuard.Unlock()
 	g.backends[b.Name()] = b
 	g.mapServers(func(server *server) {
-		server.setBackend(b)
+		sc := server.configStore.Load().(ServerConfig)
+		if b.Name() == sc.Gateway {
+			server.setBackend(b)
+		}
 	})
 }
 
@@ -547,6 +553,10 @@ func (g *guerrilla) backend(name string) backends.Backend {
 	defer g.beGuard.Unlock()
 	if b, ok := g.backends[name]; ok {
 		return b
+	}
+	// if not found, return a random one
+	for b := range g.backends {
+		return g.backends[b]
 	}
 	return nil
 }

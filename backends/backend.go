@@ -244,7 +244,6 @@ func (s *service) AddProcessor(name string, p ProcessorConstructor) {
 	c = func() Decorator {
 		return p()
 	}
-	// add to our processors list
 	processors[strings.ToLower(name)] = c
 }
 
@@ -254,7 +253,6 @@ func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) 
 	c = func() *StreamDecorator {
 		return p()
 	}
-	// add to our processors list
 	Streamers[strings.ToLower(name)] = c
 }
 

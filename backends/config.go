@@ -3,6 +3,7 @@ package backends
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -47,6 +48,30 @@ func (c *BackendConfig) GetValue(ns configNameSpace, name string, key string) in
 	}
 	if v, ok := (*c)[nsKey][name][key]; ok {
 		return &v
+	}
+	return nil
+}
+
+// ConfigureDefaults sets default values for the backend config,
+// if no backend config was added before starting, then use a default config
+// otherwise, see what required values were missed in the config and add any missing with defaults
+func (c *BackendConfig) ConfigureDefaults() error {
+	// set the defaults if no value has been configured
+	if c.GetValue(ConfigGateways, "default", "save_workers_size") == nil {
+		c.SetValue(ConfigGateways, "default", "save_workers_size", 1)
+	}
+	if c.GetValue(ConfigGateways, "default", "save_process") == nil {
+		c.SetValue(ConfigGateways, "default", "save_process", "HeadersParser|Header|Debugger")
+	}
+	if c.GetValue(ConfigProcessors, "default", "primary_mail_host") == nil {
+		h, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		c.SetValue(ConfigProcessors, "Header", "primary_mail_host", h)
+	}
+	if c.GetValue(ConfigProcessors, "default", "log_received_mails") == nil {
+		c.SetValue(ConfigProcessors, "Debugger", "log_received_mails", true)
 	}
 	return nil
 }
@@ -126,13 +151,15 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	added = make(map[string]bool, 0)
 	removed = make(map[string]bool, 0)
 
-	changedProcessors := changedConfigGroups(oldConfig[string(ConfigProcessors)], c[string(ConfigProcessors)])
-	changedStreamProcessors := changedConfigGroups(oldConfig[string(ConfigProcessors)], c[string(ConfigProcessors)])
+	changedProcessors := changedConfigGroups(
+		oldConfig[ConfigProcessors.String()], c[ConfigProcessors.String()])
+	changedStreamProcessors := changedConfigGroups(
+		oldConfig[ConfigProcessors.String()], c[ConfigProcessors.String()])
 	configType := BaseConfig(&GatewayConfig{})
 
 	// go through all the gateway configs,
 	// make a list of all the ones that have processors whose config had changed
-	for key, _ := range c[string(ConfigGateways)] {
+	for key, _ := range c[ConfigGateways.String()] {
 		e, _ := Svc.ExtractConfig(ConfigGateways, key, c, configType)
 		bcfg := e.(*GatewayConfig)
 		config := NewStackConfig(bcfg.SaveProcess)

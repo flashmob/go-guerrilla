@@ -168,7 +168,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 	if err = c.setDefaults(); err != nil {
 		return err
 	}
-	if err = c.setBackendDefaults(); err != nil {
+	if err = c.BackendConfig.ConfigureDefaults(); err != nil {
 		return err
 	}
 
@@ -336,30 +336,6 @@ func (c *AppConfig) setDefaults() error {
 				return err
 			}
 		}
-	}
-	return nil
-}
-
-// setBackendDefaults sets default values for the backend config,
-// if no backend config was added before starting, then use a default config
-// otherwise, see what required values were missed in the config and add any missing with defaults
-func (c *AppConfig) setBackendDefaults() error {
-	h, err := os.Hostname()
-	if err != nil {
-		return err
-	}
-	// set the defaults if no value has been configured
-	if c.BackendConfig.GetValue(backends.ConfigGateways, "default", "save_workers_size") == nil {
-		c.BackendConfig.SetValue(backends.ConfigGateways, "default", "save_workers_size", 1)
-	}
-	if c.BackendConfig.GetValue(backends.ConfigGateways, "default", "save_process") == nil {
-		c.BackendConfig.SetValue(backends.ConfigGateways, "default", "save_process", "HeadersParser|Header|Debugger")
-	}
-	if c.BackendConfig.GetValue(backends.ConfigProcessors, "default", "primary_mail_host") == nil {
-		c.BackendConfig.SetValue(backends.ConfigProcessors, "Header", "primary_mail_host", h)
-	}
-	if c.BackendConfig.GetValue(backends.ConfigProcessors, "default", "log_received_mails") == nil {
-		c.BackendConfig.SetValue(backends.ConfigProcessors, "Debugger", "log_received_mails", true)
 	}
 	return nil
 }

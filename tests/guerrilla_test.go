@@ -125,6 +125,7 @@ var configJson = `
 `
 
 func getBackend(backendConfig backends.BackendConfig, l log.Logger) (backends.Backend, error) {
+	_ = backendConfig.ConfigureDefaults()
 	b, err := backends.New(backends.DefaultGateway, backendConfig, l)
 	if err != nil {
 		fmt.Println("backend init error", err)

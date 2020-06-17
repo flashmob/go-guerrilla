@@ -214,7 +214,7 @@ func (d *Daemon) configureDefaults() error {
 	if d.Backends == nil {
 		d.Backends = make([]backends.Backend, 0)
 		// the config will be used to make backends
-		err = d.Config.setBackendDefaults()
+		err = d.Config.BackendConfig.ConfigureDefaults()
 		if err != nil {
 			return err
 		}
