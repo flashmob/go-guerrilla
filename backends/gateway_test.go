@@ -22,9 +22,17 @@ func TestStates(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	c := BackendConfig{
-		"save_process":       "HeadersParser|Debugger",
-		"log_received_mails": true,
-		"save_workers_size":  "1",
+		"processors": {
+			"Debugger": {
+				"log_received_mails": true,
+			},
+		},
+		"gateways": {
+			"default": {
+				"save_process":      "HeadersParser|Debugger",
+				"save_workers_size": "1",
+			},
+		},
 	}
 
 	gateway := &BackendGateway{}
@@ -53,9 +61,17 @@ func TestInitialize(t *testing.T) {
 
 func TestStartProcessStop(t *testing.T) {
 	c := BackendConfig{
-		"save_process":       "HeadersParser|Debugger",
-		"log_received_mails": true,
-		"save_workers_size":  2,
+		"processors": {
+			"Debugger": {
+				"log_received_mails": true,
+			},
+		},
+		"gateways": {
+			"default": {
+				"save_process":      "HeadersParser|Debugger",
+				"save_workers_size": "2",
+			},
+		},
 	}
 
 	gateway := &BackendGateway{}

@@ -224,7 +224,7 @@ func Transformer() *StreamDecorator {
 	var conf *TransformerConfig
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-		configType := BaseConfig(&HeaderConfig{})
+		configType := BaseConfig(&TransformerConfig{})
 		bcfg, err := Svc.ExtractConfig(
 			ConfigStreamProcessors, "transformer", backendConfig, configType)
 		if err != nil {

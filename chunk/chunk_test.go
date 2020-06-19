@@ -641,10 +641,16 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 	}
 
 	// configure the buffer cap
-	bc := backends.BackendConfig{}
-	bc["chunksaver_chunk_size"] = 8000
-	bc["chunksaver_storage_engine"] = "memory"
-	bc["chunksaver_compress_level"] = 0
+	bc := backends.BackendConfig{
+		"stream_processors": {
+			"chunksaver": {
+				"chunksaver_chunk_size":     8000,
+				"chunksaver_storage_engine": "memory",
+				"chunksaver_compress_level": 0,
+			},
+		},
+	}
+
 	_ = backends.Svc.Initialize(bc)
 
 	// give it the envelope with the parse results

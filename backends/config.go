@@ -151,7 +151,7 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	added = make(map[string]bool, 0)
 	removed = make(map[string]bool, 0)
 	cp := ConfigProcessors.String()
-	csp := ConfigProcessors.String()
+	csp := ConfigStreamProcessors.String()
 	cg := ConfigGateways.String()
 	changedProcessors := changedConfigGroups(
 		oldConfig[cp], c[cp])

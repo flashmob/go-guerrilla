@@ -29,7 +29,7 @@ var configJsonA = `
 {
     "log_file" : "../../tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "./pidfile.pid",
+    "pid_file" : "pidfile.pid",
     "allowed_hosts": [
       "guerrillamail.com",
       "guerrillamailblock.com",
@@ -336,8 +336,8 @@ var configJsonE = `
 const testPauseDuration = time.Millisecond * 1010
 
 // reload config
-func sigHup() {
-	if data, err := ioutil.ReadFile("pidfile.pid"); err == nil {
+func sigHup(pidfile string) {
+	if data, err := ioutil.ReadFile(pidfile); err == nil {
 		mainlog.Infof("pid read is %s", data)
 		ecmd := exec.Command("kill", "-HUP", string(data))
 		_, err = ecmd.Output()
@@ -351,8 +351,8 @@ func sigHup() {
 }
 
 // shutdown after calling serve()
-func sigKill() {
-	if data, err := ioutil.ReadFile("pidfile.pid"); err == nil {
+func sigKill(pidfile string) {
+	if data, err := ioutil.ReadFile(pidfile); err == nil {
 		mainlog.Infof("pid read is %s", data)
 		ecmd := exec.Command("kill", string(data))
 		_, err = ecmd.Output()
@@ -627,13 +627,18 @@ func TestServe(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-
 	go func() {
 		serve(cmd, []string{})
 	}()
 	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
 		t.Error("server not started")
 	}
+
+	// wait for the pidfle to be written out
+	if _, err := grepTestlog("pid_file", 0); err != nil {
+		t.Error("pid_file not written")
+	}
+
 	data, err := ioutil.ReadFile("pidfile.pid")
 	if err != nil {
 		t.Error("error reading pidfile.pid", err)
@@ -656,20 +661,19 @@ func TestServe(t *testing.T) {
 	// Would not work on windows as kill is not available.
 	// TODO: Implement an alternative test for windows.
 	if runtime.GOOS != "windows" {
-		sigHup()
+		sigHup("pidfile.pid")
 		// did the pidfile change as expected?
 		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
-			t.Error("server did not catch sighp")
+			t.Error("server did not catch sighup")
 		}
 	}
-	// send kill signal and wait for exit
-	d.Shutdown()
-
-	// did backend started as expected?
-
-	if _, err := grepTestlog("new backend started", 0); err != nil {
+	if _, err := grepTestlog("gateway with new config started", 0); err != nil {
 		t.Error("Dummy backend not restarted")
 	}
+
+	// send kill signal and wait for exit
+	d.Shutdown()
+	// did backend started as expected?
 
 	// wait for shutdown
 	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
@@ -727,7 +731,7 @@ func TestServerAddEvent(t *testing.T) {
 		}
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
 		t.Error("new server didn't start")
 	}
@@ -806,7 +810,7 @@ func TestServerStartEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// see if the new server started?
 	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
@@ -887,7 +891,7 @@ func TestServerStopEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 	// detect config change
 	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
 		t.Error("new server didn't start")
@@ -920,7 +924,7 @@ func TestServerStopEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 	// detect config change
 	if _, err := grepTestlog("Server [127.0.0.1:2228] has stopped accepting new clients", 27); err != nil {
 		t.Error("127.0.0.1:2228 did not stop")
@@ -1037,7 +1041,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 
 	if _, err := grepTestlog("allowed_hosts config changed", 0); err != nil {
 		t.Error("allowed_hosts config not changed")
@@ -1175,7 +1179,7 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("Did not create cert ", err)
 	}
 
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// wait for config to reload
 	if _, err := grepTestlog("Server [127.0.0.1:4655] re-opened", 0); err != nil {
@@ -1245,7 +1249,7 @@ func TestBadTLSStart(t *testing.T) {
 		// it should exit by now because the TLS config is incorrect
 		time.Sleep(testPauseDuration)
 
-		sigKill()
+		sigKill("pidfile.pid")
 		serveWG.Wait()
 
 		return
@@ -1334,7 +1338,7 @@ func TestBadTLSReload(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 	// did the config reload reload event fire? There should be config read error
 	if _, err := grepTestlog("could not read config file", 0); err != nil {
 		t.Error("was expecting an error reading config")
@@ -1411,7 +1415,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	}
 
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// did config update?
 	if _, err := grepTestlog("a new config has been saved", 0); err != nil {
@@ -1513,7 +1517,7 @@ func TestDebugLevelChange(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 	// did the config reload?
 	if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
 		t.Error("config did not reload")
@@ -1545,7 +1549,7 @@ func TestDebugLevelChange(t *testing.T) {
 
 // When reloading with a bad backend config, it should revert to old backend config
 // using the API way
-func TestBadBackendReload2(t *testing.T) {
+func TestBadBackendReload(t *testing.T) {
 
 	defer cleanTestArtifacts(t)
 	var err error
