@@ -277,12 +277,15 @@ var configJsonE = `
 				"log_received_mails" : true
 			},
             "sql" : {
- 				"sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+ 				"sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
             	"mail_table":"new_mail",
 				"sql_driver": "mysql",
-				"primary_mail_host":"sharklasers.com",
+				"primary_mail_host":"sharklasers.com"
 			},
 			"GuerrillaRedisDB" : {
+				"sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"sql_driver": "mysql",
 				"redis_interface" : "127.0.0.1:6379",
             	"redis_expire_seconds" : 7200,
 				"primary_mail_host":"sharklasers.com"
@@ -291,8 +294,7 @@ var configJsonE = `
 		"gateways" : {
 			"default" : {
 				"save_workers_size" : 3,
-    			"save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
-				"save_process": "GuerrillaRedisDB",
+				"save_process": "GuerrillaRedisDB"
 			}
 		}
 	},
@@ -1542,47 +1544,51 @@ func TestDebugLevelChange(t *testing.T) {
 }
 
 // When reloading with a bad backend config, it should revert to old backend config
-func TestBadBackendReload(t *testing.T) {
+// using the API way
+func TestBadBackendReload2(t *testing.T) {
+
+	defer cleanTestArtifacts(t)
 	var err error
 	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
-
-	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
-
 	if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
 		t.Error(err)
 	}
-	cmd := &cobra.Command{}
-	configPath = "configJsonA.json"
-	go func() {
-		serve(cmd, []string{})
-	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server didn't start")
-	}
 
-	// change the config file to the one with a broken backend
-	if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644); err != nil {
-		t.Error(err)
+	d := guerrilla.Daemon{}
+	_, err = d.LoadConfig("configJsonA.json")
+	if err != nil {
+		t.Error("ReadConfig error", err)
+		return
 	}
+	err = d.Start()
+	if err != nil {
+		t.Error("start error", err)
+		return
+	} else {
+		if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644); err != nil {
+			t.Error(err)
+			return
+		}
+		if err = d.ReloadConfigFile("configJsonA.json"); err != nil {
+			t.Error(err)
+			return
+		}
 
-	// test SIGHUP via the kill command
-	// Would not work on windows as kill is not available.
-	// TODO: Implement an alternative test for windows.
-	if runtime.GOOS != "windows" {
-		sigHup()
-		// did config update?
+		d.Shutdown()
+
 		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
 			t.Error("config didn't update")
 		}
+
+		// reverted to old gateway config?
+		if _, err := grepTestlog("reverted to old gateway config", 0); err != nil {
+			t.Error("Did not revert to old gateway config")
+		}
+
 		// did the pidfile change as expected?
 
 		if _, err := grepTestlog("pid_file (./pidfile2.pid) written", 0); err != nil {
@@ -1591,14 +1597,6 @@ func TestBadBackendReload(t *testing.T) {
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
 			t.Error("pidfile not changed after sighup SIGHUP", err)
 		}
-	}
 
-	// send kill signal and wait for exit
-	d.Shutdown()
-
-	// did backend started as expected?
-	if _, err := grepTestlog("reverted to old backend config", 0); err != nil {
-		t.Error("did not revert to old backend config")
-		t.FailNow()
 	}
 }

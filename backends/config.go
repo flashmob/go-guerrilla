@@ -150,16 +150,26 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	changed = make(map[string]bool, 0)
 	added = make(map[string]bool, 0)
 	removed = make(map[string]bool, 0)
-
+	cp := ConfigProcessors.String()
+	csp := ConfigProcessors.String()
+	cg := ConfigGateways.String()
 	changedProcessors := changedConfigGroups(
-		oldConfig[ConfigProcessors.String()], c[ConfigProcessors.String()])
+		oldConfig[cp], c[cp])
 	changedStreamProcessors := changedConfigGroups(
-		oldConfig[ConfigProcessors.String()], c[ConfigProcessors.String()])
+		oldConfig[csp], c[csp])
 	configType := BaseConfig(&GatewayConfig{})
-
+	// oldList keeps a track of gateways that have been compared for changes.
+	// We remove the from the list when a gateway was processed
+	// remaining items are assumed to be removed from the new config
+	oldList := map[string]bool{}
+	for g := range oldConfig[cg] {
+		oldList[g] = true
+	}
 	// go through all the gateway configs,
 	// make a list of all the ones that have processors whose config had changed
-	for key, _ := range c[ConfigGateways.String()] {
+	for key, _ := range c[cg] {
+		// check the processors in the SaveProcess and StreamSaveProcess settings to see if
+		// they changed. If changed, then make a record of which gateways use the processors
 		e, _ := Svc.ExtractConfig(ConfigGateways, key, c, configType)
 		bcfg := e.(*GatewayConfig)
 		config := NewStackConfig(bcfg.SaveProcess)
@@ -174,9 +184,9 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 				changed[key] = true
 			}
 		}
-		if o, ok := oldConfig[key]; ok {
-			delete(oldConfig, key)
-			if !reflect.DeepEqual(c[key], o) {
+		if o, ok := oldConfig[cg][key]; ok {
+			delete(oldList, key)
+			if !reflect.DeepEqual(c[cg][key], o) {
 				// whats changed
 				changed[key] = true
 			}
@@ -186,7 +196,7 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 		}
 	}
 	// whats been removed
-	for p := range oldConfig {
+	for p := range oldList {
 		removed[p] = true
 	}
 	return
@@ -200,7 +210,7 @@ func changedConfigGroups(old map[string]ConfigGroup, new map[string]ConfigGroup)
 	all = append(all, added...)
 	changed := make(map[string]bool, 0)
 	for p := range all {
-		changed[all[p]] = true
+		changed[strings.ToLower(all[p])] = true
 	}
 	return changed
 }

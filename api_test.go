@@ -462,8 +462,6 @@ var funkyLogger = func() backends.Decorator {
 						e.RcptTo[len(e.RcptTo)-1])
 					// if valid then forward call to the next processor in the chain
 					return p.Process(e, task)
-					// if invalid, return a backend result
-					//return backends.NewResult(response.Canned.FailRcptCmd), nil
 				} else if task == backends.TaskSaveMail {
 					backends.Log().Info("Another funky email!")
 				}

@@ -357,7 +357,6 @@ func (gw *BackendGateway) Reinitialize() error {
 
 	err := gw.Initialize(gw.config)
 	if err != nil {
-		fmt.Println("reinitialize to ", gw.config, err)
 		return fmt.Errorf("error while initializing the backend: %s", err)
 	}
 

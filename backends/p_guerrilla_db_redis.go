@@ -390,11 +390,14 @@ func GuerrillaDbRedis() Decorator {
 	}))
 
 	Svc.AddShutdowner(ShutdownWith(func() error {
-		if err := db.Close(); err != nil {
-			Log().WithError(err).Error("close mysql failed")
-		} else {
-			Log().Infof("closed mysql")
+		if db != nil {
+			if err := db.Close(); err != nil {
+				Log().WithError(err).Error("close sql database")
+			} else {
+				Log().Infof("closed sql database")
+			}
 		}
+
 		if redisClient.conn != nil {
 			if err := redisClient.conn.Close(); err != nil {
 				Log().WithError(err).Error("close redis failed")
