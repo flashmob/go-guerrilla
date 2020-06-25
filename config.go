@@ -253,7 +253,7 @@ func (c *AppConfig) emitBackendChangeEvents(oldConfig *AppConfig, app Guerrilla)
 		app.Publish(EventConfigBackendConfigAdded, c, b)
 	}
 	for b := range removed {
-		app.Publish(EventConfigBackendConfigAdded, c, b)
+		app.Publish(EventConfigBackendConfigRemoved, c, b)
 	}
 }
 

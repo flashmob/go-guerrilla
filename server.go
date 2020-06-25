@@ -242,7 +242,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 		return fmt.Errorf("[%s] Cannot listen on port: %s ", s.listenInterface, err.Error())
 	}
 
-	s.log().Infof("Listening on TCP %s", s.listenInterface)
+	s.log().Fields("iface", s.listenInterface).Info("listening on TCP")
 	s.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 

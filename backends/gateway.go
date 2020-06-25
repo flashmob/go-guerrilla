@@ -596,7 +596,8 @@ func (gw *BackendGateway) workDispatcher(
 
 	}()
 	state = dispatcherStateIdle
-	Log().Infof("processing worker started (#%d)", workerId)
+	Log().Fields("id", workerId, "gateway", gw.name).
+		Infof("processing worker started")
 	for {
 		select {
 		case <-stop:

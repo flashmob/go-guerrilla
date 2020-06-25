@@ -3,7 +3,6 @@ package guerrilla
 import (
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
 	"sync"
@@ -443,7 +442,7 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigServerGatewayConfig] = serverEvent(func(sc *ServerConfig) {
 		b := g.backend(sc.Gateway)
 		if b == nil {
-			g.mainlog().WithField("gateway", sc.Gateway).Error("could not change to gateway, not configured")
+			g.mainlog().Fields("gateway", sc.Gateway).Error("could not change to gateway, not configured")
 			return
 		}
 		g.storeBackend(b)
@@ -451,21 +450,18 @@ func (g *guerrilla) subscribeEvents() {
 
 	revertIfError := func(err error, name string, logger log.Logger, g *guerrilla) {
 		if err != nil {
-			fields := logrus.Fields{"error": err, "gateway": name}
-			logger.WithFields(fields).Error("cannot change gateway config, reverting to old config")
+			logger.Fields("error", err, "gateway", name).Error("cannot change gateway config, reverting to old config")
 			err = g.backend(name).Reinitialize()
 			if err != nil {
-				fields = logrus.Fields{"error": err, "gateway": name}
-				logger.WithFields(fields).Error("failed to revert to old gateway config")
+				logger.Fields("error", err, "gateway", name).Error("failed to revert to old gateway config")
 				return
 			}
 			err = g.backend(name).Start()
 			if err != nil {
-				fields = logrus.Fields{"error": err, "gateway": name}
-				logger.WithFields(fields).Error("failed to start gateway with old config")
+				logger.Fields("error", err, "gateway", name).Error("failed to start gateway with old config")
 				return
 			}
-			logger.WithField("gateway", name).Info("reverted to old gateway config")
+			logger.Fields("gateway", name).Info("reverted to old gateway config")
 		}
 	}
 
@@ -474,8 +470,7 @@ func (g *guerrilla) subscribeEvents() {
 		var err error
 		// shutdown the backend first.
 		if err = g.backend(name).Shutdown(); err != nil {
-			fields := logrus.Fields{"error": err, "gateway": name}
-			logger.WithFields(fields).Error("gateway failed to shutdown")
+			logger.Fields("error", err, "gateway", name).Error("gateway failed to shutdown")
 			return // we can't do anything then
 		}
 		if newBackend, newErr := backends.New(name, appConfig.BackendConfig, logger); newErr != nil {
@@ -484,12 +479,11 @@ func (g *guerrilla) subscribeEvents() {
 			return
 		} else {
 			if err = newBackend.Start(); err != nil {
-				fields := logrus.Fields{"error": err, "gateway": name}
-				logger.WithFields(fields).Error("gateway could not start")
+				logger.Fields("error", err, "gateway", name).Error("gateway could not start")
 				revertIfError(err, name, logger, g) // revert to old backend
 				return
 			} else {
-				logger.WithField("gateway", name).Info("gateway with new config started")
+				logger.Fields("gateway", name).Info("gateway with new config started")
 				g.storeBackend(newBackend)
 			}
 		}
@@ -499,20 +493,16 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigBackendConfigAdded] = backendEvent(func(appConfig *AppConfig, name string) {
 		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
 		// shutdown any old backend first.
-
 		if newBackend, newErr := backends.New(name, appConfig.BackendConfig, logger); newErr != nil {
-			fields := logrus.Fields{"error": newErr, "gateway": name}
-			logger.WithFields(fields).Error("cannot add new gateway")
+			logger.Fields("error", newErr, "gateway", name).Error("cannot add new gateway")
 		} else {
 			// swap to the bew gateway (assuming old gateway was shutdown so it can be safely swapped)
 			if err := newBackend.Start(); err != nil {
-				fields := logrus.Fields{"error": err, "gateway": name}
-				logger.WithFields(fields).Error("cannot start new gateway")
+				logger.Fields("error", err, "gateway", name).Error("cannot start new gateway")
 			}
-			logger.WithField("gateway", name).Info("new gateway started")
+			logger.Fields("gateway", name).Info("new gateway started")
 			g.storeBackend(newBackend)
 		}
-
 	})
 
 	// remove a gateway (shut it down)
@@ -523,11 +513,11 @@ func (g *guerrilla) subscribeEvents() {
 		// revert
 		defer revertIfError(err, name, logger, g)
 		if err = g.backend(name).Shutdown(); err != nil {
-			logger.WithFields(logrus.Fields{"error": err, "gateway": name}).Warn("gateway failed to shutdown")
+			logger.Fields("error", err, "gateway", name).Warn("gateway failed to shutdown")
 			return
 		}
 		g.removeBackend(g.backend(name))
-		logger.WithField("gateway", name).Info("gateway removed")
+		logger.Fields("gateway", name).Info("gateway removed")
 	})
 
 	var err error
@@ -610,7 +600,7 @@ func (g *guerrilla) Start() error {
 		}
 		startWG.Add(1)
 		go func(s *server) {
-			g.mainlog().Infof("Starting: %s", s.listenInterface)
+			g.mainlog().Fields("iface", s.listenInterface).Info("starting server")
 			if err := s.Start(&startWG); err != nil {
 				errs <- err
 			}
@@ -638,7 +628,7 @@ func (g *guerrilla) Shutdown() {
 	g.mapServers(func(s *server) {
 		if s.state == ServerStateRunning {
 			s.Shutdown()
-			g.mainlog().Infof("shutdown completed for [%s]", s.listenInterface)
+			g.mainlog().Fields("iface", s.listenInterface).Info("shutdown completed")
 		}
 	})
 
@@ -675,7 +665,7 @@ func (g *guerrilla) writePid() (err error) {
 			}
 		}
 		if err != nil {
-			g.mainlog().WithError(err).Errorf("error while writing pidFile (%s)", g.Config.PidFile)
+			g.mainlog().Fields("error", err, "file", g.Config.PidFile).Errorf("error while writing pidFile")
 		}
 	}()
 	if len(g.Config.PidFile) > 0 {
@@ -689,7 +679,7 @@ func (g *guerrilla) writePid() (err error) {
 		if err = f.Sync(); err != nil {
 			return err
 		}
-		g.mainlog().Infof("pid_file (%s) written with pid:%v", g.Config.PidFile, pid)
+		g.mainlog().Fields("file", g.Config.PidFile, "pid", pid).Info("pid_file written")
 	}
 	return nil
 }

@@ -630,7 +630,7 @@ func TestServe(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server not started")
 	}
 
@@ -711,7 +711,7 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -731,13 +731,14 @@ func TestServerAddEvent(t *testing.T) {
 		}
 	}
 	// send a sighup signal to the server
-	sigHup("pidfile.pid")
-	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
+	sigHup("./pidfile.pid")
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2526\"", 0); err != nil {
 		t.Error("new server didn't start")
 	}
 
 	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
 		t.Error("Could not connect to new server", newServer.ListenInterface, err)
+		return
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -791,7 +792,7 @@ func TestServerStartEvent(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 	// now change the config by adding a server
@@ -813,7 +814,7 @@ func TestServerStartEvent(t *testing.T) {
 	sigHup("pidfile.pid")
 
 	// see if the new server started?
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2228\"", 0); err != nil {
 		t.Error("second server didn't start")
 	}
 
@@ -872,7 +873,7 @@ func TestServerStopEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 	// now change the config by enabling a server
@@ -893,7 +894,7 @@ func TestServerStopEvent(t *testing.T) {
 	// send a sighup signal to the server
 	sigHup("pidfile.pid")
 	// detect config change
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2228\"", 0); err != nil {
 		t.Error("new server didn't start")
 	}
 
@@ -1005,7 +1006,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1114,7 +1115,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	}()
 
 	// wait for server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1302,7 +1303,7 @@ func TestBadTLSReload(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:4655\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1398,7 +1399,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:4655\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1490,7 +1491,8 @@ func TestDebugLevelChange(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1595,7 +1597,7 @@ func TestBadBackendReload(t *testing.T) {
 
 		// did the pidfile change as expected?
 
-		if _, err := grepTestlog("pid_file (./pidfile2.pid) written", 0); err != nil {
+		if _, err := grepTestlog("msg=\"pid_file written\" file=./pidfile2.pid", 0); err != nil {
 			t.Error("pid_file (./pidfile2.pid) not written")
 		}
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {

@@ -429,7 +429,7 @@ func TestSetConfigError(t *testing.T) {
 
 	err := d.SetConfig(cfg)
 	if err == nil {
-		t.Error("SetConfig should have returned an error compalning about bad tls settings")
+		t.Error("SetConfig should have returned an error complaining about bad tls settings")
 		return
 	}
 }
@@ -815,6 +815,7 @@ func TestCustomBackendResult(t *testing.T) {
 
 	if err := d.Start(); err != nil {
 		t.Error(err)
+		return
 	}
 	// lets have a talk with the server
 	if err := talkToServer("127.0.0.1:2525", ""); err != nil {
@@ -835,6 +836,99 @@ func TestCustomBackendResult(t *testing.T) {
 
 	if !strings.Contains(string(b), "system shock") {
 		t.Error("did not log: system shock")
+	}
+
+}
+
+// Test a backends removed, 2 new backends added added
+func TestBackendAddRemove(t *testing.T) {
+
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+
+	servers := []ServerConfig{
+		0: {
+			IsEnabled:       true,
+			Hostname:        "mail.guerrillamail.com",
+			MaxSize:         100017,
+			Timeout:         160,
+			ListenInterface: "127.0.0.1:2526",
+			MaxClients:      2,
+			TLS: ServerTLSConfig{
+				PrivateKeyFile: "",
+				PublicKeyFile:  "",
+				StartTLSOn:     false,
+				AlwaysOn:       false,
+			},
+		},
+	}
+
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		PidFile:      "tests/go-guerrilla.pid",
+		AllowedHosts: []string{"grr.la", "spam4.me"},
+		BackendConfig: backends.BackendConfig{
+			"gateways": {
+				"default": {
+					"save_process":     "HeadersParser|Debugger|Custom",
+					"validate_process": "Custom",
+				},
+				"temp": {
+					"save_process":     "HeadersParser|Debugger|Custom",
+					"validate_process": "Custom",
+				},
+			},
+		},
+		Servers: servers,
+	}
+
+	d := Daemon{Config: cfg}
+	d.AddProcessor("Custom", customBackend2)
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	cfg2 := *cfg
+	cfg2.BackendConfig = backends.BackendConfig{
+		"gateways": {
+			"client1": {
+				"save_process":     "HeadersParser|Debugger|Custom",
+				"validate_process": "Custom",
+			},
+			"client2": {
+				"save_process":     "HeadersParser|Debugger",
+				"validate_process": "Custom",
+			},
+		},
+	}
+
+	eventFiredAdded := false
+	_ = d.Subscribe(EventConfigBackendConfigAdded, backendEvent(func(appConfig *AppConfig, name string) {
+		eventFiredAdded = true
+	}))
+
+	eventFiredRemoved := false
+	_ = d.Subscribe(EventConfigBackendConfigRemoved, backendEvent(func(appConfig *AppConfig, name string) {
+		eventFiredRemoved = true
+	}))
+
+	// default changed, temp removed, client1 and client2 added
+
+	if err := d.ReloadConfig(cfg2); err != nil {
+		t.Error(err)
+		return
+	}
+
+	d.Shutdown()
+
+	if eventFiredAdded == false {
+		t.Error("EventConfigBackendConfigAdded did not fired")
+	}
+	if eventFiredRemoved == false {
+		t.Error("EventConfigBackendConfigRemoved did not get fired")
 	}
 
 }

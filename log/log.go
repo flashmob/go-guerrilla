@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	loglib "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -60,6 +61,7 @@ type Logger interface {
 	GetLevel() string
 	IsDebug() bool
 	AddHook(h loglib.Hook)
+	Fields(fields ...interface{}) *loglib.Entry
 }
 
 // Implements the Logger interface
@@ -217,4 +219,27 @@ func (l *HookedLogger) WithConn(conn net.Conn) *loglib.Entry {
 		addr = conn.RemoteAddr().String()
 	}
 	return l.WithField("addr", addr)
+}
+
+// Fields accepts an even number of arguments in the format of ([<string> <interface{}>)1*
+func (l *HookedLogger) Fields(spec ...interface{}) *loglib.Entry {
+	size := len(spec)
+	if size < 2 || size%2 != 0 {
+		return l.WithField("oops", "wrong fields specified")
+	}
+	fields := make(map[string]interface{}, size/2)
+	for i := range spec {
+		if i%2 != 0 {
+			continue
+		}
+		if key, ok := spec[i].(string); ok {
+			fields[key] = spec[i+1]
+		} else if key, ok := spec[i].(fmt.Stringer); ok {
+			fields[key.String()] = spec[i+1]
+		} else {
+			fields[fmt.Sprintf("%d", i)] = spec[i+1]
+		}
+
+	}
+	return l.WithFields(fields)
 }

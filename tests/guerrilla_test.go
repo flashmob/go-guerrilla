@@ -201,10 +201,10 @@ func TestStart(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:4654"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"listening on TCP\" iface=\"127.0.0.1:4654\""); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "Listening on TCP 127.0.0.1:2526"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"listening on TCP\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:2526")
 		}
 		if i := strings.Index(logOutput, "[127.0.0.1:4654] Waiting for a new client"); i < 0 {
@@ -219,10 +219,10 @@ func TestStart(t *testing.T) {
 		if i := strings.Index(logOutput, "Server [127.0.0.1:2526] has stopped accepting new clients"); i < 0 {
 			t.Error("Server did not stop on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "shutdown completed for [127.0.0.1:4654]"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:4654\""); i < 0 {
 			t.Error("Server did not complete shutdown on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "shutdown completed for [127.0.0.1:2526]"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not complete shutdown on 127.0.0.1:2526")
 		}
 		if i := strings.Index(logOutput, "shutting down pool [127.0.0.1:4654]"); i < 0 {
