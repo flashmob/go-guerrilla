@@ -97,7 +97,7 @@ func TestAddressWithIP(t *testing.T) {
 }
 
 func TestEnvelope(t *testing.T) {
-	e := NewEnvelope("127.0.0.1", 22)
+	e := NewEnvelope("127.0.0.1", 22, "127.0.0.1:25")
 
 	e.QueuedId = "abc123"
 	e.Helo = "helo.example.com"

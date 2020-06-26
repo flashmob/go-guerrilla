@@ -608,7 +608,7 @@ func TestChunkSaverWrite(t *testing.T) {
 
 func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
 	// place the parse result in an envelope
-	e := mail.NewEnvelope("127.0.0.1", 1)
+	e := mail.NewEnvelope("127.0.0.1", 1, "127.0.0.1:25")
 	to, _ := mail.NewAddress("test@test.com")
 	e.RcptTo = append(e.RcptTo, *to)
 	from, _ := mail.NewAddress("test@test.com")
