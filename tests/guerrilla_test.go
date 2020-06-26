@@ -207,16 +207,17 @@ func TestStart(t *testing.T) {
 		if i := strings.Index(logOutput, "msg=\"listening on TCP\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not listen on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "[127.0.0.1:4654] Waiting for a new client"); i < 0 {
+		// msg="waiting for a new client" iface="127.0.0.1:4654"
+		if i := strings.Index(logOutput, "msg=\"waiting for a new client\" iface=\"127.0.0.1:4654\""); i < 0 {
 			t.Error("Server did not wait on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "[127.0.0.1:2526] Waiting for a new client"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"waiting for a new client\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not wait on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "Server [127.0.0.1:4654] has stopped accepting new clients"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:4654\""); i < 0 {
 			t.Error("Server did not stop on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "Server [127.0.0.1:2526] has stopped accepting new clients"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not stop on 127.0.0.1:2526")
 		}
 		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:4654\""); i < 0 {
@@ -225,10 +226,10 @@ func TestStart(t *testing.T) {
 		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not complete shutdown on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "shutting down pool [127.0.0.1:4654]"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"shutting down pool\" iface=\"127.0.0.1:4654\""); i < 0 {
 			t.Error("Server did not shutdown pool on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "shutting down pool [127.0.0.1:2526]"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"shutting down pool\" iface=\"127.0.0.1:2526\""); i < 0 {
 			t.Error("Server did not shutdown pool on 127.0.0.1:2526")
 		}
 		if i := strings.Index(logOutput, "Backend shutdown completed"); i < 0 {
@@ -305,7 +306,7 @@ func TestGreeting(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"handle client\" peer=127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}
@@ -363,7 +364,7 @@ func TestShutDown(t *testing.T) {
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//	fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "Handle client [127.0.0.1"); i < 0 {
+		if i := strings.Index(logOutput, "msg=\"handle client\" peer=127.0.0.1"); i < 0 {
 			t.Error("Server did not handle any clients")
 		}
 	}

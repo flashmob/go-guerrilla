@@ -65,7 +65,7 @@ func (d *Daemon) Start() (err error) {
 	err = d.g.Start()
 	if err == nil {
 		if err := d.resetLogger(); err == nil {
-			d.Log().Infof("main log configured to %s", d.Config.LogFile)
+			d.Log().Fields("file", d.Config.LogFile).Info("main log configured")
 		}
 	}
 	return err
@@ -122,7 +122,7 @@ func (d *Daemon) ReloadConfig(c AppConfig) error {
 		d.Log().WithError(err).Error("Error while reloading config")
 		return err
 	}
-	d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+	d.Log().Info("configuration was reloaded")
 	d.Config.EmitChangeEvents(&oldConfig, d.g)
 
 	return nil
@@ -137,7 +137,7 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 	} else if d.Config != nil {
 		oldConfig := *d.Config
 		d.Config = &ac
-		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+		d.Log().Info("configuration was reloaded")
 		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
 	return nil

@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -84,7 +83,7 @@ var (
 )
 
 func (c command) match(in []byte) bool {
-	return bytes.Index(in, []byte(c)) == 0
+	return bytes.Index(in, c) == 0
 }
 
 // Creates and returns a new ready-to-run Server from a ServerConfig configuration
@@ -101,11 +100,11 @@ func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*serve
 	if sc.LogFile == "" {
 		// none set, use the mainlog for the server log
 		server.logStore.Store(mainlog)
-		server.log().Info("server [" + sc.ListenInterface + "] did not configure a separate log file, so using the main log")
+		server.log().Fields("iface", sc.ListenInterface).Info("server did not configure a separate log file, so using the main log")
 	} else {
 		// set level to same level as mainlog level
 		if l, logOpenError := log.GetLogger(sc.LogFile, server.mainlog().GetLevel()); logOpenError != nil {
-			server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+			server.log().Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for server")
 			return server, logOpenError
 		} else {
 			server.logStore.Store(l)
@@ -158,7 +157,8 @@ func (s *server) configureTLS() error {
 		if len(sConfig.TLS.RootCAs) > 0 {
 			caCert, err := ioutil.ReadFile(sConfig.TLS.RootCAs)
 			if err != nil {
-				s.log().WithError(err).Errorf("failed opening TLSRootCAs file [%s]", sConfig.TLS.RootCAs)
+				s.log().Fields("error", err, "file", sConfig.TLS.RootCAs).Error("failed opening TLSRootCAs file")
+				return err
 			} else {
 				caCertPool := x509.NewCertPool()
 				caCertPool.AppendCertsFromPEM(caCert)
@@ -239,7 +239,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 	if err != nil {
 		startWG.Done() // don't wait for me
 		s.state = ServerStateStartError
-		return fmt.Errorf("[%s] Cannot listen on port: %s ", s.listenInterface, err.Error())
+		return fmt.Errorf("[%s] cannot listen on port: %s ", s.listenInterface, err.Error())
 	}
 
 	s.log().Fields("iface", s.listenInterface).Info("listening on TCP")
@@ -247,21 +247,21 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		s.log().Debugf("[%s] Waiting for a new client. Next Client ID: %d", s.listenInterface, clientID+1)
+		s.log().Fields("iface", s.listenInterface, "nextSeq", clientID+1).Debug("waiting for a new client")
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				s.log().Infof("Server [%s] has stopped accepting new clients", s.listenInterface)
+				s.log().Fields("iface", s.listenInterface).Info("server has stopped accepting new clients")
 				// the listener has been closed, wait for clients to exit
-				s.log().Infof("shutting down pool [%s]", s.listenInterface)
+				s.log().Fields("iface", s.listenInterface).Info("shutting down pool")
 				s.clientPool.ShutdownState()
 				s.clientPool.ShutdownWait()
 				s.state = ServerStateStopped
 				s.closedListener <- true
 				return nil
 			}
-			s.mainlog().WithError(err).Info("Temporary error accepting client")
+			s.mainlog().Fields("error", err, "iface", s.listenInterface).Info("temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrowErr error) {
@@ -278,7 +278,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool))
+		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool, s.listenInterface))
 
 	}
 }
@@ -373,7 +373,7 @@ const advertiseHelp = "250 HELP"
 func (s *server) handleClient(client *client) {
 	defer client.closeConn()
 	sc := s.configStore.Load().(ServerConfig)
-	s.log().Infof("Handle client [%s], id: %d", client.RemoteIP, client.ID)
+	s.log().Fields("peer", client.RemoteIP, "seq", client.ID).Info("handle client")
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
@@ -397,7 +397,7 @@ func (s *server) handleClient(client *client) {
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
-			s.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+			s.log().Fields("error", err, "peer", client.RemoteIP).Warn("failed TLS handshake")
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -415,19 +415,19 @@ func (s *server) handleClient(client *client) {
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := s.readCommand(client)
-			s.log().Debugf("Client sent: %s", input)
+			s.log().Fields("input", string(input)).Debugf("client said")
 			if err == io.EOF {
-				s.log().WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("client closed the connection")
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				s.log().WithError(err).Warnf("Timeout: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("timeout")
 				return
 			} else if err == LineLimitExceeded {
 				client.sendResponse(r.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				s.log().WithError(err).Warnf("Read error: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("read error")
 				client.kill()
 				break
 			}
@@ -446,7 +446,7 @@ func (s *server) handleClient(client *client) {
 				if h, err := client.parser.Helo(input[4:]); err == nil {
 					client.Helo = h
 				} else {
-					s.log().WithFields(logrus.Fields{"helo": h, "client": client.ID}).Warn("invalid helo")
+					s.log().Fields("helo", h, "seq", client.ID).Warn("invalid helo")
 					client.sendResponse(r.FailSyntaxError)
 					break
 				}
@@ -458,7 +458,7 @@ func (s *server) handleClient(client *client) {
 					client.Helo = h
 				} else {
 					client.sendResponse(r.FailSyntaxError)
-					s.log().WithFields(logrus.Fields{"ehlo": h, "client": client.ID}).Warn("invalid ehlo")
+					s.log().Fields("ehlo", h, "seq", client.ID).Warn("invalid ehlo")
 					client.sendResponse(r.FailSyntaxError)
 					break
 				}
@@ -501,7 +501,7 @@ func (s *server) handleClient(client *client) {
 				}
 				client.MailFrom, err = client.parsePath(input[10:], client.parser.MailFrom)
 				if err != nil {
-					s.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
+					s.log().Fields("error", err, "raw", string(input[10:])).Error("MAIL parse error")
 					client.sendResponse(err)
 					break
 				} else if client.parser.NullPath {
@@ -527,7 +527,7 @@ func (s *server) handleClient(client *client) {
 				}
 				to, err := client.parsePath(input[8:], client.parser.RcptTo)
 				if err != nil {
-					s.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
+					s.log().Fields("error", err, "raw", string(input[8:])).Error("RCPT parse error")
 					client.sendResponse(err.Error())
 					break
 				}
@@ -645,12 +645,13 @@ func (s *server) handleClient(client *client) {
 			if !client.TLS && sc.TLS.StartTLSOn {
 				tlsConfig, ok := s.tlsConfigStore.Load().(*tls.Config)
 				if !ok {
-					s.mainlog().Error("Failed to load *tls.Config")
+					s.mainlog().Fields("iface", s.listenInterface).Error("failed to load *tls.Config")
 				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()
 				} else {
-					s.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+					s.log().Fields("error", err, "iface", s.listenInterface, "ip", client.RemoteIP).
+						Warn("failed TLS handshake")
 					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}
@@ -669,7 +670,7 @@ func (s *server) handleClient(client *client) {
 		// flush the response buffer
 		if client.bufout.Buffered() > 0 {
 			if s.log().IsDebug() {
-				s.log().Debugf("Writing response to client: \n%s", client.response.String())
+				s.log().Fields("out", client.response.String()).Debug("writing response to client")
 			}
 			err := s.flushResponse(client)
 			if err != nil {
@@ -715,9 +716,8 @@ func (s *server) defaultHost(a *mail.Address) {
 		sc := s.configStore.Load().(ServerConfig)
 		a.Host = sc.Hostname
 		if !s.allowsHost(a.Host) {
-			s.log().WithFields(
-				logrus.Fields{"hostname": sc.Hostname}).
-				Warn("the hostname is not present in AllowedHosts config setting")
+			s.log().Fields("hostname", sc.Hostname).
+				Warn("the hostname is not present in the AllowedHosts config setting")
 		}
 	}
 }

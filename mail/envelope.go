@@ -2,9 +2,9 @@ package mail
 
 import (
 	"bytes"
-	"crypto/md5"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"mime"
 	"net"
@@ -154,20 +154,24 @@ type Envelope struct {
 	MessageID uint64
 	// ESMTP: true if EHLO was used
 	ESMTP bool
+	// ServerIface records the server's interface in the config
+	ServerIface string
 	// When locked, it means that the envelope is being processed by the backend
 	sync.Mutex
 }
 
-func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
+func NewEnvelope(remoteAddr string, clientID uint64, iface string) *Envelope {
 	return &Envelope{
-		RemoteIP: remoteAddr,
-		Values:   make(map[string]interface{}),
-		QueuedId: queuedID(clientID),
+		RemoteIP:    remoteAddr,
+		Values:      make(map[string]interface{}),
+		ServerIface: iface,
+		QueuedId:    queuedID(clientID, iface),
 	}
 }
 
-func queuedID(clientID uint64) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
+func queuedID(clientID uint64, iface string) string {
+	h := fnv.New128a()
+	return fmt.Sprintf("%x", h.Sum([]byte(fmt.Sprintf("%v%v%v", time.Now(), clientID, iface))))
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -232,9 +236,10 @@ func (e *Envelope) ResetTransaction() {
 }
 
 // Reseed is called when used with a new connection, once it's accepted
-func (e *Envelope) Reseed(remoteIP string, clientID uint64) {
+func (e *Envelope) Reseed(remoteIP string, clientID uint64, iface string) {
 	e.RemoteIP = remoteIP
-	e.QueuedId = queuedID(clientID)
+	e.ServerIface = iface
+	e.QueuedId = queuedID(clientID, iface)
 	e.Helo = ""
 	e.TLS = false
 	e.ESMTP = false
@@ -428,14 +433,14 @@ func NewPool(poolSize int) *Pool {
 	}
 }
 
-func (p *Pool) Borrow(remoteAddr string, clientID uint64) *Envelope {
+func (p *Pool) Borrow(remoteAddr string, clientID uint64, iface string) *Envelope {
 	var e *Envelope
 	p.sem <- true // block the envelope until more room
 	select {
 	case e = <-p.pool:
-		e.Reseed(remoteAddr, clientID)
+		e.Reseed(remoteAddr, clientID, iface)
 	default:
-		e = NewEnvelope(remoteAddr, clientID)
+		e = NewEnvelope(remoteAddr, clientID, iface)
 	}
 	return e
 }

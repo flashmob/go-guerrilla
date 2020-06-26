@@ -399,7 +399,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 	var ln int
 	var line string
 	for tries := 0; tries < 6; tries++ {
-		//fmt.Println("try..", tries)
 		for {
 			ln++
 			line, err = buff.ReadString('\n')
@@ -407,7 +406,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 				break
 			}
 			if ln > lineNumber {
-				//fmt.Print(ln, line)
 				if i := strings.Index(line, match); i != -1 {
 					return ln, nil
 				}
@@ -663,7 +661,7 @@ func TestServe(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		sigHup("pidfile.pid")
 		// did the pidfile change as expected?
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+		if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
 			t.Error("server did not catch sighup")
 		}
 	}
@@ -927,7 +925,7 @@ func TestServerStopEvent(t *testing.T) {
 	// send a sighup signal to the server
 	sigHup("pidfile.pid")
 	// detect config change
-	if _, err := grepTestlog("Server [127.0.0.1:2228] has stopped accepting new clients", 27); err != nil {
+	if _, err := grepTestlog("msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:2228\"", 27); err != nil {
 		t.Error("127.0.0.1:2228 did not stop")
 	}
 
@@ -1521,7 +1519,7 @@ func TestDebugLevelChange(t *testing.T) {
 	// send a sighup signal to the server to reload config
 	sigHup("pidfile.pid")
 	// did the config reload?
-	if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+	if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
 		t.Error("config did not reload")
 		t.FailNow()
 	}
@@ -1586,7 +1584,7 @@ func TestBadBackendReload(t *testing.T) {
 
 		d.Shutdown()
 
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+		if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
 			t.Error("config didn't update")
 		}
 

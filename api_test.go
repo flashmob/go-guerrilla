@@ -354,7 +354,7 @@ func TestReopenServerLog(t *testing.T) {
 		return
 	}
 
-	if !strings.Contains(string(b), "Handle client") {
+	if !strings.Contains(string(b), "handle client") {
 		t.Error("server log does not contain \"handle client\"")
 	}
 
