@@ -171,7 +171,8 @@ func NewEnvelope(remoteAddr string, clientID uint64, iface string) *Envelope {
 
 func queuedID(clientID uint64, iface string) string {
 	h := fnv.New128a()
-	return fmt.Sprintf("%x", h.Sum([]byte(fmt.Sprintf("%v%v%v", time.Now(), clientID, iface))))
+	_, _ = h.Write([]byte(fmt.Sprintf("%v%v%v", time.Now(), clientID, iface)))
+	return fmt.Sprintf("%x", h.Sum([]byte{}))
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
