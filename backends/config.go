@@ -69,9 +69,9 @@ func (c BackendConfig) toLower() {
 	}
 }
 
-func (c BackendConfig) group(ns string, name string) *ConfigGroup {
+func (c BackendConfig) group(ns string, name string) ConfigGroup {
 	if v, ok := c[ns][name]; ok {
-		return &v
+		return v
 	}
 	return nil
 }

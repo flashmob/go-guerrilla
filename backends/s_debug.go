@@ -32,13 +32,11 @@ type streamDebuggerConfig struct {
 }
 
 func StreamDebug() *StreamDecorator {
-
 	sd := &StreamDecorator{}
 	var config streamDebuggerConfig
-	sd.Configure = func(cfg *ConfigGroup) error {
+	sd.Configure = func(cfg ConfigGroup) error {
 		return sd.ExtractConfig(cfg, &config)
 	}
-
 	sd.Decorate =
 		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			sd.Open = func(e *mail.Envelope) error {
@@ -62,6 +60,5 @@ func StreamDebug() *StreamDecorator {
 				return sp.Write(p)
 			})
 		}
-
 	return sd
 }

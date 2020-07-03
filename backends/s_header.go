@@ -53,37 +53,23 @@ func (sh *streamHeader) addHeader(e *mail.Envelope, config *HeaderConfig) {
 		addHead += "	by " + e.RcptTo[0].Host + " with SMTP id " + hash + "@" + e.RcptTo[0].Host + ";\n"
 	}
 	addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
-
 	sh.addHead = []byte(addHead)
 }
 
 func StreamHeader() *StreamDecorator {
-
 	var hc *HeaderConfig
-
-	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-		configType := BaseConfig(&HeaderConfig{})
-		bcfg, err := Svc.ExtractConfig(
-			ConfigStreamProcessors, "header", backendConfig, configType)
-		if err != nil {
-			return err
-		}
-		hc = bcfg.(*HeaderConfig)
-		return nil
-	}))
-
 	sd := &StreamDecorator{}
+	sd.Configure = func(cfg ConfigGroup) error {
+		return sd.ExtractConfig(cfg, &hc)
+	}
 	sd.Decorate =
-
 		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			var sh *streamHeader
-
 			sd.Open = func(e *mail.Envelope) error {
 				sh = newStreamHeader(sp)
 				sh.addHeader(e, hc)
 				return nil
 			}
-
 			return StreamProcessWith(func(p []byte) (int, error) {
 				if sh.i < len(sh.addHead) {
 					for {
@@ -100,6 +86,5 @@ func StreamHeader() *StreamDecorator {
 				return sp.Write(p)
 			})
 		}
-
 	return sd
 }

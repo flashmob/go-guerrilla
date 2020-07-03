@@ -9,7 +9,7 @@ type streamOpenWith func(e *mail.Envelope) error
 
 type streamCloseWith func() error
 
-type streamConfigureWith func(cfg *ConfigGroup) error
+type streamConfigureWith func(cfg ConfigGroup) error
 
 // We define what a decorator to our processor will look like
 // StreamProcessor argument is the underlying processor that we're decorating
@@ -22,7 +22,7 @@ type StreamDecorator struct {
 	Configure streamConfigureWith
 }
 
-func (s StreamDecorator) ExtractConfig(cfg *ConfigGroup, i interface{}) error {
+func (s StreamDecorator) ExtractConfig(cfg ConfigGroup, i interface{}) error {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return err
