@@ -12,6 +12,8 @@ import (
 // Description   : Log received emails
 // ----------------------------------------------------------------------------------
 // Config Options: log_received_mails bool - log if true
+//               : sleep_seconds - how many seconds to pause for, useful to force a
+//               : timeout. If sleep_seconds is 1 then a panic will be induced
 // --------------:-------------------------------------------------------------------
 // Input         : e.MailFrom, e.RcptTo, e.Header
 // ----------------------------------------------------------------------------------
@@ -49,7 +51,6 @@ func Debugger() Decorator {
 					Log().Info("Headers are:", e.Header)
 					Log().Info("Body:", e.Data.String())
 				}
-
 				if config.SleepSec > 0 {
 					Log().Infof("sleeping for %d", config.SleepSec)
 					time.Sleep(time.Second * time.Duration(config.SleepSec))
@@ -59,7 +60,6 @@ func Debugger() Decorator {
 						panic("panic on purpose")
 					}
 				}
-
 				// continue to the next Processor in the decorator stack
 				return p.Process(e, task)
 			} else {

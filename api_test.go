@@ -933,6 +933,68 @@ func TestBackendAddRemove(t *testing.T) {
 
 }
 
+func TestStreamProcessorConfig(t *testing.T) {
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+
+	servers := []ServerConfig{
+		0: {
+			IsEnabled:       true,
+			Hostname:        "mail.guerrillamail.com",
+			MaxSize:         100017,
+			Timeout:         160,
+			ListenInterface: "127.0.0.1:2526",
+			MaxClients:      2,
+			TLS: ServerTLSConfig{
+				PrivateKeyFile: "",
+				PublicKeyFile:  "",
+				StartTLSOn:     false,
+				AlwaysOn:       false,
+			},
+		},
+	}
+
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		PidFile:      "tests/go-guerrilla.pid",
+		AllowedHosts: []string{"grr.la", "spam4.me"},
+		BackendConfig: backends.BackendConfig{
+			"stream_procEssoRs": { // note mixed case
+				"chunkSaver": { // note mixed case
+					"chunksaver_chunk_size":     8000,
+					"chunksaver_storage_engine": "memory",
+					"chunksaver_compress_level": 0,
+				},
+				"test:chunksaver": {
+					"chunksaver_chunk_size":     8000,
+					"chunksaver_storage_engine": "memory",
+					"chunksaver_compress_level": 0,
+				},
+				"debug": {
+					"sleep_seconds": 2,
+					"log_reads":     true,
+				},
+			},
+			"gateways": {
+				"default": {
+					"stream_save_process": "mimeanalyzer|chunksaver|test|debug",
+				},
+			},
+		},
+		Servers: servers,
+	}
+
+	d := Daemon{Config: cfg}
+	if err := d.Start(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	d.Shutdown()
+
+}
+
 func TestStreamProcessor(t *testing.T) {
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
@@ -941,6 +1003,11 @@ func TestStreamProcessor(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
+			"stream_processors": {
+				"debug": {
+					"log_reads": true,
+				},
+			},
 			"gateways": {
 				"default": {
 					"save_process":        "HeadersParser|Debugger",
@@ -1252,6 +1319,11 @@ func TestStreamMimeProcessor(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
+			"stream_processors": {
+				"debug": {
+					"log_reads": true,
+				},
+			},
 			"gateways": {
 				"default": {
 					"save_process":        "HeadersParser|Debugger",

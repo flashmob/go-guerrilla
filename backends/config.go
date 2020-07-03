@@ -52,26 +52,51 @@ func (c *BackendConfig) GetValue(ns configNameSpace, name string, key string) in
 	return nil
 }
 
+// toLower normalizes the backendconfig lowercases the config's keys
+func (c BackendConfig) toLower() {
+	for k, v := range c {
+		var l string
+		if l = strings.ToLower(k); k != l {
+			c[l] = v
+			delete(c, k)
+		}
+		for k2, v2 := range v {
+			if l2 := strings.ToLower(k2); k2 != l2 {
+				c[l][l2] = v2
+				delete(c[l], k)
+			}
+		}
+	}
+}
+
+func (c BackendConfig) group(ns string, name string) *ConfigGroup {
+	if v, ok := c[ns][name]; ok {
+		return &v
+	}
+	return nil
+}
+
 // ConfigureDefaults sets default values for the backend config,
 // if no backend config was added before starting, then use a default config
 // otherwise, see what required values were missed in the config and add any missing with defaults
 func (c *BackendConfig) ConfigureDefaults() error {
 	// set the defaults if no value has been configured
+	// (always use lowercase)
 	if c.GetValue(ConfigGateways, "default", "save_workers_size") == nil {
 		c.SetValue(ConfigGateways, "default", "save_workers_size", 1)
 	}
 	if c.GetValue(ConfigGateways, "default", "save_process") == nil {
 		c.SetValue(ConfigGateways, "default", "save_process", "HeadersParser|Header|Debugger")
 	}
-	if c.GetValue(ConfigProcessors, "default", "primary_mail_host") == nil {
+	if c.GetValue(ConfigProcessors, "header", "primary_mail_host") == nil {
 		h, err := os.Hostname()
 		if err != nil {
 			return err
 		}
-		c.SetValue(ConfigProcessors, "Header", "primary_mail_host", h)
+		c.SetValue(ConfigProcessors, "header", "primary_mail_host", h)
 	}
-	if c.GetValue(ConfigProcessors, "default", "log_received_mails") == nil {
-		c.SetValue(ConfigProcessors, "Debugger", "log_received_mails", true)
+	if c.GetValue(ConfigProcessors, "debugger", "log_received_mails") == nil {
+		c.SetValue(ConfigProcessors, "debugger", "log_received_mails", true)
 	}
 	return nil
 }
@@ -104,6 +129,13 @@ type stackConfigExpression struct {
 	name  string
 }
 
+func (e stackConfigExpression) String() string {
+	if e.alias == e.name || e.alias == "" {
+		return e.name
+	}
+	return fmt.Sprintf("%s:%s", e.alias, e.name)
+}
+
 type notFoundError func(s string) error
 
 type stackConfig struct {
@@ -111,7 +143,29 @@ type stackConfig struct {
 	notFound notFoundError
 }
 
-func NewStackConfig(config string) (ret *stackConfig) {
+type aliasMap map[string]string
+
+// newAliasMap scans through the configured processors to produce a mapping
+// alias -> processor name. This mapping is used to determine what configuration to use
+// when making a new processor
+func newAliasMap(cfg map[string]ConfigGroup) aliasMap {
+	am := make(aliasMap, 0)
+	for k, _ := range cfg {
+		var alias, name string
+		// format: <alias> : <processorName>
+		if i := strings.Index(k, ":"); i > 0 && len(k) > i+2 {
+			alias = k[0:i]
+			name = k[i+1:]
+		} else {
+			alias = k
+			name = k
+		}
+		am[strings.ToLower(alias)] = strings.ToLower(name)
+	}
+	return am
+}
+
+func NewStackConfig(config string, am aliasMap) (ret *stackConfig) {
 	ret = new(stackConfig)
 	cfg := strings.ToLower(strings.TrimSpace(config))
 	if cfg == "" {
@@ -122,21 +176,24 @@ func NewStackConfig(config string) (ret *stackConfig) {
 	pos := 0
 	for i := range items {
 		pos = len(items) - 1 - i // reverse order, since decorators are stacked
-		ret.list[i] = stackConfigExpression{alias: "", name: items[pos]}
+		ret.list[i] = stackConfigExpression{alias: items[pos], name: items[pos]}
+		if processor, ok := am[items[pos]]; ok {
+			ret.list[i].name = processor
+		}
 	}
 	return ret
 }
 
-func newStackProcessorConfig(config string) (ret *stackConfig) {
-	ret = NewStackConfig(config)
+func newStackProcessorConfig(config string, am aliasMap) (ret *stackConfig) {
+	ret = NewStackConfig(config, am)
 	ret.notFound = func(s string) error {
 		return errors.New(fmt.Sprintf("processor [%s] not found", s))
 	}
 	return ret
 }
 
-func newStackStreamProcessorConfig(config string) (ret *stackConfig) {
-	ret = NewStackConfig(config)
+func newStackStreamProcessorConfig(config string, am aliasMap) (ret *stackConfig) {
+	ret = NewStackConfig(config, am)
 	ret.notFound = func(s string) error {
 		return errors.New(fmt.Sprintf("stream processor [%s] not found", s))
 	}
@@ -146,7 +203,6 @@ func newStackStreamProcessorConfig(config string) (ret *stackConfig) {
 // Changes returns a list of gateways whose config changed
 func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed map[string]bool) {
 	// check the processors if changed
-
 	changed = make(map[string]bool, 0)
 	added = make(map[string]bool, 0)
 	removed = make(map[string]bool, 0)
@@ -158,6 +214,8 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	changedStreamProcessors := changedConfigGroups(
 		oldConfig[csp], c[csp])
 	configType := BaseConfig(&GatewayConfig{})
+	aliasMapStream := newAliasMap(c[csp])
+	aliasMapProcessor := newAliasMap(c[cp])
 	// oldList keeps a track of gateways that have been compared for changes.
 	// We remove the from the list when a gateway was processed
 	// remaining items are assumed to be removed from the new config
@@ -172,13 +230,14 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 		// they changed. If changed, then make a record of which gateways use the processors
 		e, _ := Svc.ExtractConfig(ConfigGateways, key, c, configType)
 		bcfg := e.(*GatewayConfig)
-		config := NewStackConfig(bcfg.SaveProcess)
+		config := NewStackConfig(bcfg.SaveProcess, aliasMapProcessor)
 		for _, v := range config.list {
 			if _, ok := changedProcessors[v.name]; ok {
 				changed[key] = true
 			}
 		}
-		config = NewStackConfig(bcfg.StreamSaveProcess)
+
+		config = NewStackConfig(bcfg.StreamSaveProcess, aliasMapStream)
 		for _, v := range config.list {
 			if _, ok := changedStreamProcessors[v.name]; ok {
 				changed[key] = true

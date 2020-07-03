@@ -123,6 +123,7 @@ type processorShutdowner interface {
 }
 
 type InitializeWith func(backendConfig BackendConfig) error
+type InitializeStreamWith func(conf ConfigGroup) error
 type ShutdownWith func() error
 
 // Satisfy ProcessorInitializer interface
@@ -130,6 +131,11 @@ type ShutdownWith func() error
 func (i InitializeWith) Initialize(backendConfig BackendConfig) error {
 	// delegate to the anonymous function
 	return i(backendConfig)
+}
+
+func (i InitializeStreamWith) Initialize(conf ConfigGroup) error {
+	// delegate to the anonymous function
+	return i(conf)
 }
 
 // satisfy ProcessorShutdowner interface, same concept as InitializeWith type
@@ -177,7 +183,7 @@ func (s *service) SetMainlog(l log.Logger) {
 	s.mainlog.Store(l)
 }
 
-// AddInitializer adds a function that implements ProcessorShutdowner to be called when initializing
+// AddInitializer adds a function that implements processorInitializer to be called when initializing
 func (s *service) AddInitializer(i processorInitializer) {
 	s.Lock()
 	defer s.Unlock()

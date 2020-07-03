@@ -111,6 +111,13 @@ func (s *streamer) close() error {
 	return err
 }
 
+func (s *streamer) configure(cfg BackendConfig) error {
+	//for i := range s.d {
+	//s.d[i].Configure(cg)
+	//}
+	return nil
+}
+
 type backendState int
 
 // possible values for state
@@ -153,12 +160,14 @@ func (s backendState) String() string {
 func New(name string, backendConfig BackendConfig, l log.Logger) (Backend, error) {
 	Svc.SetMainlog(l)
 	gateway := &BackendGateway{name: name}
+	backendConfig.toLower()
+	// keep the a copy of the config
+	gateway.config = backendConfig
 	err := gateway.Initialize(backendConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing the backend: %s", err)
 	}
-	// keep the a copy of the config
-	gateway.config = backendConfig
+
 	return gateway, nil
 }
 
@@ -369,7 +378,7 @@ func (gw *BackendGateway) Reinitialize() error {
 // This function uses the config value save_process or validate_process to figure out which Decorator to use
 func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
-	c := newStackProcessorConfig(stackConfig)
+	c := newStackProcessorConfig(stackConfig, newAliasMap(gw.config[ConfigProcessors.String()]))
 	if len(c.list) == 0 {
 		return NoopProcessor{}, nil
 	}
@@ -387,17 +396,27 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 
 func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	var decorators []*StreamDecorator
-	c := newStackStreamProcessorConfig(stackConfig)
+	noop := streamer{NoopStreamProcessor{}, decorators}
+	c := newStackStreamProcessorConfig(stackConfig, newAliasMap(gw.config[ConfigStreamProcessors.String()]))
 	if len(c.list) == 0 {
-		return streamer{NoopStreamProcessor{}, decorators}, nil
+		return noop, nil
 	}
 	for i := range c.list {
 		if makeFunc, ok := Streamers[c.list[i].name]; ok {
-			decorators = append(decorators, makeFunc())
+			d := makeFunc()
+			if config := gw.config.group(ConfigStreamProcessors.String(), c.list[i].String()); config != nil {
+				if d.Configure != nil {
+					if err := d.Configure(config); err != nil {
+						return noop, err
+					}
+				}
+			}
+			decorators = append(decorators, d)
 		} else {
 			return streamer{nil, decorators}, c.notFound(c.list[i].name)
 		}
 	}
+	//decorators[0].
 	// build the call-stack of decorators
 	sp, decorators := DecorateStream(&DefaultStreamProcessor{}, decorators)
 	return streamer{sp, decorators}, nil

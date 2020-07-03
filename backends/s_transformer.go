@@ -32,11 +32,6 @@ func init() {
 	}
 }
 
-type TransformerConfig struct {
-	// we can add any config here
-
-}
-
 // Transform stream processor: convert an email to UTF-8
 type Transform struct {
 	sp                  io.Writer
@@ -76,7 +71,7 @@ func (t *Transform) unswap() {
 // regexpCharset captures the charset value
 var regexpCharset = regexp.MustCompile("(?i)charset=\"?(.+)\"?") // (?i) is a flag for case-insensitive
 
-func (t *Transform) ReWrite(b []byte, last bool, offset uint) (count int, err error) {
+func (t *Transform) ReWrite(b []byte, last bool) (count int, err error) {
 	defer func() {
 		count = len(b)
 	}()
@@ -221,20 +216,6 @@ func (t *Transform) Reset() {
 
 func Transformer() *StreamDecorator {
 
-	var conf *TransformerConfig
-
-	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-		configType := BaseConfig(&TransformerConfig{})
-		bcfg, err := Svc.ExtractConfig(
-			ConfigStreamProcessors, "transformer", backendConfig, configType)
-		if err != nil {
-			return err
-		}
-		conf = bcfg.(*TransformerConfig)
-		_ = conf
-		return nil
-	}))
-
 	var (
 		msgPos   uint
 		progress int
@@ -278,7 +259,7 @@ func Transformer() *StreamDecorator {
 				var err error
 				var count int
 
-				count, err = reWriter.ReWrite(p[pos:start-offset], true, offset)
+				count, err = reWriter.ReWrite(p[pos:start-offset], true)
 
 				written += count
 				if err != nil {
@@ -329,7 +310,7 @@ func Transformer() *StreamDecorator {
 
 						// if on the latest (last) part, and yet there is still data to be written out
 						if len(*parts)-1 == i && len(p)-1 > pos {
-							count, err = reWriter.ReWrite(p[pos:], false, offset)
+							count, err = reWriter.ReWrite(p[pos:], false)
 
 							written += count
 							if err != nil {
