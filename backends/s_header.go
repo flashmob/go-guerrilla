@@ -40,7 +40,7 @@ func newStreamHeader(w io.Writer) *streamHeader {
 	return sc
 }
 
-func (sh *streamHeader) addHeader(e *mail.Envelope, config *HeaderConfig) {
+func (sh *streamHeader) addHeader(e *mail.Envelope, config *headerConfig) {
 	to := strings.TrimSpace(e.RcptTo[0].User) + "@" + config.PrimaryHost
 	hash := "unknown"
 	if len(e.Hashes) > 0 {
@@ -57,7 +57,7 @@ func (sh *streamHeader) addHeader(e *mail.Envelope, config *HeaderConfig) {
 }
 
 func StreamHeader() *StreamDecorator {
-	var hc *HeaderConfig
+	hc := headerConfig{}
 	sd := &StreamDecorator{}
 	sd.Configure = func(cfg ConfigGroup) error {
 		return sd.ExtractConfig(cfg, &hc)
@@ -67,7 +67,7 @@ func StreamHeader() *StreamDecorator {
 			var sh *streamHeader
 			sd.Open = func(e *mail.Envelope) error {
 				sh = newStreamHeader(sp)
-				sh.addHeader(e, hc)
+				sh.addHeader(e, &hc)
 				return nil
 			}
 			return StreamProcessWith(func(p []byte) (int, error) {

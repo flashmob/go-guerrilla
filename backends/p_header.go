@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type HeaderConfig struct {
+type headerConfig struct {
 	PrimaryHost string `json:"primary_mail_host"`
 }
 
@@ -34,15 +34,15 @@ func init() {
 // Sets e.DeliveryHeader part of the envelope with the generated header
 func Header() Decorator {
 
-	var config *HeaderConfig
+	var config *headerConfig
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-		configType := BaseConfig(&HeaderConfig{})
+		configType := BaseConfig(&headerConfig{})
 		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "header", backendConfig, configType)
 		if err != nil {
 			return err
 		}
-		config = bcfg.(*HeaderConfig)
+		config = bcfg.(*headerConfig)
 		return nil
 	}))
 
