@@ -111,13 +111,6 @@ func (s *streamer) close() error {
 	return err
 }
 
-func (s *streamer) configure(cfg BackendConfig) error {
-	//for i := range s.d {
-	//s.d[i].Configure(cg)
-	//}
-	return nil
-}
-
 type backendState int
 
 // possible values for state
@@ -416,7 +409,6 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 			return streamer{nil, decorators}, c.notFound(c.list[i].name)
 		}
 	}
-	//decorators[0].
 	// build the call-stack of decorators
 	sp, decorators := DecorateStream(&DefaultStreamProcessor{}, decorators)
 	return streamer{sp, decorators}, nil
