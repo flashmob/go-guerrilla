@@ -44,6 +44,7 @@ type Backend interface {
 	Process(*mail.Envelope) Result
 	// ValidateRcpt validates the last recipient that was pushed to the mail envelope
 	ValidateRcpt(e *mail.Envelope) RcptError
+	ProcessBackground(e *mail.Envelope)
 	// ProcessStream is the alternative for Process, a stream is read from io.Reader
 	ProcessStream(r io.Reader, e *mail.Envelope) (Result, error)
 	// StreamOn signals if ProcessStream can be used

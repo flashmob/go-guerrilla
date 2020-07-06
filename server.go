@@ -595,6 +595,9 @@ func (s *server) handleClient(client *client) {
 			if be.StreamOn() {
 				// process the message as a stream
 				res, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
+				if err == nil && res.Code() < 300 {
+					be.ProcessBackground(client.Envelope)
+				}
 			} else {
 				// or buffer the entire message (parse headers & mime structure as we go along)
 				n, err = client.Data.ReadFrom(client.smtpReader)

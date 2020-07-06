@@ -111,6 +111,22 @@ func (s *streamer) close() error {
 	return err
 }
 
+func (s *streamer) shutdown() error {
+	var err Errors
+	// shutdown in reverse order
+	for i := len(s.d) - 1; i >= 0; i-- {
+		if s.d[i].Shutdown != nil {
+			if e := s.d[i].Shutdown(); e != nil {
+				err = append(err, e)
+			}
+		}
+	}
+	if len(err) == 0 {
+		return nil
+	}
+	return err
+}
+
 type backendState int
 
 // possible values for state
@@ -276,6 +292,10 @@ func (gw *BackendGateway) StreamOn() bool {
 	return len(gw.gwConfig.StreamSaveProcess) != 0
 }
 
+func (gw *BackendGateway) ProcessBackground(e *mail.Envelope) {
+
+}
+
 func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, error) {
 	res := response.Canned
 	if gw.State != BackendStateRunning {
@@ -340,6 +360,12 @@ func (gw *BackendGateway) Shutdown() error {
 		gw.stopWorkers()
 		// wait for workers to stop
 		gw.wg.Wait()
+		for stream := range gw.streamers {
+			err := gw.streamers[stream].shutdown()
+			if err != nil {
+				Log().Fields("error", err, "gateway", gw.name).Error("failed shutting down stream")
+			}
+		}
 		// call shutdown on all processor shutdowners
 		if err := Svc.shutdown(); err != nil {
 			return err
@@ -390,18 +416,21 @@ func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	var decorators []*StreamDecorator
 	noop := streamer{NoopStreamProcessor{}, decorators}
-	c := newStackStreamProcessorConfig(stackConfig, newAliasMap(gw.config[ConfigStreamProcessors.String()]))
+	configKey := ConfigStreamProcessors.String()
+	c := newStackStreamProcessorConfig(stackConfig, newAliasMap(gw.config[configKey]))
 	if len(c.list) == 0 {
 		return noop, nil
 	}
 	for i := range c.list {
 		if makeFunc, ok := Streamers[c.list[i].name]; ok {
 			d := makeFunc()
-			if config := gw.config.group(ConfigStreamProcessors.String(), c.list[i].String()); config != nil {
-				if d.Configure != nil {
-					if err := d.Configure(config); err != nil {
-						return noop, err
-					}
+			config := gw.config.group(configKey, c.list[i].String())
+			if config == nil {
+				config = ConfigGroup{}
+			}
+			if d.Configure != nil {
+				if err := d.Configure(config); err != nil {
+					return noop, err
 				}
 			}
 			decorators = append(decorators, d)

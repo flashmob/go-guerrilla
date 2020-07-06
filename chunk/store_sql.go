@@ -9,17 +9,24 @@ import (
 	"net"
 )
 
+func init() {
+	StorageEngines["sql"] = func() Storage {
+		return new(StoreSQL)
+	}
+}
+
 type sqlConfig struct {
-	EmailTable  string `json:"chunksaver_email_table,omitempty"`
-	ChunkTable  string `json:"chunksaver_chunk_table,omitempty"`
-	Driver      string `json:"chunksaver_sql_driver,omitempty"`
-	DSN         string `json:"chunksaver_sql_dsn,omitempty"`
-	PrimaryHost string `json:"chunksaver_primary_mail_host,omitempty"`
+	EmailTable    string `json:"email_table,omitempty"`
+	ChunkTable    string `json:"chunk_table,omitempty"`
+	Driver        string `json:"sql_driver,omitempty"`
+	DSN           string `json:"sql_dsn,omitempty"`
+	PrimaryHost   string `json:"primary_mail_host,omitempty"`
+	CompressLevel int    `json:"compress_level,omitempty"`
 }
 
 // StoreSQL implements the Storage interface
 type StoreSQL struct {
-	config     *sqlConfig
+	config     sqlConfig
 	statements map[string]*sql.Stmt
 	db         *sql.DB
 }
@@ -180,13 +187,12 @@ func (s *StoreSQL) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo,
 }
 
 // Initialize loads the specific database config, connects to the db, prepares statements
-func (s *StoreSQL) Initialize(cfg backends.BackendConfig) error {
-	configType := backends.BaseConfig(&sqlConfig{})
-	bcfg, err := backends.Svc.ExtractConfig(backends.ConfigStreamProcessors, "chunksaver", cfg, configType)
+func (s *StoreSQL) Initialize(cfg backends.ConfigGroup) error {
+	sd := backends.StreamDecorator{}
+	err := sd.ExtractConfig(cfg, &s.config)
 	if err != nil {
 		return err
 	}
-	s.config = bcfg.(*sqlConfig)
 	s.db, err = s.connect()
 	if err != nil {
 		return err

@@ -71,7 +71,8 @@ func (c *chunkingBuffer) CapTo(n int) {
 	c.buf = make([]byte, 0, n)
 }
 
-// ChunkingBufferMime decorates chunkingBuffer, specifying that to do when a flush event is triggered
+// ChunkingBufferMime decorates chunkingBuffer, defining what to do when a flush event is triggered
+// in other words,
 type ChunkingBufferMime struct {
 	chunkingBuffer
 	current  *mimeparse.Part

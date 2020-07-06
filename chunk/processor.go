@@ -2,6 +2,7 @@ package chunk
 
 import (
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/flashmob/go-guerrilla/backends"
@@ -13,7 +14,7 @@ import (
 // Processor Name: ChunkSaver
 // ----------------------------------------------------------------------------------
 // Description   : Takes the stream and saves it in chunks. Chunks are split on the
-//               : chunksaver_chunk_size config setting, and also at the end of MIME parts,
+//               : chunk_size config setting, and also at the end of MIME parts,
 //               : and after a header. This allows for basic de-duplication: we can take a
 //               : hash of each chunk, then check the database to see if we have it already.
 //               : We don't need to write it to the database, but take the reference of the
@@ -24,7 +25,7 @@ import (
 // ----------------------------------------------------------------------------------
 // Requires      : "mimeanalyzer" stream processor to be enabled before it
 // ----------------------------------------------------------------------------------
-// Config Options: chunksaver_chunk_size - maximum chunk size, in bytes
+// Config Options: chunk_size - maximum chunk size, in bytes
 // --------------:-------------------------------------------------------------------
 // Input         : e.MimeParts Which is of type *mime.Parts, as populated by "mimeanalyzer"
 // ----------------------------------------------------------------------------------
@@ -41,12 +42,11 @@ func init() {
 type Config struct {
 	// ChunkMaxBytes controls the maximum buffer size for saving
 	// 16KB default.
-	ChunkMaxBytes int    `json:"chunksaver_chunk_size,omitempty"`
-	StorageEngine string `json:"chunksaver_storage_engine,omitempty"`
-	CompressLevel int    `json:"chunksaver_compress_level,omitempty"`
+	ChunkMaxBytes int    `json:"chunk_size,omitempty"`
+	StorageEngine string `json:"storage_engine,omitempty"`
 }
 
-//const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunksaver_chunk_size config setting
+//const chunkMaxBytes = 1024 * 16 // 16Kb is the default, change using chunk_size config setting
 /**
 *
  * A chunk ends ether:
@@ -57,26 +57,63 @@ type Config struct {
  *
 */
 func Chunksaver() *backends.StreamDecorator {
+	var (
+		config Config
 
+		envelope    *mail.Envelope
+		chunkBuffer *ChunkingBufferMime
+		msgPos      uint
+		database    Storage
+		written     int64
+
+		// just some headers from the first mime-part
+		subject string
+		to      string
+		from    string
+
+		progress int // tracks which mime parts were processed
+	)
 	sd := &backends.StreamDecorator{}
+	sd.Configure = func(cfg backends.ConfigGroup) error {
+		err := sd.ExtractConfig(cfg, &config)
+		if err != nil {
+			return err
+		}
+		if chunkBuffer == nil {
+			chunkBuffer = NewChunkedBytesBufferMime()
+		}
+		// database could be injected when Decorate is called
+		if database == nil {
+			// configure storage if none was injected
+			if config.StorageEngine == "" {
+				return errors.New("storage_engine setting not configured")
+			}
+			if makerFn, ok := StorageEngines[config.StorageEngine]; ok {
+				database = makerFn()
+			} else {
+				return fmt.Errorf("storage engine does not exist [%s]", config.StorageEngine)
+			}
+		}
+		err = database.Initialize(cfg)
+		if err != nil {
+			return err
+		}
+		// configure the chunks buffer
+		if config.ChunkMaxBytes > 0 {
+			chunkBuffer.CapTo(config.ChunkMaxBytes)
+		} else {
+			chunkBuffer.CapTo(chunkMaxBytes)
+		}
+		return nil
+	}
+
+	sd.Shutdown = func() error {
+		err := database.Shutdown()
+		return err
+	}
+
 	sd.Decorate =
 		func(sp backends.StreamProcessor, a ...interface{}) backends.StreamProcessor {
-			var (
-				envelope    *mail.Envelope
-				chunkBuffer *ChunkingBufferMime
-				msgPos      uint
-				database    Storage
-				written     int64
-
-				// just some headers from the first mime-part
-				subject string
-				to      string
-				from    string
-
-				progress int // tracks which mime parts were processed
-			)
-
-			var config *Config
 			// optional dependency injection (you can pass your own instance of Storage or ChunkingBufferMime)
 			for i := range a {
 				if db, ok := a[i].(Storage); ok {
@@ -86,49 +123,9 @@ func Chunksaver() *backends.StreamDecorator {
 					chunkBuffer = buff
 				}
 			}
-
-			backends.Svc.AddInitializer(backends.InitializeWith(func(backendConfig backends.BackendConfig) error {
-
-				configType := backends.BaseConfig(&Config{})
-				bcfg, err := backends.Svc.ExtractConfig(
-					backends.ConfigStreamProcessors, "chunksaver", backendConfig, configType)
-				if err != nil {
-					return err
-				}
-				config = bcfg.(*Config)
-				if chunkBuffer == nil {
-					chunkBuffer = NewChunkedBytesBufferMime()
-				}
-				// configure storage if none was injected
-				if database == nil {
-					if config.StorageEngine == "memory" {
-						db := new(StoreMemory)
-						db.CompressLevel = config.CompressLevel
-						database = db
-					} else {
-						db := new(StoreSQL)
-						database = db
-					}
-				}
-				err = database.Initialize(backendConfig)
-				if err != nil {
-					return err
-				}
-				// configure the chunks buffer
-				if config.ChunkMaxBytes > 0 {
-					chunkBuffer.CapTo(config.ChunkMaxBytes)
-				} else {
-					chunkBuffer.CapTo(chunkMaxBytes)
-				}
+			if database != nil {
 				chunkBuffer.SetDatabase(database)
-
-				return nil
-			}))
-
-			backends.Svc.AddShutdowner(backends.ShutdownWith(func() error {
-				err := database.Shutdown()
-				return err
-			}))
+			}
 
 			var writeTo uint
 			var pos int

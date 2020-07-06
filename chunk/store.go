@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+func init() {
+	StorageEngines = make(map[string]StorageEngineConstructor)
+}
+
 // Storage defines an interface to the storage layer (the database)
 type Storage interface {
 	// OpenMessage is used to begin saving an email. An email id is returned and used to call CloseMessage later
@@ -21,10 +25,17 @@ type Storage interface {
 	// GetChunks loads in the specified chunks of bytes from storage
 	GetChunks(hash ...HashKey) ([]*Chunk, error)
 	// Initialize is called when the backend is started
-	Initialize(cfg backends.BackendConfig) error
+	Initialize(cfg backends.ConfigGroup) error
 	// Shutdown is called when the backend gets shutdown.
 	Shutdown() (err error)
 }
+
+// StorageEngines contains the constructors for creating instances that implement Storage
+// To add your own Storage, create your own Storage struct, then add your constructor to
+// this `StorageEngines` map. Enable it via the configuration (the `storage_engine` setting)
+var StorageEngines map[string]StorageEngineConstructor
+
+type StorageEngineConstructor func() Storage
 
 // Email represents an email
 type Email struct {

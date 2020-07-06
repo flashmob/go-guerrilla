@@ -644,15 +644,16 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 	bc := backends.BackendConfig{
 		"stream_processors": {
 			"chunksaver": {
-				"chunksaver_chunk_size":     8000,
-				"chunksaver_storage_engine": "memory",
-				"chunksaver_compress_level": 0,
+				"chunk_size":     8000,
+				"storage_engine": "memory",
+				"compress_level": 9,
 			},
 		},
 	}
 
-	_ = backends.Svc.Initialize(bc)
-
+	//_ = backends.Svc.Initialize(bc)
+	_ = chunksaver.Configure(bc["stream_processors"]["chunksaver"])
+	_ = mimeanalyzer.Configure(backends.ConfigGroup{})
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)
 	_ = mimeanalyzer.Open(e)

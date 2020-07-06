@@ -28,26 +28,30 @@ func init() {
 func StreamMimeAnalyzer() *StreamDecorator {
 
 	sd := &StreamDecorator{}
+	var (
+		envelope *mail.Envelope
+		parseErr error
+		parser   *mimeparse.Parser
+	)
+	sd.Configure = func(cfg ConfigGroup) error {
+		parser = mimeparse.NewMimeParser()
+		return nil
+	}
+	sd.Shutdown = func() error {
+		var err error
+		defer func() {
+			parser = nil
+
+		}()
+		if err = parser.Close(); err != nil {
+			Log().WithError(err).Error("error when closing parser in mimeanalyzer")
+			return err
+		}
+		return nil
+	}
 
 	sd.Decorate =
 		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
-			var (
-				envelope *mail.Envelope
-				parseErr error
-				parser   *mimeparse.Parser
-			)
-			Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-				parser = mimeparse.NewMimeParser()
-				return nil
-			}))
-
-			Svc.AddShutdowner(ShutdownWith(func() error {
-				if err := parser.Close(); err != nil {
-					Log().WithError(err).Error("error when closing parser in mimeanalyzer")
-				}
-				parser = nil
-				return nil
-			}))
 
 			sd.Open = func(e *mail.Envelope) error {
 				parser.Open()

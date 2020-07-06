@@ -962,14 +962,14 @@ func TestStreamProcessorConfig(t *testing.T) {
 		BackendConfig: backends.BackendConfig{
 			"stream_procEssoRs": { // note mixed case
 				"chunkSaver": { // note mixed case
-					"chunksaver_chunk_size":     8000,
-					"chunksaver_storage_engine": "memory",
-					"chunksaver_compress_level": 0,
+					"chunk_size":     8000,
+					"storage_engine": "memory",
+					"compress_level": 0,
 				},
 				"test:chunksaver": {
-					"chunksaver_chunk_size":     8000,
-					"chunksaver_storage_engine": "memory",
-					"chunksaver_compress_level": 0,
+					"chunk_size":     8000,
+					"storage_engine": "memory",
+					"compress_level": 0,
 				},
 				"debug": {
 					"sleep_seconds": 2,
@@ -1012,6 +1012,81 @@ func TestStreamProcessor(t *testing.T) {
 				"default": {
 					"save_process":        "HeadersParser|Debugger",
 					"stream_save_process": "Header|headersparser|compress|Decompress|debug",
+					"post_process":        "Header|headersparser|compress|Decompress|debug",
+				},
+			},
+		},
+	}
+	d := Daemon{Config: cfg}
+
+	if err := d.Start(); err != nil {
+		t.Error(err)
+	}
+	body := "Subject: Test subject\r\n" +
+		//"\r\n" +
+		"A an email body.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
+		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n"
+
+	// lets have a talk with the server
+	if err := talkToServer("127.0.0.1:2525", body); err != nil {
+		t.Error(err)
+	}
+
+	d.Shutdown()
+
+	b, err := ioutil.ReadFile("tests/testlog")
+	if err != nil {
+		t.Error("could not read logfile")
+		return
+	}
+
+	// lets check for fingerprints
+	if strings.Index(string(b), "Debug stream") < 0 {
+		t.Error("did not log: Debug stream")
+	}
+
+	if strings.Index(string(b), "Error") != -1 {
+		t.Error("There was an error", string(b))
+	}
+
+}
+
+func TestStreamProcessorBackground(t *testing.T) {
+
+	if err := os.Truncate("tests/testlog", 0); err != nil {
+		t.Error(err)
+	}
+	cfg := &AppConfig{
+		LogFile:      "tests/testlog",
+		AllowedHosts: []string{"grr.la"},
+		BackendConfig: backends.BackendConfig{
+			"stream_processors": {
+				"debug": {
+					"log_reads": true,
+				},
+				"chunksaver": {
+					"chunk_size":     8000,
+					"storage_engine": "memory",
+					"compress_level": 0,
+				},
+			},
+			"gateways": {
+				"default": {
+					"save_process":          "",
+					"stream_save_process":   "mimeanalyzer|chunksaver",
+					"post_process_consumer": "Header|headersparser|compress|Decompress|debug",
+					"post_process_producer": "chunksaver",
 				},
 			},
 		},
@@ -1470,9 +1545,9 @@ func TestStreamChunkSaver(t *testing.T) {
 		BackendConfig: backends.BackendConfig{
 			"stream_processors": {
 				"chunksaver": {
-					"chunksaver_chunk_size":     1024 * 32,
-					"stream_buffer_size":        1024 * 16,
-					"chunksaver_storage_engine": "memory",
+					"chunk_size":         1024 * 32,
+					"stream_buffer_size": 1024 * 16,
+					"storage_engine":     "memory",
 				},
 			},
 			"gateways": {

@@ -10,12 +10,23 @@ import (
 	"time"
 )
 
+func init() {
+	StorageEngines["memory"] = func() Storage {
+		return new(StoreMemory)
+	}
+}
+
+type storeMemoryConfig struct {
+	CompressLevel int `json:"compress_level,omitempty"`
+}
+
 type StoreMemory struct {
 	chunks        map[HashKey]*memoryChunk
 	emails        []*memoryEmail
 	nextID        uint64
 	offset        uint64
 	CompressLevel int
+	config        storeMemoryConfig
 }
 
 type memoryEmail struct {
@@ -122,12 +133,21 @@ func (m *StoreMemory) AddChunk(data []byte, hash []byte) error {
 }
 
 // Initialize implements the Storage interface
-func (m *StoreMemory) Initialize(cfg backends.BackendConfig) error {
+func (m *StoreMemory) Initialize(cfg backends.ConfigGroup) error {
+
+	sd := backends.StreamDecorator{}
+	err := sd.ExtractConfig(cfg, &m.config)
+	if err != nil {
+		return err
+	}
 	m.offset = 1
 	m.nextID = m.offset
 	m.emails = make([]*memoryEmail, 0, 100)
 	m.chunks = make(map[HashKey]*memoryChunk, 1000)
-	m.CompressLevel = zlib.NoCompression
+	if m.config.CompressLevel > 9 || m.config.CompressLevel < 0 {
+		m.config.CompressLevel = zlib.BestCompression
+	}
+	m.CompressLevel = m.config.CompressLevel
 	return nil
 }
 
