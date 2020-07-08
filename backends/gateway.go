@@ -541,6 +541,7 @@ func (gw *BackendGateway) Start() error {
 			stop := make(chan bool)
 			go func(workerId int, stop chan bool) {
 				// blocks here until the worker exits
+				// for-loop used so that if workDispatcher panics, re-enter gw.workDispatcher
 				for {
 					state := gw.workDispatcher(
 						gw.conveyor,
