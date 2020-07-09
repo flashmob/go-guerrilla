@@ -22,13 +22,16 @@ type BackendGateway struct {
 	// name is the name of the gateway given in the config
 	name string
 	// channel for distributing envelopes to workers
-	conveyor chan *workerMsg
+	conveyor           chan *workerMsg
+	conveyorValidation chan *workerMsg
+	conveyorStream     chan *workerMsg
+	conveyorStreamBg   chan *workerMsg
 
 	// waits for backend workers to start/stop
 	wg           sync.WaitGroup
 	workStoppers []chan bool
 	processors   []Processor
-	validators   []Processor
+	validators   []ValidatingProcessor
 	streamers    []streamer
 
 	// controls access to state
@@ -48,9 +51,9 @@ type GatewayConfig struct {
 	// ValidateProcess is like ProcessorStack, but for recipient validation tasks
 	ValidateProcess string `json:"validate_process,omitempty"`
 	// TimeoutSave is duration before timeout when saving an email, eg "29s"
-	TimeoutSave string `json:"gw_save_timeout,omitempty"`
+	TimeoutSave string `json:"save_timeout,omitempty"`
 	// TimeoutValidateRcpt duration before timeout when validating a recipient, eg "1s"
-	TimeoutValidateRcpt string `json:"gw_val_rcpt_timeout,omitempty"`
+	TimeoutValidateRcpt string `json:"val_rcpt_timeout,omitempty"`
 	// StreamSaveProcess is same as a ProcessorStack, but reads from an io.Reader to write email data
 	StreamSaveProcess string `json:"stream_save_process,omitempty"`
 	// StreamBufferLen controls the size of the output buffer, in bytes. Default is 4096
@@ -137,9 +140,9 @@ const (
 	BackendStateError
 	BackendStateInitialized
 
-	// default timeout for saving email, if 'gw_save_timeout' not present in config
+	// default timeout for saving email, if 'save_timeout' not present in config
 	saveTimeout = time.Second * 30
-	// default timeout for validating rcpt to, if 'gw_val_rcpt_timeout' not present in config
+	// default timeout for validating rcpt to, if 'val_rcpt_timeout' not present in config
 	validateRcptTimeout = time.Second * 5
 	defaultProcessor    = "Debugger"
 
@@ -267,7 +270,7 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 	workerMsg := workerMsgPool.Get().(*workerMsg)
 	defer workerMsgPool.Put(workerMsg)
 	workerMsg.reset(e, TaskValidateRcpt)
-	gw.conveyor <- workerMsg
+	gw.conveyorValidation <- workerMsg
 	// wait for the validation to complete
 	// or timeout
 	select {
@@ -306,7 +309,7 @@ func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, 
 	workerMsg.reset(e, TaskSaveMailStream)
 	workerMsg.r = r
 	// place on the channel so that one of the save mail workers can pick it up
-	gw.conveyor <- workerMsg
+	gw.conveyorStream <- workerMsg
 	// wait for the save to complete
 	// or timeout
 	select {
@@ -481,7 +484,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 		return errors.New("must have at least 1 worker")
 	}
 	gw.processors = make([]Processor, 0)
-	gw.validators = make([]Processor, 0)
+	gw.validators = make([]ValidatingProcessor, 0)
 	gw.streamers = make([]streamer, 0)
 	for i := 0; i < workersSize; i++ {
 		p, err := gw.newStack(gw.gwConfig.SaveProcess)
@@ -514,6 +517,15 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 	if gw.conveyor == nil {
 		gw.conveyor = make(chan *workerMsg, workersSize)
 	}
+	if gw.conveyorValidation == nil {
+		gw.conveyorValidation = make(chan *workerMsg, workersSize)
+	}
+	if gw.conveyorStream == nil {
+		gw.conveyorStream = make(chan *workerMsg, workersSize)
+	}
+	if gw.conveyorStreamBg == nil {
+		gw.conveyorStreamBg = make(chan *workerMsg, workersSize)
+	}
 
 	size := streamBufferSize
 	if gw.gwConfig.StreamBufferSize > 0 {
@@ -534,35 +546,38 @@ func (gw *BackendGateway) Start() error {
 		workersSize := gw.workersSize()
 		// make our slice of channels for stopping
 		gw.workStoppers = make([]chan bool, 0)
-		// set the wait group
-		gw.wg.Add(workersSize)
-
-		for i := 0; i < workersSize; i++ {
-			stop := make(chan bool)
-			go func(workerId int, stop chan bool) {
-				// blocks here until the worker exits
-				// for-loop used so that if workDispatcher panics, re-enter gw.workDispatcher
-				for {
-					state := gw.workDispatcher(
-						gw.conveyor,
-						gw.processors[workerId],
-						gw.validators[workerId],
-						gw.streamers[workerId],
-						workerId+1,
-						stop)
-					// keep running after panic
-					if state != dispatcherStatePanic {
-						break
-					}
-				}
-				gw.wg.Done()
-			}(i, stop)
-			gw.workStoppers = append(gw.workStoppers, stop)
-		}
+		gw.startWorkers(gw.conveyor, workersSize, gw.processors)
+		gw.startWorkers(gw.conveyorValidation, workersSize, gw.validators)
+		gw.startWorkers(gw.conveyorStream, workersSize, gw.streamers)
 		gw.State = BackendStateRunning
 		return nil
 	} else {
 		return fmt.Errorf("cannot start backend because it's in %s state", gw.State)
+	}
+}
+
+func (gw *BackendGateway) startWorkers(conveyor chan *workerMsg, workersSize int, processors interface{}) {
+	// set the wait group
+	gw.wg.Add(workersSize)
+	for i := 0; i < workersSize; i++ {
+		stop := make(chan bool)
+		go func(workerId int, stop chan bool) {
+			// blocks here until the worker exits
+			// for-loop used so that if workDispatcher panics, re-enter gw.workDispatcher
+			for {
+				state := gw.workDispatcher(
+					conveyor,
+					processors,
+					workerId,
+					stop)
+				// keep running after panic
+				if state != dispatcherStatePanic {
+					break
+				}
+			}
+			gw.wg.Done()
+		}(i, stop)
+		gw.workStoppers = append(gw.workStoppers, stop)
 	}
 }
 
@@ -611,13 +626,23 @@ const (
 
 func (gw *BackendGateway) workDispatcher(
 	workIn chan *workerMsg,
-	save Processor,
-	validate Processor,
-	stream streamer,
+	processors interface{},
 	workerId int,
 	stop chan bool) (state dispatcherState) {
 
 	var msg *workerMsg
+	var save Processor
+	var validate ValidatingProcessor
+	var stream streamer
+
+	switch v := processors.(type) {
+	case []Processor:
+		save = v[workerId]
+	case []ValidatingProcessor:
+		validate = v[workerId]
+	case []streamer:
+		stream = v[workerId]
+	}
 
 	defer func() {
 
@@ -637,13 +662,13 @@ func (gw *BackendGateway) workDispatcher(
 
 	}()
 	state = dispatcherStateIdle
-	Log().Fields("id", workerId, "gateway", gw.name).
+	Log().Fields("id", workerId+1, "gateway", gw.name).
 		Infof("processing worker started")
 	for {
 		select {
 		case <-stop:
 			state = dispatcherStateStopped
-			Log().Infof("stop signal for worker (#%d)", workerId)
+			Log().Infof("stop signal for worker (#%d)", workerId+1)
 			return
 		case msg = <-workIn:
 			state = dispatcherStateWorking // recovers from panic if in this state

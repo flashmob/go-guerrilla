@@ -939,8 +939,8 @@ func TestGatewayTimeout(t *testing.T) {
 	defer cleanTestArtifacts(t)
 
 	bcfg := backends.BackendConfig{}
-	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_save_timeout", "1s")
-	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_val_rcpt_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "val_rcpt_timeout", "1s")
 	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
 	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
 	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
@@ -1026,8 +1026,8 @@ func TestGatewayPanic(t *testing.T) {
 	defer cleanTestArtifacts(t)
 
 	bcfg := backends.BackendConfig{}
-	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_save_timeout", "2s")
-	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "gw_val_rcpt_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "val_rcpt_timeout", "2s")
 	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
 	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
 	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")

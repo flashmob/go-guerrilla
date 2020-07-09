@@ -1063,7 +1063,7 @@ func TestStreamProcessor(t *testing.T) {
 }
 
 func TestStreamProcessorBackground(t *testing.T) {
-
+	return
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
 	}
@@ -1087,6 +1087,11 @@ func TestStreamProcessorBackground(t *testing.T) {
 					"stream_save_process":   "mimeanalyzer|chunksaver",
 					"post_process_consumer": "Header|headersparser|compress|Decompress|debug",
 					"post_process_producer": "chunksaver",
+					"post_process_backlog":  100,
+					"stream_buffer_size":    1024,
+					"save_workers_size":     8,
+					"save_timeout":          "1s",
+					"val_rcpt_timeout":      "2s",
 				},
 			},
 		},
@@ -1554,7 +1559,7 @@ func TestStreamChunkSaver(t *testing.T) {
 				"default": {
 					"save_process":        "HeadersParser|Debugger",
 					"stream_save_process": "mimeanalyzer|chunksaver",
-					"gw_save_timeout":     "5",
+					"save_timeout":        "5",
 				},
 			},
 		},
