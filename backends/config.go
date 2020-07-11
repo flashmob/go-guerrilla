@@ -69,7 +69,7 @@ func (c BackendConfig) toLower() {
 	}
 }
 
-func (c BackendConfig) group(ns string, name string) ConfigGroup {
+func (c BackendConfig) lookupGroup(ns string, name string) ConfigGroup {
 	if v, ok := c[ns][name]; ok {
 		return v
 	}

@@ -28,6 +28,9 @@ type StreamDecorator struct {
 	// Shutdown is called to release any resources before StreamDecorator is destroyed
 	// typically to close any database connections, cleanup any files, etc
 	Shutdown streamShutdownWith
+	// GetEmail returns a reader for reading the data of ab email,
+	// it may return nil if no email is available
+	GetEmail func(emailID uint64) (SeekPartReader, error)
 }
 
 func (s StreamDecorator) ExtractConfig(cfg ConfigGroup, i interface{}) error {

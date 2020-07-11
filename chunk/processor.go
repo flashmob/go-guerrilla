@@ -112,6 +112,19 @@ func Chunksaver() *backends.StreamDecorator {
 		return err
 	}
 
+	sd.GetEmail = func(emailID uint64) (backends.SeekPartReader, error) {
+		if database == nil {
+			return nil, errors.New("database is nil")
+		}
+		email, err := database.GetEmail(emailID)
+		if err != nil {
+			return nil, errors.New("email not found")
+
+		}
+		r, err := NewChunkedReader(database, email, 0)
+		return r, err
+	}
+
 	sd.Decorate =
 		func(sp backends.StreamProcessor, a ...interface{}) backends.StreamProcessor {
 			// optional dependency injection (you can pass your own instance of Storage or ChunkingBufferMime)
