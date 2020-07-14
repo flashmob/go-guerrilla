@@ -251,12 +251,13 @@ func (gw *BackendGateway) Process(e *mail.Envelope) Result {
 		return NewResult(response.Canned.FailBackendTransaction, response.SP, err)
 
 	case <-time.After(gw.saveTimeout()):
-		Log().Error("Backend has timed out while saving email")
-		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
+		Log().Fields("queuedId", e.QueuedId).Error("backend has timed out while saving email")
+		e.Add(1) // lock the envelope - it's still processing here, we don't want the server to recycle it
 		go func() {
 			// keep waiting for the backend to finish processing
 			<-workerMsg.notifyMe
-			e.Unlock()
+			Log().Fields("queuedId", e.QueuedId).Error("finished processing mail after timeout")
+			e.Done()
 		}()
 		return NewResult(response.Canned.FailBackendTimeout)
 	}
@@ -287,11 +288,12 @@ func (gw *BackendGateway) ValidateRcpt(e *mail.Envelope) RcptError {
 		return nil
 
 	case <-time.After(gw.validateRcptTimeout()):
-		e.Lock()
+		Log().Fields("queuedId", e.QueuedId).Error("backend has timed out while validating rcpt")
+		e.Add(1) // lock the envelope - it's still processing here, we don't want the server to recycle it
 		go func() {
 			<-workerMsg.notifyMe
-			e.Unlock()
-			Log().Error("Backend has timed out while validating rcpt")
+			Log().Fields("queuedId", e.QueuedId).Error("finished validating rcpt after timeout")
+			e.Done()
 		}()
 		return StorageTimeout
 	}
@@ -323,7 +325,7 @@ func (gw *BackendGateway) newStreamDecorator(cs stackConfigExpression, ns string
 }
 
 func (gw *BackendGateway) ProcessBackground(e *mail.Envelope) {
-	//defer e.Unlock()
+
 	m := newAliasMap(gw.config[ConfigStreamProcessors.String()])
 	c := newStackStreamProcessorConfig(gw.gwConfig.PostProcessProducer, m)
 	if len(c.list) == 0 {
@@ -344,9 +346,8 @@ func (gw *BackendGateway) ProcessBackground(e *mail.Envelope) {
 		// borrow a workerMsg from the pool
 		workerMsg := workerMsgPool.Get().(*workerMsg)
 		defer workerMsgPool.Put(workerMsg)
-		// we copy the envelope (ignore the "sync locker" warning)
-		envelope := *e
-		workerMsg.reset(&envelope, TaskSaveMailStream)
+
+		workerMsg.reset(e, TaskSaveMailStream)
 		workerMsg.r = r
 
 		// place on the channel so that one of the save mail workers can pick it up
@@ -359,36 +360,34 @@ func (gw *BackendGateway) ProcessBackground(e *mail.Envelope) {
 			return
 		}
 		// process in the background
-		go func() {
-			for {
-				select {
-				case status := <-workerMsg.notifyMe:
-					// email saving transaction completed
-					if status.result == BackendResultOK && status.queuedID != "" {
-						Log().Fields("queuedID", status.queuedID).Info("post-process email completed")
-						return
-					}
-					var fields []interface{}
-					if status.err != nil {
-						fields = append(fields, "error", status.err)
-					}
-					if status.result != nil {
-						fields = append(fields, "result", status.result, "code", status.result.Code())
-					}
-					if len(fields) > 0 {
-						fields = append(fields, "queuedID", status.queuedID)
-						Log().Fields(fields).Error("post-process completed with an error")
-						return
-					}
-					// both result & error are nil (should not happen)
-					Log().Fields("error", err, "queuedID", e.QueuedId).Error("no response from backend - post-process did not return a result or an error")
-					return
-				case <-time.After(gw.saveTimeout()):
-					Log().Fields("queuedID", e.QueuedId).Error("post-processing timeout")
+		for {
+			select {
+			case status := <-workerMsg.notifyMe:
+				// email saving transaction completed
+				if status.result == BackendResultOK && status.queuedID != "" {
+					Log().Fields("queuedID", status.queuedID).Info("post-process email completed")
 					return
 				}
+				var fields []interface{}
+				if status.err != nil {
+					fields = append(fields, "error", status.err)
+				}
+				if status.result != nil {
+					fields = append(fields, "result", status.result, "code", status.result.Code())
+				}
+				if len(fields) > 0 {
+					fields = append(fields, "queuedID", status.queuedID)
+					Log().Fields(fields).Error("post-process completed with an error")
+					return
+				}
+				// both result & error are nil (should not happen)
+				Log().Fields("error", err, "queuedID", e.QueuedId).Error("no response from backend - post-process did not return a result or an error")
+				return
+			case <-time.After(gw.saveTimeout()):
+				Log().Fields("queuedID", e.QueuedId).Error("background post-processing timed-out, will keep waiting")
+				// don't return here, keep waiting for workerMsg.notifyMe
 			}
-		}()
+		}
 	}
 }
 
@@ -435,12 +434,13 @@ func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, 
 		return NewResult(res.FailBackendTransaction, response.SP, err), err
 
 	case <-time.After(gw.saveTimeout()):
-		Log().Error("Backend has timed out while saving email")
-		e.Lock() // lock the envelope - it's still processing here, we don't want the server to recycle it
+		Log().Fields("queuedID", e.QueuedId).Error("backend has timed out while saving email stream")
+		e.Add(1) // lock the envelope - it's still processing here, we don't want the server to recycle it
 		go func() {
 			// keep waiting for the backend to finish processing
 			<-workerMsg.notifyMe
-			e.Unlock()
+			e.Done()
+			Log().Fields("queuedID", e.QueuedId).Info("backend has finished saving email stream after timeout")
 		}()
 		return NewResult(res.FailBackendTimeout), errors.New("gateway timeout")
 	}

@@ -120,6 +120,24 @@ func NewAddress(str string) (*Address, error) {
 
 // Envelope of Email represents a single SMTP message.
 type Envelope struct {
+	// Data stores the header and message body (when using the non-streaming processor)
+	Data bytes.Buffer
+	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
+	Subject string
+	// Header stores the results from ParseHeaders()
+	Header textproto.MIMEHeader
+	// Values hold the values generated when processing the envelope by the backend
+	Values map[string]interface{}
+	// Hashes of each email on the rcpt
+	Hashes []string
+	// DeliveryHeader stores additional delivery header that may be added (used by non-streaming processor)
+	DeliveryHeader string
+	// Size is the length of message, after being written
+	Size int64
+	// MimeParts contain the information about the mime-parts after they have been parsed
+	MimeParts *mimeparse.Parts
+	// MessageID contains the id of the message after it has been written
+	MessageID uint64
 	// Remote IP address
 	RemoteIP string
 	// Message sent in EHLO command
@@ -128,36 +146,19 @@ type Envelope struct {
 	MailFrom Address
 	// Recipients
 	RcptTo []Address
-	// Data stores the header and message body (when using the non-streaming processor)
-	Data bytes.Buffer
-	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
-	Subject string
 	// TLS is true if the email was received using a TLS connection
 	TLS bool
-	// Header stores the results from ParseHeaders()
-	Header textproto.MIMEHeader
-	// Values hold the values generated when processing the envelope by the backend
-	Values map[string]interface{}
-	// Hashes of each email on the rcpt
-	Hashes []string
-	// additional delivery header that may be added
-	DeliveryHeader string
 	// Email(s) will be queued with this id
 	QueuedId string
 	// TransportType indicates whenever 8BITMIME extension has been signaled
 	TransportType smtp.TransportType
-	// Size is the length of message, after being written
-	Size int64
-	// MimeParts contain the information about the mime-parts after they have been parsed
-	MimeParts *mimeparse.Parts
-	// MessageID contains the id of the message after it has been written
-	MessageID uint64
 	// ESMTP: true if EHLO was used
 	ESMTP bool
 	// ServerIface records the server's interface in the config
 	ServerIface string
+
 	// When locked, it means that the envelope is being processed by the backend
-	sync.Mutex
+	sync.WaitGroup
 }
 
 func NewEnvelope(remoteAddr string, clientID uint64, iface string) *Envelope {
@@ -216,9 +217,7 @@ func (e *Envelope) String() string {
 func (e *Envelope) ResetTransaction() {
 
 	// ensure not processing by the backend, will only get lock if finished, otherwise block
-	e.Lock()
-	// got the lock, it means processing finished
-	e.Unlock()
+	e.Wait()
 
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}

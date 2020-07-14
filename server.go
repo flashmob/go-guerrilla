@@ -93,7 +93,7 @@ func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*serve
 		closedListener:  make(chan bool, 1),
 		listenInterface: sc.ListenInterface,
 		state:           ServerStateNew,
-		envelopePool:    mail.NewPool(sc.MaxClients),
+		envelopePool:    mail.NewPool(sc.MaxClients * 2),
 	}
 	server.mainlogStore.Store(mainlog)
 	server.backendStore.Store(b)
@@ -596,7 +596,17 @@ func (s *server) handleClient(client *client) {
 				// process the message as a stream
 				res, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
 				if err == nil && res.Code() < 300 {
-					be.ProcessBackground(client.Envelope)
+					e := s.envelopePool.Borrow(
+						client.Envelope.RemoteIP,
+						client.ID,
+						client.Envelope.ServerIface,
+					)
+					s.copyEnvelope(client.Envelope, e)
+					// process in the background then return the envelope
+					go func() {
+						be.ProcessBackground(e)
+						s.envelopePool.Return(e)
+					}()
 				}
 			} else {
 				// or buffer the entire message (parse headers & mime structure as we go along)
@@ -723,4 +733,13 @@ func (s *server) defaultHost(a *mail.Address) {
 				Warn("the hostname is not present in the AllowedHosts config setting")
 		}
 	}
+}
+
+func (s *server) copyEnvelope(src *mail.Envelope, dest *mail.Envelope) {
+	dest.TLS = src.TLS
+	dest.Helo = src.Helo
+	dest.ESMTP = src.ESMTP
+	dest.RcptTo = src.RcptTo
+	dest.MailFrom = src.MailFrom
+	dest.TransportType = src.TransportType
 }
