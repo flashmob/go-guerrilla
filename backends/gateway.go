@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -637,28 +638,25 @@ func (gw *BackendGateway) Start() error {
 }
 
 func (gw *BackendGateway) startWorkers(conveyor chan *workerMsg, workersSize int, processors interface{}) {
-	// set the wait group
-	gw.wg.Add(workersSize)
-	for i := 0; i < workersSize; i++ {
-		stop := make(chan bool)
-
-		var p interface{}
-		switch v := processors.(type) {
-		case []Processor:
-			p = v[i]
-		case []ValidatingProcessor:
-			p = v[i]
-		case []streamer:
-			p = v[i]
-		}
+	s := reflect.ValueOf(processors)
+	if reflect.TypeOf(processors).Kind() != reflect.Slice {
+		panic("processors must be a slice")
+	}
+	// set the wait group (when stopping, it will block for all goroutines to exit)
+	gw.wg.Add(s.Len())
+	for i := 0; i < s.Len(); i++ {
+		// set the buffer
 		gw.buffers[gw.workerID] = gw.makeBuffer()
-		go func(workerId int, stop chan bool) {
+		// stop is a channel used for stopping the worker
+		stop := make(chan bool)
+		// start the worker and keep it running
+		go func(workerId int, stop chan bool, i int) {
 			// blocks here until the worker exits
 			// for-loop used so that if workDispatcher panics, re-enter gw.workDispatcher
 			for {
 				state := gw.workDispatcher(
 					conveyor,
-					p,
+					s.Index(i),
 					workerId,
 					stop)
 				// keep running after panic
@@ -667,7 +665,7 @@ func (gw *BackendGateway) startWorkers(conveyor chan *workerMsg, workersSize int
 				}
 			}
 			gw.wg.Done()
-		}(gw.workerID, stop)
+		}(gw.workerID, stop, i)
 		gw.workStoppers = append(gw.workStoppers, stop)
 		gw.workerID++
 	}
