@@ -978,7 +978,7 @@ func TestStreamProcessorConfig(t *testing.T) {
 			},
 			"gateways": {
 				"default": {
-					"stream_save_process": "mimeanalyzer|chunksaver|test|debug",
+					"save_stream": "mimeanalyzer|chunksaver|test|debug",
 				},
 			},
 		},
@@ -1010,9 +1010,9 @@ func TestStreamProcessor(t *testing.T) {
 			},
 			"gateways": {
 				"default": {
-					"save_process":        "HeadersParser|Debugger",
-					"stream_save_process": "Header|headersparser|compress|Decompress|debug",
-					"post_process":        "Header|headersparser|compress|Decompress|debug",
+					"save_process": "HeadersParser|Debugger",
+					"save_stream":  "Header|headersparser|compress|Decompress|debug",
+					"post_process": "Header|headersparser|compress|Decompress|debug",
 				},
 			},
 		},
@@ -1063,7 +1063,7 @@ func TestStreamProcessor(t *testing.T) {
 }
 
 func TestStreamProcessorBackground(t *testing.T) {
-	return
+
 	if err := os.Truncate("tests/testlog", 0); err != nil {
 		t.Error(err)
 	}
@@ -1075,7 +1075,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 				"debug": {
 					"log_reads": true,
 				},
-				"chunksaver": {
+				"moo:chunksaver": {
 					"chunk_size":     8000,
 					"storage_engine": "memory",
 					"compress_level": 0,
@@ -1084,10 +1084,10 @@ func TestStreamProcessorBackground(t *testing.T) {
 			"gateways": {
 				"default": {
 					"save_process":          "",
-					"stream_save_process":   "mimeanalyzer|chunksaver",
+					"save_stream":           "mimeanalyzer|moo",
 					"post_process_consumer": "Header|headersparser|compress|Decompress|debug",
-					"post_process_producer": "chunksaver",
-					"post_process_backlog":  100,
+					"post_process_producer": "moo",
+					"post_process_size":     100,
 					"stream_buffer_size":    1024,
 					"save_workers_size":     8,
 					"save_timeout":          "1s",
@@ -1102,7 +1102,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 		t.Error(err)
 	}
 	body := "Subject: Test subject\r\n" +
-		//"\r\n" +
+		"\r\n" +
 		"A an email body.\r\n" +
 		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
 		"Header|headersparser|compress|Decompress|debug Header|headersparser|compress|Decompress|debug.\r\n" +
@@ -1129,10 +1129,14 @@ func TestStreamProcessorBackground(t *testing.T) {
 		t.Error("could not read logfile")
 		return
 	}
-
+	time.Sleep(time.Second * 2)
 	// lets check for fingerprints
 	if strings.Index(string(b), "Debug stream") < 0 {
 		t.Error("did not log: Debug stream")
+	}
+
+	if strings.Index(string(b), "background process done") < 0 {
+		t.Error("did not log: background process done")
 	}
 
 	if strings.Index(string(b), "Error") != -1 {
@@ -1406,8 +1410,8 @@ func TestStreamMimeProcessor(t *testing.T) {
 			},
 			"gateways": {
 				"default": {
-					"save_process":        "HeadersParser|Debugger",
-					"stream_save_process": "mimeanalyzer|headersparser|compress|Decompress|debug",
+					"save_process": "HeadersParser|Debugger",
+					"save_stream":  "mimeanalyzer|headersparser|compress|Decompress|debug",
 				},
 			},
 		},
@@ -1557,9 +1561,9 @@ func TestStreamChunkSaver(t *testing.T) {
 			},
 			"gateways": {
 				"default": {
-					"save_process":        "HeadersParser|Debugger",
-					"stream_save_process": "mimeanalyzer|chunksaver",
-					"save_timeout":        "5",
+					"save_process": "HeadersParser|Debugger",
+					"save_stream":  "mimeanalyzer|chunksaver",
+					"save_timeout": "5",
 				},
 			},
 		},

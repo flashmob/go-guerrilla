@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 )
 
 type ConfigGroup map[string]interface{}
@@ -23,6 +24,28 @@ type BackendConfig struct {
 }
 
 */
+
+const (
+	validateRcptTimeout = time.Second * 5
+	defaultProcessor    = "Debugger"
+
+	// streamBufferSize sets the size of the buffer for the streaming processors,
+	// can be configured using `stream_buffer_size`
+	configStreamBufferSize       = 4096
+	configSaveWorkersCount       = 1
+	configValidateWorkersCount   = 1
+	configStreamWorkersCount     = 1
+	configBackgroundWorkersCount = 1
+	configSaveProcessSize        = 64
+	configValidateProcessSize    = 64
+	// configTimeoutSave: default timeout for saving email, if 'save_timeout' not present in config
+	configTimeoutSave = time.Second * 30
+	// configTimeoutValidateRcpt default timeout for validating rcpt to, if 'val_rcpt_timeout' not present in config
+	configTimeoutValidateRcpt = time.Second * 5
+	configTimeoutStream       = time.Second * 30
+	configSaveStreamSize      = 64
+	configPostProcessSize     = 64
+)
 
 func (c *BackendConfig) SetValue(ns configNameSpace, name string, key string, value interface{}) {
 	nsKey := ns.String()
@@ -226,7 +249,7 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	// go through all the gateway configs,
 	// make a list of all the ones that have processors whose config had changed
 	for key, _ := range c[cg] {
-		// check the processors in the SaveProcess and StreamSaveProcess settings to see if
+		// check the processors in the SaveProcess and SaveStream settings to see if
 		// they changed. If changed, then make a record of which gateways use the processors
 		e, _ := Svc.ExtractConfig(ConfigGateways, key, c, configType)
 		bcfg := e.(*GatewayConfig)
@@ -237,7 +260,7 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 			}
 		}
 
-		config = NewStackConfig(bcfg.StreamSaveProcess, aliasMapStream)
+		config = NewStackConfig(bcfg.SaveStream, aliasMapStream)
 		for _, v := range config.list {
 			if _, ok := changedStreamProcessors[v.name]; ok {
 				changed[key] = true
@@ -297,4 +320,126 @@ func compareConfigGroup(old map[string]ConfigGroup, new map[string]ConfigGroup) 
 		removed = append(removed, p)
 	}
 	return
+}
+
+type GatewayConfig struct {
+	// SaveWorkersCount controls how many concurrent workers to start. Defaults to 1
+	SaveWorkersCount int `json:"save_workers_size,omitempty"`
+	// ValidateWorkersCount controls how many concurrent recipient validation workers to start. Defaults to 1
+	ValidateWorkersCount int `json:"validate_workers_size,omitempty"`
+	// StreamWorkersCount controls how many concurrent stream workers to start. Defaults to 1
+	StreamWorkersCount int `json:"stream_workers_size,omitempty"`
+	// BackgroundWorkersCount controls how many concurrent background stream workers to start. Defaults to 1
+	BackgroundWorkersCount int `json:"background_workers_size,omitempty"`
+
+	// SaveProcess controls which processors to chain in a stack for saving email tasks
+	SaveProcess string `json:"save_process,omitempty"`
+	// SaveProcessSize limits the amount of messages waiting in the queue to get processed by SaveProcess
+	SaveProcessSize int `json:"save_process_size,omitempty"`
+	// ValidateProcess is like ProcessorStack, but for recipient validation tasks
+	ValidateProcess string `json:"validate_process,omitempty"`
+	// ValidateProcessSize limits the amount of messages waiting in the queue to get processed by ValidateProcess
+	ValidateProcessSize int `json:"validate_process_size,omitempty"`
+
+	// TimeoutSave is duration before timeout when saving an email, eg "29s"
+	TimeoutSave string `json:"save_timeout,omitempty"`
+	// TimeoutValidateRcpt duration before timeout when validating a recipient, eg "1s"
+	TimeoutValidateRcpt string `json:"val_rcpt_timeout,omitempty"`
+	// TimeoutStream duration before timeout when processing a stream eg "1s"
+	TimeoutStream string `json:"stream_timeout,omitempty"`
+
+	// StreamBufferLen controls the size of the output buffer, in bytes. Default is 4096
+	StreamBufferSize int `json:"stream_buffer_size,omitempty"`
+	// SaveStream is same as a SaveProcess, but uses the StreamProcessor stack instead
+	SaveStream string `json:"save_stream,omitempty"`
+	// SaveStreamSize limits the amount of messages waiting in the queue to get processed by SaveStream
+	SaveStreamSize int `json:"save_stream_size,omitempty"`
+
+	// PostProcessSize controls the length of thq queue for background processing
+	PostProcessSize int `json:"post_process_size,omitempty"`
+	// PostProcessProducer specifies which StreamProcessor to use for reading data to the post process
+	PostProcessProducer string `json:"post_process_producer,omitempty"`
+	// PostProcessConsumer is same as SaveStream, but controls
+	PostProcessConsumer string `json:"post_process_consumer,omitempty"`
+}
+
+// saveWorkersCount gets the number of workers to use for saving email by reading the save_workers_size config value
+// Returns 1 if no config value was set
+func (c *GatewayConfig) saveWorkersCount() int {
+	if c.SaveWorkersCount <= 0 {
+		return configSaveWorkersCount
+	}
+	return c.SaveWorkersCount
+}
+
+func (c *GatewayConfig) validateWorkersCount() int {
+	if c.ValidateWorkersCount <= 0 {
+		return configValidateWorkersCount
+	}
+	return c.ValidateWorkersCount
+}
+
+func (c *GatewayConfig) streamWorkersCount() int {
+	if c.StreamWorkersCount <= 0 {
+		return configStreamWorkersCount
+	}
+	return c.StreamWorkersCount
+}
+
+func (c *GatewayConfig) backgroundWorkersCount() int {
+	if c.BackgroundWorkersCount <= 0 {
+		return configBackgroundWorkersCount
+	}
+	return c.BackgroundWorkersCount
+}
+func (c *GatewayConfig) saveProcessSize() int {
+	if c.SaveProcessSize <= 0 {
+		return configSaveProcessSize
+	}
+	return c.SaveProcessSize
+}
+
+func (c *GatewayConfig) validateProcessSize() int {
+	if c.ValidateProcessSize <= 0 {
+		return configValidateProcessSize
+	}
+	return c.ValidateProcessSize
+}
+
+func (c *GatewayConfig) saveStreamSize() int {
+	if c.SaveStreamSize <= 0 {
+		return configSaveStreamSize
+	}
+	return c.SaveStreamSize
+}
+
+func (c *GatewayConfig) postProcessSize() int {
+	if c.PostProcessSize <= 0 {
+		return configPostProcessSize
+	}
+	return c.PostProcessSize
+}
+
+// saveTimeout returns the maximum amount of seconds to wait before timing out a save processing task
+func (gw *BackendGateway) saveTimeout() time.Duration {
+	if gw.gwConfig.TimeoutSave == "" {
+		return configTimeoutSave
+	}
+	t, err := time.ParseDuration(gw.gwConfig.TimeoutSave)
+	if err != nil {
+		return configTimeoutSave
+	}
+	return t
+}
+
+// validateRcptTimeout returns the maximum amount of seconds to wait before timing out a recipient validation  task
+func (gw *BackendGateway) validateRcptTimeout() time.Duration {
+	if gw.gwConfig.TimeoutValidateRcpt == "" {
+		return configTimeoutValidateRcpt
+	}
+	t, err := time.ParseDuration(gw.gwConfig.TimeoutValidateRcpt)
+	if err != nil {
+		return configTimeoutValidateRcpt
+	}
+	return t
 }

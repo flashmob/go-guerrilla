@@ -741,5 +741,6 @@ func (s *server) copyEnvelope(src *mail.Envelope, dest *mail.Envelope) {
 	dest.ESMTP = src.ESMTP
 	dest.RcptTo = src.RcptTo
 	dest.MailFrom = src.MailFrom
+	dest.MessageID = src.MessageID
 	dest.TransportType = src.TransportType
 }
