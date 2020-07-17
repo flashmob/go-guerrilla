@@ -49,7 +49,7 @@ func TestInitialize(t *testing.T) {
 
 	if gateway.conveyor == nil {
 		t.Error("gateway.conveyor should not be nil")
-	} else if cap(gateway.conveyor) != gateway.configSaveWorkersSize() {
+	} else if cap(gateway.conveyor) != gateway.gwConfig.saveProcessSize() {
 		t.Error("gateway.conveyor channel buffer cap does not match worker size, cap was", cap(gateway.conveyor))
 	}
 
