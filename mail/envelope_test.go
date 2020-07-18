@@ -97,7 +97,7 @@ func TestAddressWithIP(t *testing.T) {
 }
 
 func TestEnvelope(t *testing.T) {
-	e := NewEnvelope("127.0.0.1", 22, "127.0.0.1:25")
+	e := NewEnvelope("127.0.0.1", 22, 0)
 
 	e.QueuedId = "abc123"
 	e.Helo = "helo.example.com"
@@ -162,11 +162,11 @@ func TestEncodedWordAhead(t *testing.T) {
 }
 
 func TestQueuedID(t *testing.T) {
-	str := queuedID(555, "127.0.7.4")
+	str := queuedID(555, 1)
 	if len(str) != 32 {
 		t.Error("queuedID needs to be 32 bytes in length")
 	}
-	str2 := queuedID(555, "127.0.7.4")
+	str2 := queuedID(555, 1)
 	if str == str2 {
 		t.Error("hashes should not be equal")
 	}

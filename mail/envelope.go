@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -154,25 +155,27 @@ type Envelope struct {
 	TransportType smtp.TransportType
 	// ESMTP: true if EHLO was used
 	ESMTP bool
-	// ServerIface records the server's interface in the config
-	ServerIface string
+	// ServerID records the server's index in the configuration
+	ServerID int
 
 	// When locked, it means that the envelope is being processed by the backend
 	sync.WaitGroup
 }
 
-func NewEnvelope(remoteAddr string, clientID uint64, iface string) *Envelope {
+func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	return &Envelope{
-		RemoteIP:    remoteAddr,
-		Values:      make(map[string]interface{}),
-		ServerIface: iface,
-		QueuedId:    queuedID(clientID, iface),
+		RemoteIP: remoteAddr,
+		Values:   make(map[string]interface{}),
+		ServerID: serverID,
+		QueuedId: queuedID(clientID, serverID),
 	}
 }
 
-func queuedID(clientID uint64, iface string) string {
+func queuedID(clientID uint64, serverID int) string {
 	h := fnv.New128a()
-	_, _ = h.Write([]byte(fmt.Sprintf("%v%v%v", time.Now(), clientID, iface)))
+	tmp := make([]byte, 8)
+	binary.LittleEndian.PutUint64(tmp, uint64(time.Now().UnixNano())+clientID+uint64(serverID))
+	h.Write(tmp)
 	return fmt.Sprintf("%x", h.Sum([]byte{}))
 }
 
@@ -236,10 +239,10 @@ func (e *Envelope) ResetTransaction() {
 }
 
 // Reseed is called when used with a new connection, once it's accepted
-func (e *Envelope) Reseed(remoteIP string, clientID uint64, iface string) {
+func (e *Envelope) Reseed(remoteIP string, clientID uint64, serverID int) {
 	e.RemoteIP = remoteIP
-	e.ServerIface = iface
-	e.QueuedId = queuedID(clientID, iface)
+	e.ServerID = serverID
+	e.QueuedId = queuedID(clientID, serverID)
 	e.Helo = ""
 	e.TLS = false
 	e.ESMTP = false
@@ -432,14 +435,14 @@ func NewPool(poolSize int) *Pool {
 	}
 }
 
-func (p *Pool) Borrow(remoteAddr string, clientID uint64, iface string) *Envelope {
+func (p *Pool) Borrow(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	var e *Envelope
 	p.sem <- true // block the envelope until more room
 	select {
 	case e = <-p.pool:
-		e.Reseed(remoteAddr, clientID, iface)
+		e.Reseed(remoteAddr, clientID, serverID)
 	default:
-		e = NewEnvelope(remoteAddr, clientID, iface)
+		e = NewEnvelope(remoteAddr, clientID, serverID)
 	}
 	return e
 }

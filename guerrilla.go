@@ -162,7 +162,7 @@ func New(ac *AppConfig, l log.Logger, b ...backends.Backend) (Guerrilla, error) 
 func (g *guerrilla) makeServers() error {
 	g.mainlog().Debug("making servers")
 	var errs Errors
-	for _, sc := range g.Config.Servers {
+	for serverID, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
 			// server already instantiated
 			continue
@@ -173,7 +173,7 @@ func (g *guerrilla) makeServers() error {
 			continue
 		} else {
 			sc := sc // pin!
-			server, err := newServer(&sc, g.backend(sc.Gateway), g.mainlog())
+			server, err := newServer(&sc, g.backend(sc.Gateway), g.mainlog(), serverID)
 			if err != nil {
 				g.mainlog().WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
 				errs = append(errs, err)

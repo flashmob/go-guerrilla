@@ -46,6 +46,7 @@ type server struct {
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
+	serverID        int
 	clientPool      *Pool
 	wg              sync.WaitGroup // for waiting to shutdown
 	listener        net.Listener
@@ -87,11 +88,12 @@ func (c command) match(in []byte) bool {
 }
 
 // Creates and returns a new ready-to-run Server from a ServerConfig configuration
-func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*server, error) {
+func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger, serverID int) (*server, error) {
 	server := &server{
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan bool, 1),
 		listenInterface: sc.ListenInterface,
+		serverID:        serverID,
 		state:           ServerStateNew,
 		envelopePool:    mail.NewPool(sc.MaxClients * 2),
 	}
@@ -242,26 +244,26 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 		return fmt.Errorf("[%s] cannot listen on port: %s ", s.listenInterface, err.Error())
 	}
 
-	s.log().Fields("iface", s.listenInterface).Info("listening on TCP")
+	s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("listening on TCP")
 	s.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		s.log().Fields("iface", s.listenInterface, "nextSeq", clientID+1).Debug("waiting for a new client")
+		s.log().Fields("serverID", s.serverID, "nextSeq", clientID+1).Debug("waiting for a new client")
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				s.log().Fields("iface", s.listenInterface).Info("server has stopped accepting new clients")
+				s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("server has stopped accepting new clients")
 				// the listener has been closed, wait for clients to exit
-				s.log().Fields("iface", s.listenInterface).Info("shutting down pool")
+				s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("shutting down pool")
 				s.clientPool.ShutdownState()
 				s.clientPool.ShutdownWait()
 				s.state = ServerStateStopped
 				s.closedListener <- true
 				return nil
 			}
-			s.mainlog().Fields("error", err, "iface", s.listenInterface).Info("temporary error accepting client")
+			s.mainlog().Fields("error", err, "serverID", s.serverID).Error("temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrowErr error) {
@@ -271,14 +273,14 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 				s.envelopePool.Return(c.Envelope)
 				s.clientPool.Return(c)
 			} else {
-				s.log().WithError(borrowErr).Info("couldn't borrow a new client")
+				s.log().Fields("error", borrowErr, "serverID", s.serverID).Error("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				_ = conn.Close()
 
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool, s.listenInterface))
+		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool, s.serverID))
 
 	}
 }
@@ -599,7 +601,7 @@ func (s *server) handleClient(client *client) {
 					e := s.envelopePool.Borrow(
 						client.Envelope.RemoteIP,
 						client.ID,
-						client.Envelope.ServerIface,
+						client.Envelope.ServerID,
 					)
 					s.copyEnvelope(client.Envelope, e)
 					// process in the background then return the envelope
