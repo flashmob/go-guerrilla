@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"io"
 	"mime"
@@ -28,6 +29,8 @@ var Dec mime.WordDecoder
 func init() {
 	// use the default decoder, without Gnu inconv. Import the mail/inconv package to use iconv.
 	Dec = mime.WordDecoder{}
+	// for QueuedID generation
+	hasher.h = fnv.New128a()
 }
 
 // Address encodes an email address of the form `<user@host>`
@@ -162,6 +165,14 @@ type Envelope struct {
 	sync.WaitGroup
 }
 
+type queuedIDGenerator struct {
+	h hash.Hash
+	n [24]byte
+	sync.Mutex
+}
+
+var hasher queuedIDGenerator
+
 func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	return &Envelope{
 		RemoteIP: remoteAddr,
@@ -172,14 +183,17 @@ func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 }
 
 func queuedID(clientID uint64, serverID int) string {
-	h := fnv.New128a()
-	var n [24]byte
+	hasher.Lock()
+	defer func() {
+		hasher.h.Reset()
+		hasher.Unlock()
+	}()
 	// pack the seeds and hash them
-	binary.BigEndian.PutUint64(n[0:8], uint64(time.Now().UnixNano()))
-	binary.BigEndian.PutUint64(n[8:16], clientID)
-	binary.BigEndian.PutUint64(n[16:24], uint64(serverID))
-	h.Write(n[:])
-	return fmt.Sprintf("%x", h.Sum([]byte{}))
+	binary.BigEndian.PutUint64(hasher.n[0:8], uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(hasher.n[8:16], clientID)
+	binary.BigEndian.PutUint64(hasher.n[16:24], uint64(serverID))
+	hasher.h.Write(hasher.n[:])
+	return fmt.Sprintf("%x", hasher.h.Sum([]byte{}))
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
