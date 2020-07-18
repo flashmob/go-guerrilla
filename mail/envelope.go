@@ -173,9 +173,12 @@ func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 
 func queuedID(clientID uint64, serverID int) string {
 	h := fnv.New128a()
-	tmp := make([]byte, 8)
-	binary.LittleEndian.PutUint64(tmp, uint64(time.Now().UnixNano())+clientID+uint64(serverID))
-	h.Write(tmp)
+	var n [24]byte
+	// pack the seeds and hash them
+	binary.BigEndian.PutUint64(n[0:8], uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(n[8:16], clientID)
+	binary.BigEndian.PutUint64(n[16:24], uint64(serverID))
+	h.Write(n[:])
 	return fmt.Sprintf("%x", h.Sum([]byte{}))
 }
 

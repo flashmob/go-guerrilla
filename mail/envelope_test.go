@@ -162,11 +162,11 @@ func TestEncodedWordAhead(t *testing.T) {
 }
 
 func TestQueuedID(t *testing.T) {
-	str := queuedID(555, 1)
+	str := queuedID(5550000000, 1)
 	if len(str) != 32 {
 		t.Error("queuedID needs to be 32 bytes in length")
 	}
-	str2 := queuedID(555, 1)
+	str2 := queuedID(5550000000, 1)
 	if str == str2 {
 		t.Error("hashes should not be equal")
 	}
