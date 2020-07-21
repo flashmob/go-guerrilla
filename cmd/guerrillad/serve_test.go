@@ -377,6 +377,42 @@ func exponentialBackoff(i int) {
 	time.Sleep(time.Duration(Round(math.Pow(3.0, float64(i))-1.0)*100.0/2.0) * time.Millisecond)
 }
 
+func matchTestlog(startLine int, args ...interface{}) (bool, error) {
+	fd, err := os.Open("../../tests/testlog")
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = fd.Close()
+	}()
+	for tries := 0; tries < 6; tries++ {
+		if b, err := ioutil.ReadAll(fd); err != nil {
+			return false, err
+		} else {
+			if test.MatchLog(string(b), startLine, args...) {
+				return true, nil
+			}
+		}
+		// close and reopen
+		err = fd.Close()
+		if err != nil {
+			return false, err
+		}
+		fd = nil
+
+		// sleep
+		exponentialBackoff(tries)
+		_ = mainlog.Reopen()
+
+		// re-open
+		fd, err = os.OpenFile("../../tests/testlog", os.O_RDONLY, 0644)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 var grepNotFound error
 
 // grepTestlog looks for the `match` string in the testlog
@@ -547,7 +583,7 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	oldconf.BackendConfig = backends.BackendConfig{
-		"processors": {"debugger": {"log_received_mails": true}},
+		backends.ConfigProcessors: {"debugger": {"log_received_mails": true}},
 	}
 	oldconf.BackendConfig.ConfigureDefaults()
 
@@ -750,14 +786,19 @@ func TestServerAddEvent(t *testing.T) {
 
 	// shutdown the server
 	d.Shutdown()
-
-	// did backend started as expected?
-	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-		t.Error("Did not add server [127.0.0.1:2526] after sighup")
+	// sever added as as expected?
+	if matched, err := matchTestlog(
+		1, "msg", "new server added",
+		"iface", "127.0.0.1:2526",
+		"event", "server_change:new_server",
+	); !matched {
+		t.Error("Did not add server [127.0.0.1:2526] after sighup", err)
 	}
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("Server failed to stop")
+	if matched, err := matchTestlog(
+		1, "msg", "Backend shutdown completed",
+	); !matched {
+		t.Error("Server failed to stop", err)
 	}
 
 }
@@ -1539,9 +1580,8 @@ func TestDebugLevelChange(t *testing.T) {
 
 	d.Shutdown()
 
-	// did the log level change to info?
-	if _, err := grepTestlog("log level changed to [info]", 0); err != nil {
-		t.Error("log level did not change to [info]")
+	if ok, err := matchTestlog(1, "msg", "log level changed"); !ok {
+		t.Error("log level did not change", err)
 		t.FailNow()
 	}
 

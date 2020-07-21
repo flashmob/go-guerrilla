@@ -186,6 +186,39 @@ func cleanTestArtifacts(t *testing.T) {
 
 }
 
+func TestMatchConfig(t *testing.T) {
+	str := `
+time="2020-07-20T14:14:17+09:00" level=info msg="pid_file written" file=tests/go-guerrilla.pid pid=15247
+time="2020-07-20T14:14:17+09:00" level=debug msg="making servers"
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=default id=3
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=default id=2
+time="2020-07-20T14:14:17+09:00" level=info msg="starting server" iface="127.0.0.1:2526" serverID=0
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=default id=1
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=temp id=2
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=default id=4
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=temp id=3
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=temp id=4
+time="2020-07-20T14:14:17+09:00" level=info msg="processing worker started" gateway=temp id=1
+time="2020-07-20T14:14:17+09:00" level=info msg="listening on TCP" iface="127.0.0.1:2526" serverID=0
+time="2020-07-20T14:14:17+09:00" level=debug msg="waiting for a new client" nextSeq=1 serverID=0
+
+
+`
+	defer cleanTestArtifacts(t)
+	if !MatchLog(str, 1, "msg", "making servers") {
+		t.Error("making servers not matched")
+	}
+
+	if MatchLog(str, 10, "msg", "making servers") {
+		t.Error("not expecting making servers matched")
+	}
+
+	if !MatchLog(str, 1, "msg", "listening on TCP", "serverID", 0) {
+		t.Error("2 not pairs matched")
+	}
+
+}
+
 // Testing start and stop of server
 func TestStart(t *testing.T) {
 	if initErr != nil {
@@ -201,41 +234,48 @@ func TestStart(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "msg=\"listening on TCP\" iface=\"127.0.0.1:4654\""); i < 0 {
+		if !MatchLog(logOutput, 1, "msg", "listening on TCP", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not listen on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "msg=\"listening on TCP\" iface=\"127.0.0.1:2526\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "listening on TCP", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not listen on 127.0.0.1:2526")
 		}
-		// msg="waiting for a new client" iface="127.0.0.1:4654"
-		if i := strings.Index(logOutput, "msg=\"waiting for a new client\" iface=\"127.0.0.1:4654\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "waiting for a new client", "iface", "127.0.0.1:4654") {
 			t.Error("Server did not wait on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "msg=\"waiting for a new client\" iface=\"127.0.0.1:2526\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "waiting for a new client", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not wait on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:4654\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "server has stopped accepting new clients", "iface", "127.0.0.1:4654") {
 			t.Error("Server did not stop on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:2526\""); i < 0 {
+		if !MatchLog(logOutput, 1, "msg", "server has stopped accepting new clients", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not stop on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:4654\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "shutdown completed", "iface", "127.0.0.1:4654") {
 			t.Error("Server did not complete shutdown on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "msg=\"shutdown completed\" iface=\"127.0.0.1:2526\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "shutdown completed", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not complete shutdown on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "msg=\"shutting down pool\" iface=\"127.0.0.1:4654\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "shutting down pool", "iface", "127.0.0.1:4654") {
 			t.Error("Server did not shutdown pool on 127.0.0.1:4654")
 		}
-		if i := strings.Index(logOutput, "msg=\"shutting down pool\" iface=\"127.0.0.1:2526\""); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "shutting down pool", "iface", "127.0.0.1:2526") {
 			t.Error("Server did not shutdown pool on 127.0.0.1:2526")
 		}
-		if i := strings.Index(logOutput, "Backend shutdown completed"); i < 0 {
+
+		if !MatchLog(logOutput, 1, "msg", "Backend shutdown completed") {
 			t.Error("Backend didn't shut down")
 		}
-
 	}
 
 }

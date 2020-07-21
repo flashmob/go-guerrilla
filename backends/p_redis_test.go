@@ -11,18 +11,18 @@ import (
 
 func TestRedisGeneric(t *testing.T) {
 
-	e := mail.NewEnvelope("127.0.0.1", 1, "127.0.0.1:2525")
+	e := mail.NewEnvelope("127.0.0.1", 1, 10)
 	e.RcptTo = append(e.RcptTo, mail.Address{User: "test", Host: "grr.la"})
 
 	l, _ := log.GetLogger("./test_redis.log", "debug")
 	g, err := New("default", BackendConfig{
-		"processors": {
+		ConfigProcessors: {
 			"redis": {
 				"redis_interface":      "127.0.0.1:6379",
 				"redis_expire_seconds": 7200,
 			},
 		},
-		"gateways": {
+		ConfigGateways: {
 			"default": {
 				"save_process": "Hasher|Redis",
 			},

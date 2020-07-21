@@ -264,11 +264,11 @@ func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) 
 // The reason why using reflection is because we'll get a nice error message if the field is missing
 // the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
 // error messages
-func (s *service) ExtractConfig(ns configNameSpace, group string, cfg BackendConfig, configType BaseConfig) (interface{}, error) {
+func (s *service) ExtractConfig(section ConfigSection, group string, cfg BackendConfig, configType BaseConfig) (interface{}, error) {
 	group = strings.ToLower(group)
 
 	var configData ConfigGroup
-	if v, ok := cfg[ns.String()][group]; ok {
+	if v, ok := cfg[section][group]; ok {
 		configData = v
 	} else {
 		return configType, nil

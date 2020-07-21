@@ -250,8 +250,8 @@ func TestConfigChangeEvents(t *testing.T) {
 	logger, _ := log.GetLogger(oldconf.LogFile, oldconf.LogLevel)
 
 	oldconf.BackendConfig = backends.BackendConfig{
-		"processors": {"debugger": {"log_received_mails": true}},
-		"gateways": {
+		backends.ConfigProcessors: {"debugger": {"log_received_mails": true}},
+		backends.ConfigGateways: {
 			"default": {
 				"save_process": "HeadersParser|Header|Hasher|Debugger",
 			},

@@ -53,10 +53,10 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	}
 
 	bcfg := backends.BackendConfig{
-		backends.ConfigProcessors.String(): {
+		backends.ConfigProcessors: {
 			"debugger": {"log_received_mails": true},
 		},
-		backends.ConfigGateways.String(): {
+		backends.ConfigGateways: {
 			backends.DefaultGateway: {"save_workers_size": 1},
 		},
 	}

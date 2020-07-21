@@ -38,7 +38,7 @@ type BackendGateway struct {
 
 	producer *StreamDecorator
 
-	decoratorLookup map[string]map[string]*StreamDecorator
+	decoratorLookup map[ConfigSection]map[string]*StreamDecorator
 
 	workerID int
 
@@ -281,13 +281,13 @@ func (gw *BackendGateway) StreamOn() bool {
 
 // newStreamDecorator creates a new StreamDecorator and calls Configure with its corresponding configuration
 // cs - the item of 'list' property, result from newStackStreamProcessorConfig()
-// ns - typically the result of calling ConfigStreamProcessors.String()
-func (gw *BackendGateway) newStreamDecorator(cs stackConfigExpression, ns string) *StreamDecorator {
+// section - which section of the config
+func (gw *BackendGateway) newStreamDecorator(cs stackConfigExpression, section ConfigSection) *StreamDecorator {
 	if makeFunc, ok := Streamers[cs.name]; !ok {
 		return nil
 	} else {
 		d := makeFunc()
-		config := gw.config.lookupGroup(ns, cs.String())
+		config := gw.config.lookupGroup(section, cs.String())
 		if config == nil {
 			config = ConfigGroup{}
 		}
@@ -472,7 +472,7 @@ func (gw *BackendGateway) Reinitialize() error {
 // This function uses the config value save_process or validate_process to figure out which Decorator to use
 func (gw *BackendGateway) newStack(stackConfig string) (Processor, error) {
 	var decorators []Decorator
-	c := newStackProcessorConfig(stackConfig, newAliasMap(gw.config[ConfigProcessors.String()]))
+	c := newStackProcessorConfig(stackConfig, newAliasMap(gw.config[ConfigProcessors]))
 	if len(c.list) == 0 {
 		return NoopProcessor{}, nil
 	}
@@ -492,7 +492,7 @@ func (gw *BackendGateway) newStreamStack(stackConfig string) (streamer, error) {
 	var decorators []*StreamDecorator
 
 	noop := streamer{NoopStreamProcessor{}, decorators}
-	groupName := ConfigStreamProcessors.String()
+	groupName := ConfigStreamProcessors
 	c := newStackStreamProcessorConfig(stackConfig, newAliasMap(gw.config[groupName]))
 	if len(c.list) == 0 {
 		return noop, nil
@@ -522,7 +522,7 @@ func (gw *BackendGateway) loadConfig(cfg BackendConfig) error {
 	if gw.name == "" {
 		gw.name = DefaultGateway
 	}
-	if _, ok := cfg["gateways"][gw.name]; !ok {
+	if _, ok := cfg[ConfigGateways][gw.name]; !ok {
 		return errors.New("no such gateway configured: " + gw.name)
 	}
 	bcfg, err := Svc.ExtractConfig(ConfigGateways, gw.name, cfg, configType)
@@ -546,7 +546,7 @@ func (gw *BackendGateway) Initialize(cfg BackendConfig) error {
 		return err
 	}
 	gw.buffers = make(map[int][]byte) // individual buffers are made later
-	gw.decoratorLookup = make(map[string]map[string]*StreamDecorator)
+	gw.decoratorLookup = make(map[ConfigSection]map[string]*StreamDecorator)
 	gw.processors = make([]Processor, 0)
 	gw.validators = make([]ValidatingProcessor, 0)
 	gw.streamers = make([]streamer, 0)
@@ -761,25 +761,24 @@ func (gw *BackendGateway) initProducer() error {
 	if gw.gwConfig.PostProcessProducer == "" {
 		return notValid
 	}
-	ns := ConfigStreamProcessors.String()
-	m := newAliasMap(gw.config[ns])
+	section := ConfigStreamProcessors // which section of the config (stream_processors)
+	m := newAliasMap(gw.config[section])
 	c := newStackStreamProcessorConfig(gw.gwConfig.PostProcessProducer, m)
 	if len(c.list) == 0 {
 		return notValid
 	}
 	// check it there's already an instance of it
-	if gw.decoratorLookup[ns] != nil {
-		if v, ok := gw.decoratorLookup[ns][c.list[0].String()]; ok {
+	if gw.decoratorLookup[section] != nil {
+		if v, ok := gw.decoratorLookup[section][c.list[0].String()]; ok {
 			gw.producer = v
 			return nil
 		}
 	}
-	if d := gw.newStreamDecorator(c.list[0], ns); d != nil {
+	if d := gw.newStreamDecorator(c.list[0], section); d != nil {
 		// use a new instance
 		gw.producer = d
 		return nil
 	} else {
 		return errors.New("please check gateway config [post_process_producer]")
 	}
-	return notValid
 }

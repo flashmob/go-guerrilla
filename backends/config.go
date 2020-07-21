@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,19 +12,7 @@ import (
 
 type ConfigGroup map[string]interface{}
 
-type BackendConfig map[string]map[string]ConfigGroup
-
-/*
-
-TODO change to thus
-
-type BackendConfig struct {
-	Processors map[string]ConfigGroup `json:"processors,omitempty"`
-	StreamProcessors map[string]ConfigGroup `json:"stream_processors,omitempty"`
-	Gateways map[string]ConfigGroup `json:"gateways,omitempty"`
-}
-
-*/
+type BackendConfig map[ConfigSection]map[string]ConfigGroup
 
 const (
 	validateRcptTimeout = time.Second * 5
@@ -47,29 +36,27 @@ const (
 	configPostProcessSize     = 64
 )
 
-func (c *BackendConfig) SetValue(ns configNameSpace, name string, key string, value interface{}) {
-	nsKey := ns.String()
+func (c *BackendConfig) SetValue(section ConfigSection, name string, key string, value interface{}) {
 	if *c == nil {
 		*c = make(BackendConfig, 0)
 	}
-	if (*c)[nsKey] == nil {
-		(*c)[nsKey] = make(map[string]ConfigGroup)
+	if (*c)[section] == nil {
+		(*c)[section] = make(map[string]ConfigGroup)
 	}
-	if (*c)[nsKey][name] == nil {
-		(*c)[nsKey][name] = make(ConfigGroup)
+	if (*c)[section][name] == nil {
+		(*c)[section][name] = make(ConfigGroup)
 	}
-	(*c)[nsKey][name][key] = value
+	(*c)[section][name][key] = value
 }
 
-func (c *BackendConfig) GetValue(ns configNameSpace, name string, key string) interface{} {
-	nsKey := ns.String()
-	if (*c)[nsKey] == nil {
+func (c *BackendConfig) GetValue(section ConfigSection, name string, key string) interface{} {
+	if (*c)[section] == nil {
 		return nil
 	}
-	if (*c)[nsKey][name] == nil {
+	if (*c)[section][name] == nil {
 		return nil
 	}
-	if v, ok := (*c)[nsKey][name][key]; ok {
+	if v, ok := (*c)[section][name][key]; ok {
 		return &v
 	}
 	return nil
@@ -77,23 +64,18 @@ func (c *BackendConfig) GetValue(ns configNameSpace, name string, key string) in
 
 // toLower normalizes the backendconfig lowercases the config's keys
 func (c BackendConfig) toLower() {
-	for k, v := range c {
-		var l string
-		if l = strings.ToLower(k); k != l {
-			c[l] = v
-			delete(c, k)
-		}
+	for section, v := range c {
 		for k2, v2 := range v {
-			if l2 := strings.ToLower(k2); k2 != l2 {
-				c[l][l2] = v2
-				delete(c[l], k)
+			if k2_lower := strings.ToLower(k2); k2 != k2_lower {
+				c[section][k2_lower] = v2
+				delete(c[section], k2) // delete the non-lowercased key
 			}
 		}
 	}
 }
 
-func (c BackendConfig) lookupGroup(ns string, name string) ConfigGroup {
-	if v, ok := c[ns][name]; ok {
+func (c BackendConfig) lookupGroup(section ConfigSection, name string) ConfigGroup {
+	if v, ok := c[section][name]; ok {
 		return v
 	}
 	return nil
@@ -124,15 +106,50 @@ func (c *BackendConfig) ConfigureDefaults() error {
 	return nil
 }
 
-type configNameSpace int
+// UnmarshalJSON custom handling of the ConfigSection keys (they're enumerated)
+func (c *BackendConfig) UnmarshalJSON(b []byte) error {
+	temp := make(map[string]map[string]ConfigGroup)
+	err := json.Unmarshal(b, &temp)
+	if err != nil {
+		return err
+	}
+	if *c == nil {
+		*c = make(BackendConfig)
+	}
+	for key, val := range temp {
+		// map the key to a ConfigSection type
+		var section ConfigSection
+		if err := json.Unmarshal([]byte("\""+key+"\""), &section); err != nil {
+			return err
+		}
+		if (*c)[section] == nil {
+			(*c)[section] = make(map[string]ConfigGroup)
+		}
+		(*c)[section] = val
+	}
+	return nil
+
+}
+
+// MarshalJSON custom handling of ConfigSection keys (since JSON keys need to be strings)
+func (c *BackendConfig) MarshalJSON() ([]byte, error) {
+	temp := make(map[string]map[string]ConfigGroup)
+	for key, val := range *c {
+		// convert they key to a string
+		temp[key.String()] = val
+	}
+	return json.Marshal(temp)
+}
+
+type ConfigSection int
 
 const (
-	ConfigProcessors configNameSpace = iota
+	ConfigProcessors ConfigSection = iota
 	ConfigStreamProcessors
 	ConfigGateways
 )
 
-func (o configNameSpace) String() string {
+func (o ConfigSection) String() string {
 	switch o {
 	case ConfigProcessors:
 		return "processors"
@@ -142,6 +159,30 @@ func (o configNameSpace) String() string {
 		return "gateways"
 	}
 	return "unknown"
+}
+
+func (o *ConfigSection) UnmarshalJSON(b []byte) error {
+	str := strings.Trim(string(b), `"`)
+	str = strings.ToLower(str)
+	switch {
+	case str == "processors":
+		*o = ConfigProcessors
+	case str == "stream_processors":
+		*o = ConfigStreamProcessors
+	case str == "gateways":
+		*o = ConfigGateways
+	default:
+		return errors.New("incorrect config section [" + str + "], may be processors, stream_processors or gateways")
+	}
+	return nil
+}
+
+func (o *ConfigSection) MarshalJSON() ([]byte, error) {
+	ret := o.String()
+	if ret == "unknown" {
+		return []byte{}, errors.New("unknown config section")
+	}
+	return []byte(ret), nil
 }
 
 // All config structs extend from this
@@ -229,9 +270,9 @@ func (c BackendConfig) Changes(oldConfig BackendConfig) (changed, added, removed
 	changed = make(map[string]bool, 0)
 	added = make(map[string]bool, 0)
 	removed = make(map[string]bool, 0)
-	cp := ConfigProcessors.String()
-	csp := ConfigStreamProcessors.String()
-	cg := ConfigGateways.String()
+	cp := ConfigProcessors
+	csp := ConfigStreamProcessors
+	cg := ConfigGateways
 	changedProcessors := changedConfigGroups(
 		oldConfig[cp], c[cp])
 	changedStreamProcessors := changedConfigGroups(

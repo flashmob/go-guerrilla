@@ -249,7 +249,8 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		s.log().Fields("serverID", s.serverID, "nextSeq", clientID+1).Debug("waiting for a new client")
+		s.log().Fields("serverID", s.serverID, "nextSeq", clientID+1, "iface", s.listenInterface).
+			Debug("waiting for a new client")
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
@@ -276,12 +277,10 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 				s.log().Fields("error", borrowErr, "serverID", s.serverID).Error("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				_ = conn.Close()
-
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
 		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool, s.serverID))
-
 	}
 }
 

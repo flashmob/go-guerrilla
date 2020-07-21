@@ -608,7 +608,7 @@ func TestChunkSaverWrite(t *testing.T) {
 
 func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
 	// place the parse result in an envelope
-	e := mail.NewEnvelope("127.0.0.1", 1, "127.0.0.1:25")
+	e := mail.NewEnvelope("127.0.0.1", 1, 234)
 	to, _ := mail.NewAddress("test@test.com")
 	e.RcptTo = append(e.RcptTo, *to)
 	from, _ := mail.NewAddress("test@test.com")
@@ -642,7 +642,7 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 
 	// configure the buffer cap
 	bc := backends.BackendConfig{
-		"stream_processors": {
+		backends.ConfigStreamProcessors: {
 			"chunksaver": {
 				"chunk_size":     8000,
 				"storage_engine": "memory",
@@ -652,7 +652,7 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 	}
 
 	//_ = backends.Svc.Initialize(bc)
-	_ = chunksaver.Configure(bc["stream_processors"]["chunksaver"])
+	_ = chunksaver.Configure(bc[backends.ConfigStreamProcessors]["chunksaver"])
 	_ = mimeanalyzer.Configure(backends.ConfigGroup{})
 	// give it the envelope with the parse results
 	_ = chunksaver.Open(e)

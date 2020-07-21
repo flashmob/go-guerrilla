@@ -102,7 +102,7 @@ func TestSMTPCustomBackend(t *testing.T) {
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	bcfg := backends.BackendConfig{
-		"processors": {
+		backends.ConfigProcessors: {
 			"debugger": {
 				"log_received_mails": true,
 			},
@@ -110,7 +110,7 @@ func TestSMTPCustomBackend(t *testing.T) {
 				"primary_mail_host": "example.com",
 			},
 		},
-		"gateways": {
+		backends.ConfigGateways: {
 			"default": {
 				"save_workers_size": 3,
 				"save_process":      "HeadersParser|Header|Hasher|Debugger",
@@ -479,7 +479,7 @@ func TestSetAddProcessor(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":     "HeadersParser|Debugger|FunkyLogger",
 					"validate_process": "FunkyLogger",
@@ -625,7 +625,7 @@ func TestReloadConfig(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":     "HeadersParser|Debugger|FunkyLogger",
 					"validate_process": "FunkyLogger",
@@ -660,7 +660,7 @@ func TestPubSubAPI(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":     "HeadersParser|Debugger|FunkyLogger",
 					"validate_process": "FunkyLogger",
@@ -801,7 +801,7 @@ func TestCustomBackendResult(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":     "HeadersParser|Debugger|Custom",
 					"validate_process": "Custom",
@@ -869,7 +869,7 @@ func TestBackendAddRemove(t *testing.T) {
 		PidFile:      "tests/go-guerrilla.pid",
 		AllowedHosts: []string{"grr.la", "spam4.me"},
 		BackendConfig: backends.BackendConfig{
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":     "HeadersParser|Debugger|Custom",
 					"validate_process": "Custom",
@@ -893,7 +893,7 @@ func TestBackendAddRemove(t *testing.T) {
 
 	cfg2 := *cfg
 	cfg2.BackendConfig = backends.BackendConfig{
-		"gateways": {
+		backends.ConfigGateways: {
 			"client1": {
 				"save_process":     "HeadersParser|Debugger|Custom",
 				"validate_process": "Custom",
@@ -960,7 +960,7 @@ func TestStreamProcessorConfig(t *testing.T) {
 		PidFile:      "tests/go-guerrilla.pid",
 		AllowedHosts: []string{"grr.la", "spam4.me"},
 		BackendConfig: backends.BackendConfig{
-			"stream_procEssoRs": { // note mixed case
+			backends.ConfigStreamProcessors: {
 				"chunkSaver": { // note mixed case
 					"chunk_size":     8000,
 					"storage_engine": "memory",
@@ -976,7 +976,7 @@ func TestStreamProcessorConfig(t *testing.T) {
 					"log_reads":     true,
 				},
 			},
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_stream": "mimeanalyzer|chunksaver|test|debug",
 				},
@@ -1003,12 +1003,12 @@ func TestStreamProcessor(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"stream_processors": {
+			backends.ConfigStreamProcessors: {
 				"debug": {
 					"log_reads": true,
 				},
 			},
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process": "HeadersParser|Debugger",
 					"save_stream":  "Header|headersparser|compress|Decompress|debug",
@@ -1071,7 +1071,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"stream_processors": {
+			backends.ConfigStreamProcessors: {
 				"debug": {
 					"log_reads": true,
 				},
@@ -1081,7 +1081,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 					"compress_level": 0,
 				},
 			},
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process":          "",
 					"save_stream":           "mimeanalyzer|moo",
@@ -1403,12 +1403,12 @@ func TestStreamMimeProcessor(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"stream_processors": {
+			backends.ConfigStreamProcessors: {
 				"debug": {
 					"log_reads": true,
 				},
 			},
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process": "HeadersParser|Debugger",
 					"save_stream":  "mimeanalyzer|headersparser|compress|Decompress|debug",
@@ -1552,14 +1552,14 @@ func TestStreamChunkSaver(t *testing.T) {
 		LogFile:      "tests/testlog",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
-			"stream_processors": {
+			backends.ConfigStreamProcessors: {
 				"chunksaver": {
 					"chunk_size":         1024 * 32,
 					"stream_buffer_size": 1024 * 16,
 					"storage_engine":     "memory",
 				},
 			},
-			"gateways": {
+			backends.ConfigGateways: {
 				"default": {
 					"save_process": "HeadersParser|Debugger",
 					"save_stream":  "mimeanalyzer|chunksaver",

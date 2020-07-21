@@ -22,12 +22,12 @@ func TestStates(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	c := BackendConfig{
-		"processors": {
+		ConfigProcessors: {
 			"Debugger": {
 				"log_received_mails": true,
 			},
 		},
-		"gateways": {
+		ConfigGateways: {
 			"default": {
 				"save_process":      "HeadersParser|Debugger",
 				"save_workers_size": "1",
@@ -61,12 +61,12 @@ func TestInitialize(t *testing.T) {
 
 func TestStartProcessStop(t *testing.T) {
 	c := BackendConfig{
-		"processors": {
+		ConfigProcessors: {
 			"Debugger": {
 				"log_received_mails": true,
 			},
 		},
-		"gateways": {
+		ConfigGateways: {
 			"default": {
 				"save_process":      "HeadersParser|Debugger",
 				"save_workers_size": "2",
