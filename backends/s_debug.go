@@ -1,7 +1,6 @@
 package backends
 
 import (
-	"fmt"
 	"github.com/flashmob/go-guerrilla/mail"
 	"time"
 )
@@ -34,24 +33,25 @@ type streamDebuggerConfig struct {
 func StreamDebug() *StreamDecorator {
 	sd := &StreamDecorator{}
 	var config streamDebuggerConfig
+	var envelope *mail.Envelope
 	sd.Configure = func(cfg ConfigGroup) error {
 		return sd.ExtractConfig(cfg, &config)
 	}
 	sd.Decorate =
 		func(sp StreamProcessor, a ...interface{}) StreamProcessor {
 			sd.Open = func(e *mail.Envelope) error {
+				envelope = e
 				return nil
 			}
 			return StreamProcessWith(func(p []byte) (int, error) {
-				str := string(p)
+
 				if config.LogReads {
-					fmt.Print(str)
-					Log().WithField("p", string(p)).Info("Debug stream")
+					Log().Fields("queuedID", envelope.QueuedId, "payload", string(p)).Info("debug stream")
 				}
 				if config.SleepSec > 0 {
-					Log().Infof("sleeping for %d", config.SleepSec)
+					Log().Fields("queuedID", envelope.QueuedId, "sleep", config.SleepSec).Info("sleeping")
 					time.Sleep(time.Second * time.Duration(config.SleepSec))
-					Log().Infof("woke up")
+					Log().Fields("queuedID", envelope.QueuedId).Info("woke up")
 
 					if config.SleepSec == 1 {
 						panic("panic on purpose")

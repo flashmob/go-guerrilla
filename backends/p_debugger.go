@@ -47,14 +47,14 @@ func Debugger() Decorator {
 		return ProcessWith(func(e *mail.Envelope, task SelectTask) (Result, error) {
 			if task == TaskSaveMail {
 				if config.LogReceivedMails {
-					Log().Infof("Mail from: %s / to: %v", e.MailFrom.String(), e.RcptTo)
-					Log().Info("Headers are:", e.Header)
-					Log().Info("Body:", e.Data.String())
+					Log().Fields("queuedID", e.QueuedId, "from", e.MailFrom.String(), "to", e.RcptTo).Info("save mail")
+					Log().Fields("queuedID", e.QueuedId, "headers", e.Header).Info("headers dump")
+					Log().Fields("queuedID", e.QueuedId, "body", e.Data.String()).Info("body dump")
 				}
 				if config.SleepSec > 0 {
-					Log().Infof("sleeping for %d", config.SleepSec)
+					Log().Fields("queuedID", e.QueuedId, "sleep", config.SleepSec).Info("sleeping")
 					time.Sleep(time.Second * time.Duration(config.SleepSec))
-					Log().Infof("woke up")
+					Log().Fields("queuedID", e.QueuedId).Info("woke up")
 
 					if config.SleepSec == 1 {
 						panic("panic on purpose")

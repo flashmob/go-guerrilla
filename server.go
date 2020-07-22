@@ -416,7 +416,7 @@ func (s *server) handleClient(client *client) {
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := s.readCommand(client)
-			s.log().Fields("input", string(input)).Debugf("client said")
+			s.log().Fields("input", string(input)).Debug("client said")
 			if err == io.EOF {
 				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("client closed the connection")
 				return

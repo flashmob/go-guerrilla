@@ -20,7 +20,9 @@ func init() {
 }
 
 func logVersion() {
-	mainlog.Infof("guerrillad %s", guerrilla.Version)
-	mainlog.Debugf("Build Time: %s", guerrilla.BuildTime)
-	mainlog.Debugf("Commit:     %s", guerrilla.Commit)
+	mainlog.Fields(
+		"version", guerrilla.Version,
+		"buildTime", guerrilla.BuildTime,
+		"commit", guerrilla.Commit).
+		Info("guerrillad")
 }

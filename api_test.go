@@ -457,9 +457,8 @@ var funkyLogger = func() backends.Decorator {
 			func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 				if task == backends.TaskValidateRcpt {
 					// log the last recipient appended to e.Rcpt
-					backends.Log().Infof(
-						"another funky recipient [%s]",
-						e.RcptTo[len(e.RcptTo)-1])
+					backends.Log().Fields("recipient", e.RcptTo[len(e.RcptTo)-1]).Info(
+						"another funky recipient")
 					// if valid then forward call to the next processor in the chain
 					return p.Process(e, task)
 				} else if task == backends.TaskSaveMail {
@@ -1052,7 +1051,7 @@ func TestStreamProcessor(t *testing.T) {
 	}
 
 	// lets check for fingerprints
-	if strings.Index(string(b), "Debug stream") < 0 {
+	if strings.Index(string(b), "debug stream") < 0 {
 		t.Error("did not log: Debug stream")
 	}
 
@@ -1131,7 +1130,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 	}
 	time.Sleep(time.Second * 2)
 	// lets check for fingerprints
-	if strings.Index(string(b), "Debug stream") < 0 {
+	if strings.Index(string(b), "debug stream") < 0 {
 		t.Error("did not log: Debug stream")
 	}
 
@@ -1445,7 +1444,7 @@ func TestStreamMimeProcessor(t *testing.T) {
 	}
 
 	// lets check for fingerprints
-	if strings.Index(string(b), "Debug stream") < 0 {
+	if strings.Index(string(b), "debug stream") < 0 {
 		t.Error("did not log: Debug stream")
 	}
 

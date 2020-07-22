@@ -338,14 +338,19 @@ const testPauseDuration = time.Millisecond * 1010
 // reload config
 func sigHup(pidfile string) {
 	if data, err := ioutil.ReadFile(pidfile); err == nil {
-		mainlog.Infof("pid read is %s", data)
-		ecmd := exec.Command("kill", "-HUP", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			mainlog.Infof("could not SIGHUP", err)
+		if pid, err := strconv.Atoi(string(data)); err != nil {
+			mainlog.WithError(err).Error("could not read pid")
+		} else {
+			mainlog.Fields("pid", pid).Info("pid read")
+			ecmd := exec.Command("kill", "-HUP", string(data))
+			_, err = ecmd.Output()
+			if err != nil {
+				mainlog.WithError(err).Error("could not SIGHUP")
+			}
 		}
+
 	} else {
-		mainlog.WithError(err).Info("sighup - Could not read pidfle")
+		mainlog.Fields("error", err, "file", pidfile).Info("sighup - Could not read pidfle")
 	}
 
 }
@@ -353,12 +358,17 @@ func sigHup(pidfile string) {
 // shutdown after calling serve()
 func sigKill(pidfile string) {
 	if data, err := ioutil.ReadFile(pidfile); err == nil {
-		mainlog.Infof("pid read is %s", data)
-		ecmd := exec.Command("kill", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			mainlog.Infof("could not sigkill", err)
+		if pid, err := strconv.Atoi(string(data)); err != nil {
+			mainlog.WithError(err).Error("could not read pid")
+		} else {
+			mainlog.Fields("pid", pid).Info("pid read")
+			ecmd := exec.Command("kill", string(data))
+			_, err = ecmd.Output()
+			if err != nil {
+				mainlog.WithError(err).Info("could not sigkill")
+			}
 		}
+
 	} else {
 		mainlog.WithError(err).Info("sigKill - Could not read pidfle")
 	}
@@ -710,7 +720,7 @@ func TestServe(t *testing.T) {
 	// did backend started as expected?
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -796,7 +806,7 @@ func TestServerAddEvent(t *testing.T) {
 	}
 
 	if matched, err := matchTestlog(
-		1, "msg", "Backend shutdown completed",
+		1, "msg", "backend shutdown completed",
 	); !matched {
 		t.Error("Server failed to stop", err)
 	}
@@ -873,7 +883,7 @@ func TestServerStartEvent(t *testing.T) {
 	// shutdown and wait for exit
 	d.Shutdown()
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -978,7 +988,7 @@ func TestServerStopEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 }
@@ -1112,7 +1122,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1222,7 +1232,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	sigHup("pidfile.pid")
 
 	// wait for config to reload
-	if _, err := grepTestlog("Server [127.0.0.1:4655] re-opened", 0); err != nil {
+	if _, err := matchTestlog(1, "iface", "127.0.0.1:4655", "msg", "server re-opened"); err != nil {
 		t.Error("server didn't catch sighup")
 	}
 
@@ -1243,7 +1253,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1401,7 +1411,7 @@ func TestBadTLSReload(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1487,7 +1497,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 	// so the connection we have opened should timeout by now

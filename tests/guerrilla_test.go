@@ -273,7 +273,7 @@ func TestStart(t *testing.T) {
 			t.Error("Server did not shutdown pool on 127.0.0.1:2526")
 		}
 
-		if !MatchLog(logOutput, 1, "msg", "Backend shutdown completed") {
+		if !MatchLog(logOutput, 1, "msg", "backend shutdown completed") {
 			t.Error("Backend didn't shut down")
 		}
 	}

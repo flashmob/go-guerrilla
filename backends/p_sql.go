@@ -142,14 +142,19 @@ func (s *SQLProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 func (s *SQLProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) (execErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Fields(
+				"panic", fmt.Sprintf("%v", r),
+				"size", sum,
+				"error", execErr,
+				"stack", string(debug.Stack()),
+			).
+				Error("panic while inserting query")
 			panic("query failed")
 		}
 	}()

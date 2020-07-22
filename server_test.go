@@ -49,7 +49,7 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	var mainlog log.Logger
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 
 	bcfg := backends.BackendConfig{
@@ -280,7 +280,7 @@ func TestHandleClient(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
@@ -320,7 +320,7 @@ func TestGithubIssue197(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -422,7 +422,7 @@ func TestGithubIssue198(t *testing.T) {
 	backends.Svc.AddProcessor("custom", customBackend)
 
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	cfg := backends.BackendConfig{}
@@ -561,7 +561,7 @@ func TestGithubIssue199(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -740,7 +740,7 @@ func TestGithubIssue200(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -792,7 +792,7 @@ func TestGithubIssue201(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -880,7 +880,7 @@ func TestXClient(t *testing.T) {
 	sc.XClientOn = true
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.

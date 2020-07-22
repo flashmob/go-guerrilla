@@ -13,7 +13,7 @@ func MatchLog(input string, startLine int, args ...interface{}) bool {
 	}
 	lines := strings.Split(input, "\n")
 	if len(lines) < startLine {
-		panic("log too short, lines:" + string(len(lines)))
+		panic("log too short, lines:" + fmt.Sprintf("%v", len(lines)))
 	}
 	var lookFor string
 	// for each line

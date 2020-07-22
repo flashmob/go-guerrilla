@@ -186,24 +186,23 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
-			//logln(1, fmt.Sprintf("Recovered in %v", r))
-			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Fields("panic", fmt.Sprintf("%v", r),
+				"size", sum,
+				"error", execErr,
+				"stack", string(debug.Stack())).
+				Error("panic while inserting query")
 			panic("query failed")
 		}
 	}()
 	// prepare the query used to insert when rows reaches batchMax
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
-	//if rand.Intn(2) == 1 {
-	//	return errors.New("uggabooka")
-	//}
 	if execErr != nil {
 		Log().WithError(execErr).Error("There was a problem the insert")
 	}
@@ -248,7 +247,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 				// retry the sql query
 				attempts := 3
 				for i := 0; i < attempts; i++ {
-					Log().Infof("retrying query query rows[%c] ", c)
+					Log().Fields("rows", c).Info("retrying query query rows ")
 					time.Sleep(time.Second)
 					err = g.doQuery(c, db, insertStmt, &vals)
 					if err == nil {
@@ -274,7 +273,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 		select {
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
 		case <-stop:
-			Log().Infof("MySQL query batcher stopped (#%d)", batcherId)
+			Log().Fields("batcherID", batcherId).Info("MySQL query batcher stopped")
 			// Insert any remaining rows
 			inserter(count)
 			feederOk = false
@@ -284,7 +283,12 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 
 			vals = append(vals, row...)
 			count++
-			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", batcherId)
+			Log().Fields(
+				"row", row,
+				"cols", len(row),
+				"count", count,
+				"worker", batcherId,
+			).Debug("new feeder row")
 			if count >= GuerrillaDBAndRedisBatchMax {
 				inserter(GuerrillaDBAndRedisBatchMax)
 			}
@@ -378,7 +382,7 @@ func GuerrillaDbRedis() Decorator {
 			// we loop so that if insertQueryBatcher panics, it can recover and go in again
 			for {
 				if feederOK := g.insertQueryBatcher(feeder, db, qbID, stop); !feederOK {
-					Log().Debugf("insertQueryBatcher exited (#%d)", qbID)
+					Log().Fields("qbID", qbID).Debug("insertQueryBatcher exited")
 					return
 				}
 				Log().Debug("resuming insertQueryBatcher")
@@ -394,7 +398,7 @@ func GuerrillaDbRedis() Decorator {
 			if err := db.Close(); err != nil {
 				Log().WithError(err).Error("close sql database")
 			} else {
-				Log().Infof("closed sql database")
+				Log().Info("closed sql database")
 			}
 		}
 
@@ -402,7 +406,7 @@ func GuerrillaDbRedis() Decorator {
 			if err := redisClient.conn.Close(); err != nil {
 				Log().WithError(err).Error("close redis failed")
 			} else {
-				Log().Infof("closed redis")
+				Log().Info("closed redis")
 			}
 		}
 		// send a close signal to all query batchers to exit.
