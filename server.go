@@ -372,9 +372,17 @@ const advertiseHelp = "250 HELP"
 
 // handleClient handles an entire client SMTP exchange
 func (s *server) handleClient(client *client) {
-	defer client.closeConn()
+	defer func() {
+		s.log().Fields(
+			"peer", client.RemoteIP,
+			"event", "disconnect",
+			"id":    client.ID,
+			"queuedID": client.QueuedID,
+		).Info("Disconnect client")
+		client.closeConn()
+	}()
 	sc := s.configStore.Load().(ServerConfig)
-	s.log().Fields("peer", client.RemoteIP, "seq", client.ID).Info("handle client")
+	s.log().Fields("peer", client.RemoteIP, "id", client.ID, "event", "connect").Info("handle client")
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
@@ -508,6 +516,15 @@ func (s *server) handleClient(client *client) {
 				} else if client.parser.NullPath {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
+				} else {
+					s.log().Fields(
+						"event",   "mailfrom",
+						"helo",    client.Helo,
+						"domain",  client.MailFrom.Host,
+						"address", client.RemoteIP,
+						"id":      client.ID,
+						"queuedID" : client.queuedID,
+					}).Info("mail from")
 				}
 				client.TransportType = smtp.TransportTypeUnspecified
 				for i := range client.MailFrom.PathParams {
@@ -647,6 +664,12 @@ func (s *server) handleClient(client *client) {
 
 			if res.Code() < 300 {
 				client.messagesSent++
+				s.log().Fields(
+					"event" : "received"
+					"helo":          client.Helo,
+					"remoteAddress": getRemoteAddr(client.conn),
+					"success":       true,
+				).Info("Received message")
 			}
 			client.sendResponse(res)
 			client.state = ClientCmd
