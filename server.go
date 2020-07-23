@@ -376,13 +376,18 @@ func (s *server) handleClient(client *client) {
 		s.log().Fields(
 			"peer", client.RemoteIP,
 			"event", "disconnect",
-			"id":    client.ID,
-			"queuedID": client.QueuedID,
+			"id", client.ID,
+			"queuedID", client.QueuedId,
 		).Info("Disconnect client")
 		client.closeConn()
 	}()
 	sc := s.configStore.Load().(ServerConfig)
-	s.log().Fields("peer", client.RemoteIP, "id", client.ID, "event", "connect").Info("handle client")
+	s.log().Fields(
+		"peer", client.RemoteIP,
+		"id", client.ID,
+		"event", "connect",
+		"queuedID", client.QueuedId,
+	).Info("handle client")
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
@@ -518,13 +523,13 @@ func (s *server) handleClient(client *client) {
 					client.MailFrom = mail.Address{}
 				} else {
 					s.log().Fields(
-						"event",   "mailfrom",
-						"helo",    client.Helo,
-						"domain",  client.MailFrom.Host,
+						"event", "mailfrom",
+						"helo", client.Helo,
+						"domain", client.MailFrom.Host,
 						"address", client.RemoteIP,
-						"id":      client.ID,
-						"queuedID" : client.queuedID,
-					}).Info("mail from")
+						"id", client.ID,
+						"queuedID", client.QueuedId,
+					).Info("mail from")
 				}
 				client.TransportType = smtp.TransportTypeUnspecified
 				for i := range client.MailFrom.PathParams {
@@ -598,9 +603,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailUnrecognizedCmd)
 				}
 			}
-
 		case ClientData:
-
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
 			client.bufin.setLimit(sc.MaxSize + 1024000) // This a hard limit.
@@ -610,9 +613,18 @@ func (s *server) handleClient(client *client) {
 				err error
 				res backends.Result
 			)
+			fields := []interface{}{
+				"event", "data",
+				"id", client.ID,
+				"queuedID", client.QueuedId,
+				"messageID", client.MessageID,
+				"peer", client.RemoteIP,
+				"serverID", s.serverID,
+			}
+			s.log().Fields(fields...).Info("receive DATA")
 			if be.StreamOn() {
 				// process the message as a stream
-				res, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
+				res, n, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
 				if err == nil && res.Code() < 300 {
 					e := s.envelopePool.Borrow(
 						client.Envelope.RemoteIP,
@@ -637,8 +649,8 @@ func (s *server) handleClient(client *client) {
 					}
 				}
 				// All done. we can close the smtpReader, the protocol will reset the transaction, expecting a new message
-				if err := client.smtpReader.Close(); err != nil {
-					s.log().WithError(err).Error("could not close DATA reader")
+				if closeErr := client.smtpReader.Close(); closeErr != nil {
+					s.log().WithError(closeErr).Error("could not close DATA reader")
 				}
 			}
 
@@ -653,7 +665,7 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailReadErrorDataCmd, " ", err.Error())
 					client.kill()
 				}
-				s.log().WithError(err).Warn("Error reading data")
+				s.log().Fields(append(fields, "error", err)...).Error("error reading DATA")
 				client.resetTransaction()
 				break
 			}
@@ -664,12 +676,7 @@ func (s *server) handleClient(client *client) {
 
 			if res.Code() < 300 {
 				client.messagesSent++
-				s.log().Fields(
-					"event" : "received"
-					"helo":          client.Helo,
-					"remoteAddress": getRemoteAddr(client.conn),
-					"success":       true,
-				).Info("Received message")
+				s.log().Fields(append(fields, "length", n)...).Info("received message DATA")
 			}
 			client.sendResponse(res)
 			client.state = ClientCmd

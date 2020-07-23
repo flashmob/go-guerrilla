@@ -346,7 +346,7 @@ func TestGreeting(t *testing.T) {
 	app.Shutdown()
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
-		if i := strings.Index(logOutput, "msg=\"handle client\" peer=127.0.0.1"); i < 0 {
+		if !MatchLog(logOutput, 1, "msg", "handle client", "peer", "127.0.0.1") {
 			t.Error("Server did not handle any clients")
 		}
 	}
@@ -404,9 +404,10 @@ func TestShutDown(t *testing.T) {
 	if read, err := ioutil.ReadFile("./testlog"); err == nil {
 		logOutput := string(read)
 		//	fmt.Println(logOutput)
-		if i := strings.Index(logOutput, "msg=\"handle client\" peer=127.0.0.1"); i < 0 {
+		if !MatchLog(logOutput, 1, "msg", "handle client", "peer", "127.0.0.1") {
 			t.Error("Server did not handle any clients")
 		}
+
 	}
 
 }

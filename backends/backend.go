@@ -46,7 +46,7 @@ type Backend interface {
 	ValidateRcpt(e *mail.Envelope) RcptError
 	ProcessBackground(e *mail.Envelope)
 	// ProcessStream is the alternative for Process, a stream is read from io.Reader
-	ProcessStream(r io.Reader, e *mail.Envelope) (Result, error)
+	ProcessStream(r io.Reader, e *mail.Envelope) (Result, int64, error)
 	// StreamOn signals if ProcessStream can be used
 	StreamOn() bool
 	// Initializes the backend, eg. creates folders, sets-up database connections

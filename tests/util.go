@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -15,6 +16,7 @@ func MatchLog(input string, startLine int, args ...interface{}) bool {
 	if len(lines) < startLine {
 		panic("log too short, lines:" + fmt.Sprintf("%v", len(lines)))
 	}
+	re, _ := regexp.Compile(`[[:space:]:\\]`)
 	var lookFor string
 	// for each line
 	found := false
@@ -26,18 +28,14 @@ func MatchLog(input string, startLine int, args ...interface{}) bool {
 			}
 			key := args[j]
 			val := args[j+1]
-			switch val.(type) {
-			case string:
+			lookFor = fmt.Sprintf("%v", val)
+			if re.MatchString(lookFor) {
 				// quote it
 				lookFor = fmt.Sprintf(`%s="%s"`, key, val)
-				break
-			case fmt.Stringer:
-				// quote it
-				lookFor = fmt.Sprintf(`%s="%s"`, key, val)
-				break
-			default:
+			} else {
 				lookFor = fmt.Sprintf(`%s=%v`, key, val)
 			}
+
 			if pos := strings.Index(lines[i], lookFor); pos != -1 {
 				found = true
 			} else {

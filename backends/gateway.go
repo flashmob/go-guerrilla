@@ -364,10 +364,10 @@ func (gw *BackendGateway) ProcessBackground(e *mail.Envelope) {
 	}
 }
 
-func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, error) {
+func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, int64, error) {
 	res := response.Canned
 	if gw.State != BackendStateRunning {
-		return NewResult(res.FailBackendNotRunning, response.SP, gw.State), errors.New(res.FailBackendNotRunning.String())
+		return NewResult(res.FailBackendNotRunning, response.SP, gw.State), 0, errors.New(res.FailBackendNotRunning.String())
 	}
 	// borrow a workerMsg from the pool
 	workerMsg := workerMsgPool.Get().(*workerMsg)
@@ -382,29 +382,23 @@ func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, 
 	case status := <-workerMsg.notifyMe:
 		// email saving transaction completed
 		if status.result == BackendResultOK && status.queuedID != "" {
-			return NewResult(res.SuccessMessageQueued, response.SP, status.queuedID), status.err
+			return NewResult(res.SuccessMessageQueued, response.SP, status.queuedID), e.Size, status.err
 		}
-
 		// A custom result, there was probably an error, if so, log it
 		if status.result != nil {
-			if status.err != nil {
-				Log().Error(status.err)
-			}
-			return status.result, status.err
+			return status.result, e.Size, status.err
 		}
-
 		// if there was no result, but there's an error, then make a new result from the error
 		if status.err != nil {
 			if _, err := strconv.Atoi(status.err.Error()[:3]); err != nil {
-				return NewResult(res.FailBackendTransaction, response.SP, status.err), status.err
+				return NewResult(res.FailBackendTransaction, response.SP, status.err), e.Size, status.err
 			}
-			return NewResult(status.err), status.err
+			return NewResult(status.err), e.Size, status.err
 		}
-
 		// both result & error are nil (should not happen)
 		err := errors.New("no response from backend - processor did not return a result or an error")
 		Log().Error(err)
-		return NewResult(res.FailBackendTransaction, response.SP, err), err
+		return NewResult(res.FailBackendTransaction, response.SP, err), e.Size, err
 
 	case <-time.After(gw.saveTimeout()):
 		Log().Fields("queuedID", e.QueuedId).Error("backend has timed out while saving email stream")
@@ -415,9 +409,8 @@ func (gw *BackendGateway) ProcessStream(r io.Reader, e *mail.Envelope) (Result, 
 			e.Done()
 			Log().Fields("queuedID", e.QueuedId).Info("backend has finished saving email stream after timeout")
 		}()
-		return NewResult(res.FailBackendTimeout), errors.New("gateway timeout")
+		return NewResult(res.FailBackendTimeout), -1, errors.New("gateway timeout")
 	}
-
 }
 
 // Shutdown shuts down the backend and leaves it in BackendStateShuttered state
