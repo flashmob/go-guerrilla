@@ -277,6 +277,47 @@ func (e *Envelope) PopRcpt() Address {
 	return ret
 }
 
+func (e *Envelope) Protocol() Protocol {
+	protocol := ProtocolSMTP
+	switch {
+	case !e.ESMTP && !e.TLS:
+		protocol = ProtocolSMTP
+	case !e.ESMTP && e.TLS:
+		protocol = ProtocolSMTPS
+	case e.ESMTP && !e.TLS:
+		protocol = ProtocolESMTP
+	case e.ESMTP && e.TLS:
+		protocol = ProtocolESMTPS
+	}
+	return protocol
+}
+
+type Protocol int
+
+const (
+	ProtocolSMTP Protocol = iota
+	ProtocolSMTPS
+	ProtocolESMTP
+	ProtocolESMTPS
+	ProtocolLTPS
+)
+
+func (p Protocol) String() string {
+	switch p {
+	case ProtocolSMTP:
+		return "SMTP"
+	case ProtocolSMTPS:
+		return "SMTPS"
+	case ProtocolESMTP:
+		return "ESMTP"
+	case ProtocolESMTPS:
+		return "ESMTPS"
+	case ProtocolLTPS:
+		return "LTPS"
+	}
+	return "unknown"
+}
+
 const (
 	statePlainText = iota
 	stateStartEncodedWord

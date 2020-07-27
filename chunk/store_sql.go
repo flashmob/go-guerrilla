@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"net"
 )
@@ -53,7 +54,7 @@ func (s *StoreSQL) prepareSql() error {
 	// begin inserting an email (before saving chunks)
 	if stmt, err := s.db.Prepare(`INSERT INTO ` +
 		s.config.EmailTable +
-		` (from, helo, recipient, ipv4_addr, ipv6_addr, return_path, is_tls, is_8bit) 
+		` (from, helo, recipient, ipv4_addr, ipv6_addr, return_path, transport, protocol) 
  VALUES(?, ?, ?, ?, ?, ?, ?, ?)`); err != nil {
 		return err
 	} else {
@@ -73,7 +74,7 @@ func (s *StoreSQL) prepareSql() error {
 	// finalize the email (the connection closed)
 	if stmt, err := s.db.Prepare(`
 		UPDATE ` + s.config.EmailTable + ` 
-			SET size=?, parts_info = ?, subject, delivery_id = ?, to = ? 
+			SET size=?, parts_info = ?, subject, queued_id = ?, to = ? 
 		WHERE mail_id = ? `); err != nil {
 		return err
 	} else {
@@ -131,7 +132,15 @@ func (s *StoreSQL) prepareSql() error {
 }
 
 // OpenMessage implements the Storage interface
-func (s *StoreSQL) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool, transport smtp.TransportType) (mailID uint64, err error) {
+func (s *StoreSQL) OpenMessage(
+	from string,
+	helo string,
+	recipient string,
+	ipAddress net.IPAddr,
+	returnPath string,
+	protocol mail.Protocol,
+	transport smtp.TransportType,
+) (mailID uint64, err error) {
 
 	// if it's ipv4 then we want ipv6 to be 0, and vice-versa
 	var ip4 uint32
@@ -141,7 +150,7 @@ func (s *StoreSQL) OpenMessage(from string, helo string, recipient string, ipAdd
 	} else {
 		_ = copy(ip6, ipAddress.IP)
 	}
-	r, err := s.statements["insertEmail"].Exec(from, helo, recipient, ip4, ip6, returnPath, isTLS, transport)
+	r, err := s.statements["insertEmail"].Exec(from, helo, recipient, ip4, ip6, returnPath, transport, protocol)
 	if err != nil {
 		return 0, err
 	}
@@ -174,12 +183,18 @@ func (s *StoreSQL) AddChunk(data []byte, hash []byte) error {
 }
 
 // CloseMessage implements the Storage interface
-func (s *StoreSQL) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
+func (s *StoreSQL) CloseMessage(
+	mailID uint64,
+	size int64,
+	partsInfo *PartsInfo,
+	subject string,
+	queuedID string,
+	to string, from string) error {
 	partsInfoJson, err := json.Marshal(partsInfo)
 	if err != nil {
 		return err
 	}
-	_, err = s.statements["finalizeEmail"].Exec(size, partsInfoJson, subject, deliveryID, to, mailID)
+	_, err = s.statements["finalizeEmail"].Exec(size, partsInfoJson, subject, queuedID, to, mailID)
 	if err != nil {
 		return err
 	}

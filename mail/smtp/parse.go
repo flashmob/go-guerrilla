@@ -24,6 +24,7 @@ const (
 
 type PathParam []string
 
+// A TransportType specifies the message transport according to https://tools.ietf.org/html/rfc6152
 type TransportType int
 
 const (
@@ -32,6 +33,20 @@ const (
 	TransportTypeUnspecified
 	TransportTypeInvalid
 )
+
+func (t TransportType) String() string {
+	switch t {
+	case TransportType7bit:
+		return "7bit"
+	case TransportType8bit:
+		return "8bit"
+	case TransportTypeUnspecified:
+		return "unknown"
+	case TransportTypeInvalid:
+		return "invalid"
+	}
+	return "invalid"
+}
 
 // is8BitMime checks for the BODY parameter as
 func (p PathParam) Transport() TransportType {

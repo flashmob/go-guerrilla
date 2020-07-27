@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"errors"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"net"
 	"time"
@@ -20,6 +21,7 @@ type storeMemoryConfig struct {
 	CompressLevel int `json:"compress_level,omitempty"`
 }
 
+// A StoreMemory stores emails and chunked data in mememory
 type StoreMemory struct {
 	chunks        map[HashKey]*memoryChunk
 	emails        []*memoryEmail
@@ -38,13 +40,13 @@ type memoryEmail struct {
 	partsInfo  []byte
 	helo       string
 	subject    string
-	deliveryID string
+	queuedID   string
 	recipient  string
 	ipv4       net.IPAddr
 	ipv6       net.IPAddr
 	returnPath string
-	isTLS      bool
-	is8Bit     smtp.TransportType
+	transport  smtp.TransportType
+	protocol   mail.Protocol
 }
 
 type memoryChunk struct {
@@ -54,7 +56,15 @@ type memoryChunk struct {
 }
 
 // OpenMessage implements the Storage interface
-func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ipAddress net.IPAddr, returnPath string, isTLS bool, transport smtp.TransportType) (mailID uint64, err error) {
+func (m *StoreMemory) OpenMessage(
+	from string,
+	helo string,
+	recipient string,
+	ipAddress net.IPAddr,
+	returnPath string,
+	protocol mail.Protocol,
+	transport smtp.TransportType,
+) (mailID uint64, err error) {
 	var ip4, ip6 net.IPAddr
 	if ip := ipAddress.IP.To4(); ip != nil {
 		ip4 = ipAddress
@@ -70,8 +80,8 @@ func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ip
 		ipv4:       ip4,
 		ipv6:       ip6,
 		returnPath: returnPath,
-		isTLS:      isTLS,
-		is8Bit:     transport,
+		transport:  transport,
+		protocol:   protocol,
 	}
 	m.emails = append(m.emails, &email)
 	m.nextID++
@@ -79,7 +89,14 @@ func (m *StoreMemory) OpenMessage(from string, helo string, recipient string, ip
 }
 
 // CloseMessage implements the Storage interface
-func (m *StoreMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsInfo, subject string, deliveryID string, to string, from string) error {
+func (m *StoreMemory) CloseMessage(
+	mailID uint64,
+	size int64,
+	partsInfo *PartsInfo,
+	subject string,
+	queuedID string,
+	to string,
+	from string) error {
 	if email := m.emails[mailID-m.offset]; email == nil {
 		return errors.New("email not found")
 	} else {
@@ -90,7 +107,7 @@ func (m *StoreMemory) CloseMessage(mailID uint64, size int64, partsInfo *PartsIn
 			email.partsInfo = info
 		}
 		email.subject = subject
-		email.deliveryID = deliveryID
+		email.queuedID = queuedID
 		email.to = to
 		email.from = from
 		email.size = size
@@ -179,13 +196,13 @@ func (m *StoreMemory) GetEmail(mailID uint64) (*Email, error) {
 		partsInfo:  *pi,
 		helo:       email.helo,
 		subject:    email.subject,
-		deliveryID: email.deliveryID,
+		queuedID:   email.queuedID,
 		recipient:  email.recipient,
 		ipv4:       email.ipv4,
 		ipv6:       email.ipv6,
 		returnPath: email.returnPath,
-		isTLS:      email.isTLS,
-		transport:  email.is8Bit,
+		transport:  email.transport,
+		protocol:   email.protocol,
 	}, nil
 }
 

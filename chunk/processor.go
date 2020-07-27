@@ -157,7 +157,7 @@ func Chunksaver() *backends.StreamDecorator {
 					e.RcptTo[0].String(),
 					ip,
 					e.MailFrom.String(),
-					e.TLS,
+					e.Protocol(),
 					e.TransportType,
 				)
 				if err != nil {
