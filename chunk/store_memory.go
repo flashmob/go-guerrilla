@@ -21,7 +21,7 @@ type storeMemoryConfig struct {
 	CompressLevel int `json:"compress_level,omitempty"`
 }
 
-// A StoreMemory stores emails and chunked data in mememory
+// A StoreMemory stores emails and chunked data in memory
 type StoreMemory struct {
 	chunks        map[HashKey]*memoryChunk
 	emails        []*memoryEmail
@@ -42,8 +42,8 @@ type memoryEmail struct {
 	subject    string
 	queuedID   string
 	recipient  string
-	ipv4       net.IPAddr
-	ipv6       net.IPAddr
+	ipv4       IPAddr
+	ipv6       IPAddr
 	returnPath string
 	transport  smtp.TransportType
 	protocol   mail.Protocol
@@ -57,21 +57,23 @@ type memoryChunk struct {
 
 // OpenMessage implements the Storage interface
 func (m *StoreMemory) OpenMessage(
+	queuedID mail.Hash128,
 	from string,
 	helo string,
 	recipient string,
-	ipAddress net.IPAddr,
+	ipAddress IPAddr,
 	returnPath string,
 	protocol mail.Protocol,
 	transport smtp.TransportType,
 ) (mailID uint64, err error) {
-	var ip4, ip6 net.IPAddr
+	var ip4, ip6 IPAddr
 	if ip := ipAddress.IP.To4(); ip != nil {
-		ip4 = ipAddress
+		ip4 = IPAddr{net.IPAddr{IP: ip}}
 	} else {
-		ip6 = ipAddress
+		ip6 = IPAddr{net.IPAddr{IP: ip}}
 	}
 	email := memoryEmail{
+		queuedID:   queuedID.String(),
 		mailID:     m.nextID,
 		createdAt:  time.Now(),
 		from:       from,
@@ -94,7 +96,6 @@ func (m *StoreMemory) CloseMessage(
 	size int64,
 	partsInfo *PartsInfo,
 	subject string,
-	queuedID string,
 	to string,
 	from string) error {
 	if email := m.emails[mailID-m.offset]; email == nil {
@@ -107,7 +108,6 @@ func (m *StoreMemory) CloseMessage(
 			email.partsInfo = info
 		}
 		email.subject = subject
-		email.queuedID = queuedID
 		email.to = to
 		email.from = from
 		email.size = size

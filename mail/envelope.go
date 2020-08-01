@@ -3,6 +3,7 @@ package mail
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -122,6 +123,23 @@ func NewAddress(str string) (*Address, error) {
 	return a, nil
 }
 
+type Hash128 [16]byte
+
+func (h Hash128) String() string {
+	return fmt.Sprintf("%x", h[:])
+}
+
+// FromHex converts the, string must be 32 bytes
+func (h *Hash128) FromHex(s string) {
+	if len(s) != 32 {
+		panic("hex string must be 32 bytes")
+	}
+	_, _ = hex.Decode(h[:], []byte(s))
+}
+
+// Bytes returns the raw bytes
+func (h Hash128) Bytes() []byte { return h[:] }
+
 // Envelope of Email represents a single SMTP message.
 type Envelope struct {
 	// Data stores the header and message body (when using the non-streaming processor)
@@ -153,7 +171,7 @@ type Envelope struct {
 	// TLS is true if the email was received using a TLS connection
 	TLS bool
 	// Email(s) will be queued with this id
-	QueuedId string
+	QueuedId Hash128
 	// TransportType indicates whenever 8BITMIME extension has been signaled
 	TransportType smtp.TransportType
 	// ESMTP: true if EHLO was used
@@ -182,18 +200,20 @@ func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	}
 }
 
-func queuedID(clientID uint64, serverID int) string {
+func queuedID(clientID uint64, serverID int) Hash128 {
 	hasher.Lock()
 	defer func() {
 		hasher.h.Reset()
 		hasher.Unlock()
 	}()
-	// pack the seeds and hash them
+	h := Hash128{}
+	// pack the seeds and hash'em
 	binary.BigEndian.PutUint64(hasher.n[0:8], uint64(time.Now().UnixNano()))
 	binary.BigEndian.PutUint64(hasher.n[8:16], clientID)
 	binary.BigEndian.PutUint64(hasher.n[16:24], uint64(serverID))
 	hasher.h.Write(hasher.n[:])
-	return fmt.Sprintf("%x", hasher.h.Sum([]byte{}))
+	copy(h[:], hasher.h.Sum([]byte{}))
+	return h
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -300,6 +320,7 @@ const (
 	ProtocolESMTP
 	ProtocolESMTPS
 	ProtocolLTPS
+	ProtocolUnknown
 )
 
 func (p Protocol) String() string {
@@ -316,6 +337,23 @@ func (p Protocol) String() string {
 		return "LTPS"
 	}
 	return "unknown"
+}
+
+func ParseProtocolType(str string) Protocol {
+	switch {
+	case str == "SMTP":
+		return ProtocolSMTP
+	case str == "SMTPS":
+		return ProtocolSMTPS
+	case str == "ESMTP":
+		return ProtocolESMTP
+	case str == "ESMTPS":
+		return ProtocolESMTPS
+	case str == "LTPS":
+		return ProtocolLTPS
+	}
+
+	return ProtocolUnknown
 }
 
 const (

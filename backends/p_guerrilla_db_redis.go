@@ -437,8 +437,7 @@ func GuerrillaDbRedis() Decorator {
 					e.MailFrom.String(),
 					e.Subject,
 					ts)
-				e.QueuedId = hash
-
+				e.QueuedId.FromHex(hash)
 				// Add extra headers
 				var addHead string
 				addHead += "Delivered-To: " + to + "\r\n"

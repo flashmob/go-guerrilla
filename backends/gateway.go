@@ -696,7 +696,7 @@ func (gw *BackendGateway) workDispatcher(
 			case Processor:
 				result, err := v.Process(msg.e, msg.task)
 				state = dispatcherStateNotify
-				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
+				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId.String()}
 			case ValidatingProcessor:
 				result, err := v.Process(msg.e, msg.task)
 				state = dispatcherStateNotify
@@ -718,7 +718,7 @@ func (gw *BackendGateway) workDispatcher(
 				} else {
 					result = NewResult(response.Canned.SuccessMessageQueued, response.SP, msg.e.QueuedId)
 				}
-				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId}
+				msg.notifyMe <- &notifyMsg{err: err, result: result, queuedID: msg.e.QueuedId.String()}
 
 			}
 		}

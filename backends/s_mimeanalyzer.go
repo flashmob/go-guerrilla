@@ -61,11 +61,11 @@ func StreamMimeAnalyzer() *StreamDecorator {
 
 			sd.Close = func() error {
 				if parseErr == nil {
-					_ = parser.Close()
-					return nil
-				} else {
-					return parseErr
+					if parseErr = parser.Close(); parseErr != nil {
+						Log().WithError(parseErr).Error("mime parse error in mimeanalyzer on close")
+					}
 				}
+				return parseErr
 			}
 
 			return StreamProcessWith(func(p []byte) (int, error) {

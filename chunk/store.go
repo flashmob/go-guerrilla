@@ -17,10 +17,11 @@ func init() {
 type Storage interface {
 	// OpenMessage is used to begin saving an email. An email id is returned and used to call CloseMessage later
 	OpenMessage(
+		queuedID mail.Hash128,
 		from string,
 		helo string,
 		recipient string,
-		ipAddress net.IPAddr,
+		ipAddress IPAddr,
 		returnPath string,
 		protocol mail.Protocol,
 		transport smtp.TransportType) (mailID uint64, err error)
@@ -30,7 +31,6 @@ type Storage interface {
 		size int64,
 		partsInfo *PartsInfo,
 		subject string,
-		queuedID string,
 		to string,
 		from string) error
 	// AddChunk saves a chunk of bytes to a given hash key
@@ -64,8 +64,8 @@ type Email struct {
 	subject    string // subject stores the value from the first "Subject" header field
 	queuedID   string
 	recipient  string             // recipient is the email address that the server received from the RCPT TO command
-	ipv4       net.IPAddr         // set to a value if client connected via ipv4
-	ipv6       net.IPAddr         // set to a value if client connected via ipv6
+	ipv4       IPAddr             // set to a value if client connected via ipv4
+	ipv6       IPAddr             // set to a value if client connected via ipv6
 	returnPath string             // returnPath is the email address that the server received from the MAIL FROM command
 	protocol   mail.Protocol      // protocol such as SMTP, ESTMP, ESMTPS
 	transport  smtp.TransportType // transport what type of transport the message uses, eg 8bitmime
@@ -75,4 +75,8 @@ type Chunk struct {
 	modifiedAt     time.Time
 	referenceCount uint // referenceCount counts how many emails reference this chunk
 	data           io.Reader
+}
+
+type IPAddr struct {
+	net.IPAddr
 }

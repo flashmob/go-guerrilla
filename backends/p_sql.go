@@ -229,9 +229,8 @@ func SQL() Decorator {
 				hash := ""
 				if len(e.Hashes) > 0 {
 					hash = e.Hashes[0]
-					e.QueuedId = e.Hashes[0]
+					e.QueuedId.FromHex(e.Hashes[0])
 				}
-
 				var co *DataCompressor
 				// a compressor was set by the Compress processor
 				if c, ok := e.Values["zlib-compressor"]; ok {

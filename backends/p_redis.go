@@ -88,7 +88,7 @@ func Redis() Decorator {
 			if task == TaskSaveMail {
 				hash := ""
 				if len(e.Hashes) > 0 {
-					e.QueuedId = e.Hashes[0]
+					e.QueuedId.FromHex(e.Hashes[0])
 					hash = e.Hashes[0]
 					var stringer fmt.Stringer
 					// a compressor was set

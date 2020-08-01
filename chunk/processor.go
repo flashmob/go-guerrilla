@@ -147,11 +147,12 @@ func Chunksaver() *backends.StreamDecorator {
 				// create a new entry & grab the id
 				written = 0
 				progress = 0
-				var ip net.IPAddr
+				var ip IPAddr
 				if ret := net.ParseIP(e.RemoteIP); ret != nil {
-					ip = net.IPAddr{IP: ret}
+					ip = IPAddr{net.IPAddr{IP: ret}}
 				}
 				mid, err := database.OpenMessage(
+					e.QueuedId,
 					e.MailFrom.String(),
 					e.Helo,
 					e.RcptTo[0].String(),
@@ -181,7 +182,6 @@ func Chunksaver() *backends.StreamDecorator {
 						written,
 						&chunkBuffer.Info,
 						subject,
-						envelope.QueuedId,
 						to,
 						from,
 					)

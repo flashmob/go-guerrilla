@@ -3,6 +3,7 @@ package chunk
 import (
 	"bytes"
 	"fmt"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"io"
 	"os"
 	"strings"
@@ -409,7 +410,11 @@ func TestHashBytes(t *testing.T) {
 }
 
 func TestTransformer(t *testing.T) {
-	store, chunksaver, mimeanalyzer, stream := initTestStream(true)
+	store, chunksaver, mimeanalyzer, stream, _, err := initTestStream(true, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	buf := make([]byte, 64)
 	var result bytes.Buffer
 	if _, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
@@ -441,7 +446,11 @@ func TestTransformer(t *testing.T) {
 }
 
 func TestChunkSaverReader(t *testing.T) {
-	store, chunksaver, mimeanalyzer, stream := initTestStream(false)
+	store, chunksaver, mimeanalyzer, stream, _, err := initTestStream(false, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	buf := make([]byte, 64)
 	var result bytes.Buffer
 	if _, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email3)), buf); err != nil {
@@ -530,7 +539,12 @@ func TestChunkSaverReader(t *testing.T) {
 
 func TestChunkSaverWrite(t *testing.T) {
 
-	store, chunksaver, mimeanalyzer, stream := initTestStream(true)
+	store, chunksaver, mimeanalyzer, stream, _, err := initTestStream(true, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	storeMemory := store.(*StoreMemory)
 	var out bytes.Buffer
 	buf := make([]byte, 128)
 	if written, err := io.CopyBuffer(stream, bytes.NewBuffer([]byte(email)), buf); err != nil {
@@ -540,7 +554,7 @@ func TestChunkSaverWrite(t *testing.T) {
 		_ = chunksaver.Close()
 		fmt.Println("written:", written)
 		total := 0
-		for _, chunk := range store.chunks {
+		for _, chunk := range storeMemory.chunks {
 			total += len(chunk.data)
 		}
 		fmt.Println("compressed", total, "saved:", written-int64(total))
@@ -599,21 +613,41 @@ func TestChunkSaverWrite(t *testing.T) {
 			t.Error(err)
 			t.FailNow()
 		}
-		//var decoded bytes.Buffer
-		//io.Copy(&decoded, dr)
+
 		io.Copy(os.Stdout, dr)
 
 	}
 }
 
-func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor) {
+func initTestStream(transform bool, chunkSaverConfig *backends.ConfigGroup) (
+	Storage, *backends.StreamDecorator, *backends.StreamDecorator, backends.StreamProcessor, *mail.Envelope, error) {
 	// place the parse result in an envelope
 	e := mail.NewEnvelope("127.0.0.1", 1, 234)
 	to, _ := mail.NewAddress("test@test.com")
 	e.RcptTo = append(e.RcptTo, *to)
 	from, _ := mail.NewAddress("test@test.com")
+	e.Helo = "some.distant-server.org"
+	e.ESMTP = true
+	e.TLS = true
+	e.TransportType = smtp.TransportType8bit
 	e.MailFrom = *from
-	store := new(StoreMemory)
+	//e.RemoteIP = "127.0.0.1"
+	e.RemoteIP = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+
+	if chunkSaverConfig == nil {
+		chunkSaverConfig = &backends.ConfigGroup{
+			"chunk_size":     8000,
+			"storage_engine": "memory",
+			"compress_level": 9,
+		}
+	}
+	var store Storage
+	if (*chunkSaverConfig)["storage_engine"] == "sql" {
+		store = new(StoreSQL)
+	} else {
+		store = new(StoreMemory)
+	}
+
 	chunkBuffer := NewChunkedBytesBufferMime()
 	//chunkBuffer.setDatabase(store)
 	// instantiate the chunk saver
@@ -630,36 +664,43 @@ func initTestStream(transform bool) (*StoreMemory, *backends.StreamDecorator, *b
 	if transform {
 		stream = mimeanalyzer.Decorate(
 			transformer.Decorate(
-				//debug.Decorate(
+				// here we inject the store and chunkBuffer
 				chunksaver.Decorate(
 					backends.DefaultStreamProcessor{}, store, chunkBuffer)))
 	} else {
 		stream = mimeanalyzer.Decorate(
-			//debug.Decorate(
+			// inject the srore and chunkBuffer
 			chunksaver.Decorate(
-				backends.DefaultStreamProcessor{}, store, chunkBuffer)) //)
+				backends.DefaultStreamProcessor{}, store, chunkBuffer))
 	}
 
 	// configure the buffer cap
 	bc := backends.BackendConfig{
 		backends.ConfigStreamProcessors: {
-			"chunksaver": {
-				"chunk_size":     8000,
-				"storage_engine": "memory",
-				"compress_level": 9,
-			},
+			"chunksaver": *chunkSaverConfig,
 		},
 	}
 
-	//_ = backends.Svc.Initialize(bc)
-	_ = chunksaver.Configure(bc[backends.ConfigStreamProcessors]["chunksaver"])
-	_ = mimeanalyzer.Configure(backends.ConfigGroup{})
+	if err := chunksaver.Configure(bc[backends.ConfigStreamProcessors]["chunksaver"]); err != nil {
+		return nil, nil, nil, nil, nil, err
+
+	}
+	if err := mimeanalyzer.Configure(backends.ConfigGroup{}); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
 	// give it the envelope with the parse results
-	_ = chunksaver.Open(e)
-	_ = mimeanalyzer.Open(e)
-	if transform {
-		_ = transformer.Open(e)
+	if err := chunksaver.Open(e); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	if err := mimeanalyzer.Open(e); err != nil {
+		return nil, nil, nil, nil, nil, err
 	}
 
-	return store, chunksaver, mimeanalyzer, stream
+	if transform {
+		if err := transformer.Open(e); err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+	}
+
+	return store, chunksaver, mimeanalyzer, stream, e, nil
 }

@@ -99,7 +99,7 @@ func TestAddressWithIP(t *testing.T) {
 func TestEnvelope(t *testing.T) {
 	e := NewEnvelope("127.0.0.1", 22, 0)
 
-	e.QueuedId = "abc123"
+	e.QueuedId = queuedID(2, 33)
 	e.Helo = "helo.example.com"
 	e.MailFrom = Address{User: "test", Host: "example.com"}
 	e.TLS = true
@@ -162,12 +162,24 @@ func TestEncodedWordAhead(t *testing.T) {
 }
 
 func TestQueuedID(t *testing.T) {
-	str := queuedID(5550000000, 1)
-	if len(str) != 32 {
-		t.Error("queuedID needs to be 32 bytes in length")
+	h := queuedID(5550000000, 1)
+
+	if len(h) != 16 { // silly comparison, but there in case of refactoring
+		t.Error("queuedID needs to be 16 bytes in length")
 	}
-	str2 := queuedID(5550000000, 1)
-	if str == str2 {
+
+	str := h.String()
+	if len(str) != 32 {
+		t.Error("queuedID string should be 32 bytes in length")
+	}
+
+	h2 := queuedID(5550000000, 1)
+	if bytes.Equal(h[:], h2[:]) {
 		t.Error("hashes should not be equal")
+	}
+
+	h2.FromHex("5a4a2f08784334de5148161943111ad3")
+	if h2.String() != "5a4a2f08784334de5148161943111ad3" {
+		t.Error("hex conversion didnt work")
 	}
 }

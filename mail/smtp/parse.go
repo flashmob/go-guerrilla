@@ -48,6 +48,20 @@ func (t TransportType) String() string {
 	return "invalid"
 }
 
+func ParseTransportType(str string) TransportType {
+	switch {
+	case str == "7bit":
+		return TransportType7bit
+	case str == "8bit":
+		return TransportType8bit
+	case str == "unknown":
+		return TransportTypeUnspecified
+	case str == "invalid":
+		return TransportTypeInvalid
+	}
+	return TransportTypeInvalid
+}
+
 // is8BitMime checks for the BODY parameter as
 func (p PathParam) Transport() TransportType {
 	if len(p) != 2 {
