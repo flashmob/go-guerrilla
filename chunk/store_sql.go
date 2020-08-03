@@ -1,7 +1,9 @@
 package chunk
 
 import (
+	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -11,6 +13,7 @@ import (
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"github.com/go-sql-driver/mysql"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -393,9 +396,78 @@ func (s *StoreSQL) GetEmail(mailID uint64) (*Email, error) {
 	return email, nil
 }
 
+// Value implements the driver.Valuer interface
+func (h HashKey) Value() (driver.Value, error) {
+	return h[:], nil
+}
+
+func (h *HashKey) Scan(value interface{}) error {
+	b := value.([]uint8)
+	h.Pack(b)
+	return nil
+}
+
+type chunkData []uint8
+
+func (v chunkData) Value() (driver.Value, error) {
+	return v[:], nil
+}
+
 // GetChunks implements the Storage interface
 func (s *StoreSQL) GetChunks(hash ...HashKey) ([]*Chunk, error) {
-	result := make([]*Chunk, 0, len(hash))
+	result := make([]*Chunk, len(hash))
+	// we need to wrap these in an interface{} so that they can be passed to db.Query
+	args := make([]interface{}, len(hash))
+	for i := range hash {
+		args[i] = &hash[i]
+	}
+	query := fmt.Sprintf("SELECT modified_at, reference_count, data, `hash` FROM %s WHERE `hash` in (%s)",
+		s.config.EmailChunkTable,
+		"?"+strings.Repeat(",?", len(hash)-1),
+	)
+	rows, err := s.db.Query(query, args...)
+	defer func() {
+		if rows != nil {
+			_ = rows.Close()
+		}
+	}()
+	if err != nil {
+		return result, err
+	}
+	// temp is a lookup table for hash -> chunk
+	// since rows can come in different order, we need to make sure
+	// that result is sorted in the order of args
+	temp := make(map[HashKey]*Chunk, len(hash))
+	i := 0
+	for rows.Next() {
+		var createdAt mysql.NullTime
+		var data chunkData
+		var h HashKey
+		c := Chunk{}
+		if err := rows.Scan(
+			&createdAt,
+			&c.referenceCount,
+			&data,
+			&h,
+		); err != nil {
+			return result, err
+		}
+
+		c.data = bytes.NewBuffer(data)
+		c.modifiedAt = createdAt.Time
+		temp[h] = &c
+		i++
+	}
+	// re-order the rows according to the order of the args (very important)
+	for i := range args {
+		b := args[i].(*HashKey)
+		if _, ok := temp[*b]; ok {
+			result[i] = temp[*b]
+		}
+	}
+	if err := rows.Err(); err != nil || i == 0 {
+		return result, errors.New("data chunks not found")
+	}
 	return result, nil
 }
 
@@ -437,7 +509,6 @@ func (info *PartsInfo) Scan(value interface{}) error {
 // /Scan implements database/sql scanner interface, for parsing net.IPAddr
 func (ip *IPAddr) Scan(value interface{}) error {
 	if value == nil {
-		ip = nil
 		return nil
 	}
 	if data, ok := value.([]uint8); ok {

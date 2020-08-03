@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"sync"
 )
@@ -26,6 +27,11 @@ func (h *HashKey) Pack(b []byte) {
 // String implements the Stringer interface from fmt
 func (h HashKey) String() string {
 	return base64.RawStdEncoding.EncodeToString(h[0:hashByteSize])
+}
+
+// Hex returns the hash, encoded in hexadecimal
+func (h HashKey) Hex() string {
+	return fmt.Sprintf("%x", h[:])
 }
 
 // UnmarshalJSON implements the Unmarshaler interface from encoding/json

@@ -107,6 +107,13 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 	if i > len(c.chunks) {
 		return nil, errors.New("not enough chunks")
 	}
+	defer func() {
+		if len(c.chunks) > 15 {
+			fmt.Println("moo")
+			//fmt.Println("hash", hash[i].Hex(),  "i", i)
+		}
+	}()
+
 	if c.chunks[i] != nil {
 		// cache hit!
 		return c.chunks[i], nil
@@ -135,7 +142,7 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 			if i-1 > -1 {
 				for j := i - 1; j > -1; j-- {
 					if c.chunks[j] != nil {
-						c.chunks[j] = nil
+						// todo		c.chunks[j] = nil
 					} else {
 						break
 					}
