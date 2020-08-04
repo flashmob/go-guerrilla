@@ -1,19 +1,16 @@
 package guerrilla
 
 import (
-	"os"
-	"testing"
-	"time"
-
 	"bufio"
-	"net/textproto"
-	"strings"
-	"sync"
-
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/textproto"
+	"os"
+	"strings"
+	"sync"
+	"testing"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -534,7 +531,7 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 	line, _ = r.ReadLine()
 	client.Hashes = append(client.Hashes, "abcdef1526777763"+greet)
 	client.TLS = TLS
-	client.QueuedId = time.Now().String()
+	client.QueuedId = mail.QueuedID(1, 1)
 	if err := w.PrintfLine("DATA"); err != nil {
 		t.Error(err)
 	}

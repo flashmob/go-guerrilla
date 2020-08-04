@@ -1089,7 +1089,7 @@ func TestStreamProcessorBackground(t *testing.T) {
 					"post_process_size":     100,
 					"stream_buffer_size":    1024,
 					"save_workers_size":     8,
-					"save_timeout":          "1s",
+					"save_timeout":          "20s",
 					"val_rcpt_timeout":      "2s",
 				},
 			},

@@ -603,7 +603,7 @@ This is not a an MIME email
 func TestNonMineEmail(t *testing.T) {
 	p = NewMimeParser()
 	p.inject([]byte(email4))
-	if err := p.mime(nil, ""); err != nil && err != NotMime {
+	if err := p.mime(nil, ""); err != nil && err != NotMineErr {
 		t.Error(err)
 	} else {
 		// err should be NotMime
@@ -618,7 +618,7 @@ func TestNonMineEmail(t *testing.T) {
 
 	// what if we pass an empty string?
 	p.inject([]byte{' '})
-	if err := p.mime(nil, ""); err == nil || err == NotMime {
+	if err := p.mime(nil, ""); err == nil || err == NotMineErr {
 		t.Error("unexpected error", err)
 	}
 
@@ -676,7 +676,7 @@ func TestNonMineEmailBigBody(t *testing.T) {
 		in = append(in, b[i:to+i])
 	}
 	p.inject(in...)
-	if err := p.mime(nil, ""); err != nil && err != NotMime {
+	if err := p.mime(nil, ""); err != nil && err != NotMineErr {
 		t.Error(err)
 	} else {
 		for part := range p.Parts {
@@ -690,7 +690,7 @@ func TestNonMineEmailBigBody(t *testing.T) {
 
 	// what if we pass an empty string?
 	p.inject([]byte{' '})
-	if err := p.mime(nil, ""); err == nil || err == NotMime {
+	if err := p.mime(nil, ""); err == nil || err == NotMineErr {
 		t.Error("unexpected error", err)
 	}
 

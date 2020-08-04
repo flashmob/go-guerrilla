@@ -30,7 +30,7 @@ func StreamMimeAnalyzer() *StreamDecorator {
 	sd := &StreamDecorator{}
 	var (
 		envelope *mail.Envelope
-		parseErr error
+		mimeErr  error
 		parser   *mimeparse.Parser
 	)
 	sd.Configure = func(cfg ConfigGroup) error {
@@ -38,15 +38,9 @@ func StreamMimeAnalyzer() *StreamDecorator {
 		return nil
 	}
 	sd.Shutdown = func() error {
-		var err error
-		defer func() {
-			parser = nil
-
-		}()
-		if err = parser.Close(); err != nil {
-			Log().WithError(err).Error("error when closing parser in mimeanalyzer")
-			return err
-		}
+		// assumed that parser has been closed, but we can call close again just to make sure
+		_ = parser.Close()
+		parser = nil
 		return nil
 	}
 
@@ -56,26 +50,39 @@ func StreamMimeAnalyzer() *StreamDecorator {
 			sd.Open = func(e *mail.Envelope) error {
 				parser.Open()
 				envelope = e
+				mimeErr = nil
+				envelope.MimeError = nil
 				return nil
 			}
 
 			sd.Close = func() error {
-				if parseErr == nil {
-					if parseErr = parser.Close(); parseErr != nil {
-						Log().WithError(parseErr).Error("mime parse error in mimeanalyzer on close")
+				closeErr := parser.Close()
+				if mimeErr == nil {
+					mimeErr = closeErr
+				}
+
+				envelope.MimeError = mimeErr
+
+				if mimeErr != nil {
+					Log().WithError(closeErr).Warn("mime parse error in mimeanalyzer on close")
+					envelope.MimeError = nil
+
+					if err, ok := mimeErr.(*mimeparse.Error); ok && err.ParseError() {
+						// dont propagate parse errors && NotMime error
+						return nil
 					}
 				}
-				return parseErr
+				return mimeErr
 			}
 
 			return StreamProcessWith(func(p []byte) (int, error) {
 				if envelope.MimeParts == nil {
 					envelope.MimeParts = &parser.Parts
 				}
-				if parseErr == nil {
-					parseErr = parser.Parse(p)
-					if parseErr != nil {
-						Log().WithError(parseErr).Error("mime parse error in mimeanalyzer")
+				if mimeErr == nil {
+					mimeErr = parser.Parse(p)
+					if mimeErr != nil {
+						Log().WithError(mimeErr).Warn("mime parse error in mimeanalyzer")
 					}
 				}
 				return sp.Write(p)

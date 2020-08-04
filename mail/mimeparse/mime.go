@@ -11,7 +11,6 @@ doesn't back-track or multi-scan.
 */
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net/textproto"
@@ -19,6 +18,20 @@ import (
 	"strings"
 	"sync"
 )
+
+var (
+	MaxNodesErr *Error
+	NotMineErr  *Error
+)
+
+func init() {
+	NotMineErr = &Error{
+		err: ErrorNotMime,
+	}
+	MaxNodesErr = &Error{
+		err: ErrorMaxNodes,
+	}
+}
 
 const (
 	// maxBoundaryLen limits the length of the content-boundary.
@@ -46,8 +59,110 @@ const (
 	MaxNodes = 512
 )
 
-var NotMime = errors.New("not Mime")
-var MaxNodesErr = errors.New("too many mime part nodes")
+type MimeError int
+
+const (
+	ErrorNotMime MimeError = iota
+	ErrorMaxNodes
+	ErrorBoundaryTooShort
+	ErrorBoundaryLineExpected
+	ErrorUnexpectedChar
+	ErrorHeaderFieldTooShort
+	ErrorBoundaryExceededLength
+	ErrorHeaderParseError
+	ErrorMissingSubtype
+	ErrorUnexpectedTok
+	ErrorUnexpectedCommentToken
+	ErrorInvalidToken
+	ErrorUnexpectedQuotedStrToken
+	ErrorParameterExpectingEquals
+	ErrorNoHeader
+)
+
+func (e MimeError) Error() string {
+	switch e {
+	case ErrorNotMime:
+		return "not Mime"
+	case ErrorMaxNodes:
+		return "too many mime part nodes"
+	case ErrorBoundaryTooShort:
+		return "content boundary too short"
+	case ErrorBoundaryLineExpected:
+		return "boundary new line expected"
+	case ErrorUnexpectedChar:
+		return "unexpected char"
+	case ErrorHeaderFieldTooShort:
+		return "header field too short"
+	case ErrorBoundaryExceededLength:
+		return "boundary exceeded max length"
+	case ErrorHeaderParseError:
+		return "header parse error"
+	case ErrorMissingSubtype:
+		return "missing subtype"
+	case ErrorUnexpectedTok:
+		return "unexpected tok"
+	case ErrorUnexpectedCommentToken:
+		return "unexpected comment token"
+	case ErrorInvalidToken:
+		return "invalid token"
+	case ErrorUnexpectedQuotedStrToken:
+		return "unexpected token"
+	case ErrorParameterExpectingEquals:
+		return "expecting ="
+	case ErrorNoHeader:
+		return "parse error, no header"
+	}
+	return "unknown mime error"
+}
+
+// Error implements the error interface
+type Error struct {
+	err  error
+	char byte
+	peek byte
+	pos  uint // msgPos
+}
+
+func (e Error) Error() string {
+	if e.char == 0 {
+		return e.err.Error()
+	}
+	return e.err.Error() + " char:[" + string(e.char) + "], peek:" +
+		string(e.peek) + ", pos:" + strconv.Itoa(int(e.pos))
+}
+
+func (e *Error) ParseError() bool {
+	if e.err != io.EOF && e.err != NotMineErr && e.err != MaxNodesErr {
+		return true
+	}
+	return false
+}
+
+func (p *Parser) newParseError(e error) *Error {
+	var peek byte
+	offset := 1
+	for {
+		// reached the end? (don't wait for more bytes to consume)
+		if p.pos+offset >= len(p.buf) {
+			peek = 0
+			break
+		}
+		// peek the next byte
+		peek := p.buf[p.pos+offset]
+		if peek == '\r' {
+			// ignore \r
+			offset++
+			continue
+		}
+		break
+	}
+	return &Error{
+		err:  e,
+		char: p.ch,
+		peek: peek,
+		pos:  p.msgPos,
+	}
+}
 
 type captureBuffer struct {
 	bytes.Buffer
@@ -329,17 +444,15 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 	}()
 
 	if len(contentBoundary) < 1 {
-		err = errors.New("content boundary too short")
+		err = ErrorBoundaryTooShort
 	}
 	boundary := doubleDash + contentBoundary
 	p.boundaryMatched = 0
 	for {
 		if i := bytes.Index(p.buf[p.pos:], []byte(boundary)); i > -1 {
-
 			p.skip(i)
 			p.lastBoundaryPos = p.msgPos
 			p.skip(len(boundary))
-
 			if end, err = p.boundaryEnd(); err != nil {
 				return
 			}
@@ -347,10 +460,9 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 				return
 			}
 			if p.ch != '\n' {
-				err = errors.New("boundary new line expected")
+				err = ErrorBoundaryLineExpected
 			}
 			return
-
 		} else {
 			// search the tail for partial match
 			// if one is found, load more data and continue the match
@@ -392,7 +504,7 @@ func (p *Parser) boundary(contentBoundary string) (end bool, err error) {
 						return
 					}
 					if p.ch != '\n' {
-						err = errors.New("boundary new line expected")
+						err = ErrorBoundaryLineExpected
 					}
 					return
 				}
@@ -479,14 +591,12 @@ func (p *Parser) header(mh *Part) (err error) {
 					state = 2 // tolerate this error
 					continue
 				}
-				pc := p.peek()
-				err = errors.New("unexpected char:[" + string(p.ch) + "], peek:" +
-					string(pc) + ", pos:" + strconv.Itoa(int(p.msgPos)))
+				err = p.newParseError(ErrorUnexpectedChar)
 				return
 			}
 			if state == 1 {
 				if p.accept.Len() < 2 {
-					err = errors.New("header field too short")
+					err = p.newParseError(ErrorHeaderFieldTooShort)
 					return
 				}
 				p.accept.upper = true
@@ -512,7 +622,7 @@ func (p *Parser) header(mh *Part) (err error) {
 					case contentType.parameters[i].name == "boundary":
 						mh.ContentBoundary = contentType.parameters[i].value
 						if len(mh.ContentBoundary) >= maxBoundaryLen {
-							return errors.New("boundary exceeded max length")
+							return p.newParseError(ErrorBoundaryExceededLength)
 						}
 					case contentType.parameters[i].name == "charset":
 						mh.Charset = strings.ToUpper(contentType.parameters[i].value)
@@ -537,7 +647,7 @@ func (p *Parser) header(mh *Part) (err error) {
 						state = 0
 					}
 				} else {
-					err = errors.New("header parse error, pos:" + strconv.Itoa(p.pos))
+					err = p.newParseError(ErrorHeaderParseError)
 					return
 				}
 			}
@@ -583,7 +693,7 @@ func (p *Parser) contentType() (result contentType, err error) {
 		return
 	}
 	if p.ch != '/' {
-		return result, errors.New("missing subtype")
+		return result, p.newParseError(ErrorMissingSubtype)
 	}
 	p.next()
 
@@ -655,7 +765,7 @@ func (p *Parser) mimeType() (str string, err error) {
 
 		}
 	} else {
-		err = errors.New("unexpected tok")
+		err = p.newParseError(ErrorUnexpectedTok)
 		return
 	}
 }
@@ -675,9 +785,8 @@ func (p *Parser) comment() (err error) {
 	// all header fields except for Content-Disposition
 	// can include RFC 822 comments
 	if p.ch != '(' {
-		err = errors.New("unexpected token")
+		err = p.newParseError(ErrorUnexpectedCommentToken)
 	}
-
 	for {
 		p.next()
 		if p.ch == ')' {
@@ -685,7 +794,6 @@ func (p *Parser) comment() (err error) {
 			return
 		}
 	}
-
 }
 
 func (p *Parser) token(lower bool) (str string, err error) {
@@ -706,7 +814,7 @@ func (p *Parser) token(lower bool) (str string, err error) {
 			_ = p.accept.WriteByte(p.ch)
 			once = true
 		} else if !once {
-			err = errors.New("invalid token")
+			err = p.newParseError(ErrorInvalidToken)
 			return
 		} else {
 			return
@@ -731,7 +839,7 @@ func (p *Parser) quotedString() (str string, err error) {
 	}()
 
 	if p.ch != '"' {
-		err = errors.New("unexpected token")
+		err = p.newParseError(ErrorUnexpectedQuotedStrToken)
 		return
 	}
 	p.next()
@@ -750,7 +858,7 @@ func (p *Parser) quotedString() (str string, err error) {
 			if (p.ch < 127 && p.ch > 32) || p.isWSP(p.ch) {
 				_ = p.accept.WriteByte(p.ch)
 			} else {
-				err = errors.New("unexpected token")
+				err = p.newParseError(ErrorUnexpectedQuotedStrToken)
 				return
 			}
 		case 1:
@@ -759,7 +867,7 @@ func (p *Parser) quotedString() (str string, err error) {
 				_ = p.accept.WriteByte(p.ch)
 				state = 0
 			} else {
-				err = errors.New("unexpected token")
+				err = p.newParseError(ErrorUnexpectedQuotedStrToken)
 				return
 			}
 		}
@@ -785,7 +893,7 @@ func (p *Parser) parameter() (attribute, value string, err error) {
 		if len(attribute) > 0 {
 			return
 		}
-		return "", "", errors.New("expecting =")
+		return "", "", p.newParseError(ErrorParameterExpectingEquals)
 	}
 	p.next()
 	if p.ch == '"' {
@@ -845,7 +953,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 				len(part.Headers) > 0 &&
 				part.Headers.Get("MIME-Version") == "" &&
 				err == nil {
-				err = NotMime
+				err = NotMineErr
 			}
 		}()
 	}
@@ -857,7 +965,7 @@ func (p *Parser) mime(part *Part, cb string) (err error) {
 			return err
 		}
 	} else if root {
-		return errors.New("parse error, no header")
+		return p.newParseError(ErrorNoHeader)
 	}
 	if p.ch == '\n' && p.peek() == '\n' {
 		p.next()
@@ -1052,10 +1160,10 @@ func (p *Parser) Parse(buf []byte) error {
 	}
 }
 
-// ParseError returns true if the type of error was a parse error
+// Error returns true if the type of error was a parse error
 // Returns false if it was an io.EOF or the email was not mime, or exceeded maximum nodes
 func (p *Parser) ParseError(err error) bool {
-	if err != nil && err != io.EOF && err != NotMime && err != MaxNodesErr {
+	if err != nil && err != io.EOF && err != NotMineErr && err != MaxNodesErr {
 		return true
 	}
 	return false

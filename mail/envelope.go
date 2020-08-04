@@ -158,7 +158,9 @@ type Envelope struct {
 	Size int64
 	// MimeParts contain the information about the mime-parts after they have been parsed
 	MimeParts *mimeparse.Parts
-	// MessageID contains the id of the message after it has been written
+	// MimeError contains any error encountered when parsing mime using the mimeanalyzer
+	MimeError error
+	// MessageID contains theR id of the message after it has been written
 	MessageID uint64
 	// Remote IP address
 	RemoteIP string
@@ -196,11 +198,11 @@ func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 		RemoteIP: remoteAddr,
 		Values:   make(map[string]interface{}),
 		ServerID: serverID,
-		QueuedId: queuedID(clientID, serverID),
+		QueuedId: QueuedID(clientID, serverID),
 	}
 }
 
-func queuedID(clientID uint64, serverID int) Hash128 {
+func QueuedID(clientID uint64, serverID int) Hash128 {
 	hasher.Lock()
 	defer func() {
 		hasher.h.Reset()
@@ -272,6 +274,7 @@ func (e *Envelope) ResetTransaction() {
 	e.Size = 0
 	e.MessageID = 0
 	e.MimeParts = nil
+	e.MimeError = nil
 	e.Values = make(map[string]interface{})
 }
 
@@ -279,7 +282,7 @@ func (e *Envelope) ResetTransaction() {
 func (e *Envelope) Reseed(remoteIP string, clientID uint64, serverID int) {
 	e.RemoteIP = remoteIP
 	e.ServerID = serverID
-	e.QueuedId = queuedID(clientID, serverID)
+	e.QueuedId = QueuedID(clientID, serverID)
 	e.Helo = ""
 	e.TLS = false
 	e.ESMTP = false

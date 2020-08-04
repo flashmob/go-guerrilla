@@ -96,7 +96,7 @@ func TestStartProcessStop(t *testing.T) {
 
 	e := &mail.Envelope{
 		RemoteIP: "127.0.0.1",
-		QueuedId: "abc12345",
+		QueuedId: mail.QueuedID(1, 2),
 		Helo:     "helo.example.com",
 		MailFrom: mail.Address{User: "test", Host: "example.com"},
 		TLS:      true,
