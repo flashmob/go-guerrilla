@@ -15,7 +15,8 @@ type chunkedReader struct {
 	// i is which part it's currently reading, j is which chunk of a part
 	i, j int
 
-	cache cachedChunks
+	cache              cachedChunks
+	ChunkPrefetchCount int
 }
 
 // NewChunkedReader loads the email and selects which mime-part Read will read, starting from 1
@@ -34,6 +35,7 @@ func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error
 	r.cache = cachedChunks{
 		db: db,
 	}
+	r.ChunkPrefetchCount = chunkCachePreload
 	return r, nil
 }
 
@@ -68,7 +70,7 @@ type cachedChunks struct {
 const chunkCachePreload = 2
 
 // warm allocates the chunk cache, and gets the first few and stores them in the cache
-func (c *cachedChunks) warm(hashes ...HashKey) (int, error) {
+func (c *cachedChunks) warm(preload int, hashes []HashKey) (int, error) {
 
 	if c.hashIndex == nil {
 		c.hashIndex = make(map[int]HashKey, len(hashes))
@@ -81,7 +83,6 @@ func (c *cachedChunks) warm(hashes ...HashKey) (int, error) {
 		return len(c.chunks), nil
 	}
 	// let's pre-load some hashes.
-	preload := chunkCachePreload
 	if len(hashes) < preload {
 		preload = len(hashes)
 	}
@@ -107,13 +108,6 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 	if i > len(c.chunks) {
 		return nil, errors.New("not enough chunks")
 	}
-	defer func() {
-		if len(c.chunks) > 15 {
-			fmt.Println("moo")
-			//fmt.Println("hash", hash[i].Hex(),  "i", i)
-		}
-	}()
-
 	if c.chunks[i] != nil {
 		// cache hit!
 		return c.chunks[i], nil
@@ -142,13 +136,12 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 			if i-1 > -1 {
 				for j := i - 1; j > -1; j-- {
 					if c.chunks[j] != nil {
-						// todo		c.chunks[j] = nil
+						c.chunks[j] = nil
 					} else {
 						break
 					}
 				}
 			}
-
 			// return the chunk asked for
 			return chunks[0], nil
 		}
@@ -169,7 +162,7 @@ func (c *cachedChunks) empty() {
 func (r *chunkedReader) Read(p []byte) (n int, err error) {
 	var length int
 	for ; r.i < len(r.email.partsInfo.Parts); r.i++ {
-		length, err = r.cache.warm(r.email.partsInfo.Parts[r.i].ChunkHash...)
+		length, err = r.cache.warm(r.ChunkPrefetchCount, r.email.partsInfo.Parts[r.i].ChunkHash)
 		if err != nil {
 			return
 		}

@@ -2,6 +2,7 @@ package mimeparse
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -693,5 +694,51 @@ func TestNonMineEmailBigBody(t *testing.T) {
 	if err := p.mime(nil, ""); err == nil || err == NotMineErr {
 		t.Error("unexpected error", err)
 	}
+
+}
+
+func TestMimeErr(t *testing.T) {
+	p := NewMimeParser()
+	p.Open()
+	// the error is missing subtype
+	data :=
+
+		`To "moo": j m
+Subject: and a predicate
+MIME-Version: 1.0
+Content-Type: text;
+Content-Transfer-Encoding: 1
+
+Rock the microphone and then I’m gone
+
+`
+	i, err := p.Write([]byte(data))
+
+	if err != nil {
+		if mimeErr, ok := err.(*Error); !ok {
+			t.Error("not a *MimeError type")
+			return
+		} else {
+			b, err := json.Marshal(mimeErr.Unwrap())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if string(b) != "8" {
+				t.Error("expecting error be 8")
+				return
+			}
+			var parsedErr MimeError
+			json.Unmarshal(b, &parsedErr)
+			if parsedErr != ErrorMissingSubtype {
+				t.Error("expecting error to be ErrorMissingSubtype, got:", parsedErr)
+				return
+			}
+		}
+	}
+	if i != 148 {
+		t.Error("test was expecting to read 148 bytes, got", i)
+	}
+	err = p.Close()
 
 }

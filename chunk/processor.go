@@ -26,6 +26,7 @@ import (
 // Requires      : "mimeanalyzer" stream processor to be enabled before it
 // ----------------------------------------------------------------------------------
 // Config Options: chunk_size - maximum chunk size, in bytes
+//               : storage_engine - "sql" or "memory", or make your own extension
 // --------------:-------------------------------------------------------------------
 // Input         : e.MimeParts Which is of type *mime.Parts, as populated by "mimeanalyzer"
 // ----------------------------------------------------------------------------------
@@ -42,7 +43,11 @@ func init() {
 type Config struct {
 	// ChunkMaxBytes controls the maximum buffer size for saving
 	// 16KB default.
-	ChunkMaxBytes int    `json:"chunk_size,omitempty"`
+	ChunkMaxBytes int `json:"chunk_size,omitempty"`
+	// ChunkPrefetchCount specifies how many chunks to pre-fetch when reading from storage.
+	// It may reduce the number of trips required to storage
+	ChunkPrefetchCount int `json:"chunk_prefetch_count,omitempty"`
+	// StorageEngine specifies which storage engine to use (see the StorageEngines map)
 	StorageEngine string `json:"storage_engine,omitempty"`
 }
 
@@ -122,6 +127,7 @@ func Chunksaver() *backends.StreamDecorator {
 
 		}
 		r, err := NewChunkedReader(database, email, 0)
+		r.ChunkPrefetchCount = config.ChunkPrefetchCount
 		return r, err
 	}
 
@@ -174,6 +180,10 @@ func Chunksaver() *backends.StreamDecorator {
 				if err != nil {
 					// TODO we could delete the half saved message here
 					return err
+				}
+				if mimeErr, ok := envelope.MimeError.(*mimeparse.Error); ok {
+					mErr := mimeErr.Unwrap()
+					chunkBuffer.Info.Err = mErr
 				}
 				defer chunkBuffer.Reset()
 				if envelope.MessageID > 0 {

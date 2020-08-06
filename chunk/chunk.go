@@ -24,7 +24,7 @@ func (h *HashKey) Pack(b []byte) {
 	copy(h[:], b[0:hashByteSize])
 }
 
-// String implements the Stringer interface from fmt
+// String implements the Stringer interface from fmt.Stringer
 func (h HashKey) String() string {
 	return base64.RawStdEncoding.EncodeToString(h[0:hashByteSize])
 }
@@ -60,7 +60,7 @@ type PartsInfo struct {
 	HasAttach   bool          `json:"a"`   // is there an attachment?
 	Parts       []ChunkedPart `json:"p"`   // info describing a mime-part
 	CBoundaries []string      `json:"cbl"` // content boundaries list
-
+	Err         error         `json:"e"`   // any error encountered (mimeparse.MimeError)
 }
 
 var bp sync.Pool // bytes.buffer pool

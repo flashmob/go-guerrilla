@@ -115,6 +115,20 @@ func (e MimeError) Error() string {
 	return "unknown mime error"
 }
 
+func (e *MimeError) UnmarshalJSON(b []byte) error {
+	v, err := strconv.ParseInt(string(b), 10, 32)
+	if err != nil {
+		return err
+	}
+	*e = MimeError(v)
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler
+func (e MimeError) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Itoa(int(e))), nil
+}
+
 // Error implements the error interface
 type Error struct {
 	err  error
@@ -127,18 +141,22 @@ func (e Error) Error() string {
 	if e.char == 0 {
 		return e.err.Error()
 	}
-	return e.err.Error() + " char:[" + string(e.char) + "], peek:" +
-		string(e.peek) + ", pos:" + strconv.Itoa(int(e.pos))
+	return e.err.Error() + " char:[" + string(e.char) + "], peek:[" +
+		string(e.peek) + "], pos:" + strconv.Itoa(int(e.pos))
+}
+
+func (e Error) Unwrap() error {
+	return e.err
 }
 
 func (e *Error) ParseError() bool {
-	if e.err != io.EOF && e.err != NotMineErr && e.err != MaxNodesErr {
+	if e.err != io.EOF && error(e.err) != NotMineErr && error(e.err) != MaxNodesErr {
 		return true
 	}
 	return false
 }
 
-func (p *Parser) newParseError(e error) *Error {
+func (p *Parser) newParseError(e MimeError) *Error {
 	var peek byte
 	offset := 1
 	for {

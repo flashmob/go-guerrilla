@@ -141,8 +141,6 @@ func (s *StoreSQL) connect() (*sql.DB, error) {
 		}
 		s.db.SetConnMaxLifetime(t)
 	}
-	stats := s.db.Stats()
-	fmt.Println(stats)
 	// do we have permission to access the table?
 	_, err = s.db.Query("SELECT mail_id FROM " + s.config.EmailTable + " LIMIT 1")
 	if err != nil {
@@ -452,7 +450,6 @@ func (s *StoreSQL) GetChunks(hash ...HashKey) ([]*Chunk, error) {
 		); err != nil {
 			return result, err
 		}
-
 		c.data = bytes.NewBuffer(data)
 		c.modifiedAt = createdAt.Time
 		temp[h] = &c
@@ -536,8 +533,6 @@ type transportType struct {
 type protocol struct {
 	mail.Protocol
 }
-
-// todo scanners for protocol & transport
 
 // Scan implements database/sql scanner interface, for parsing smtp.TransportType
 func (t *transportType) Scan(value interface{}) error {

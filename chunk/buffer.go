@@ -160,6 +160,7 @@ func (b *ChunkingBufferMime) Reset() {
 	b.chunkingBuffer.Reset()
 }
 
+// CurrentPart sets the current mime part that's being buffered
 func (b *ChunkingBufferMime) CurrentPart(cp *mimeparse.Part) {
 	if b.current == nil {
 		b.Info = *NewPartsInfo()

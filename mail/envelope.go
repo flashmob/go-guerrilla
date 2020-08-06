@@ -160,7 +160,7 @@ type Envelope struct {
 	MimeParts *mimeparse.Parts
 	// MimeError contains any error encountered when parsing mime using the mimeanalyzer
 	MimeError error
-	// MessageID contains theR id of the message after it has been written
+	// MessageID contains the id of the message after it has been written
 	MessageID uint64
 	// Remote IP address
 	RemoteIP string
