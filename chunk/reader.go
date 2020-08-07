@@ -6,6 +6,10 @@ import (
 	"io"
 )
 
+// chunkPrefetchCountDefault controls how many chunks to pre-load in the cache
+const chunkPrefetchCountDefault = 2
+const chunkPrefetchMax = 32
+
 type chunkedReader struct {
 	db    Storage
 	email *Email
@@ -35,7 +39,7 @@ func NewChunkedReader(db Storage, email *Email, part int) (*chunkedReader, error
 	r.cache = cachedChunks{
 		db: db,
 	}
-	r.ChunkPrefetchCount = chunkCachePreload
+	r.ChunkPrefetchCount = chunkPrefetchCountDefault
 	return r, nil
 }
 
@@ -59,19 +63,16 @@ func (r *chunkedReader) SeekPart(part int) error {
 type cachedChunks struct {
 	// chunks stores the cached chunks. It stores the latest chunk being read
 	// and the next few chunks that are yet to be read
-	// (see the chunkCachePreload constant)
 	chunks []*Chunk
 	// hashIndex is a look-up table that returns the hash of a given index
-	hashIndex map[int]HashKey
-	db        Storage
+	hashIndex          map[int]HashKey
+	db                 Storage
+	ChunkPrefetchCount int // how many chunks to pre-load
 }
-
-// chunkCachePreload controls how many chunks to pre-load in the cache
-const chunkCachePreload = 2
 
 // warm allocates the chunk cache, and gets the first few and stores them in the cache
 func (c *cachedChunks) warm(preload int, hashes []HashKey) (int, error) {
-
+	c.ChunkPrefetchCount = preload
 	if c.hashIndex == nil {
 		c.hashIndex = make(map[int]HashKey, len(hashes))
 	}
@@ -119,7 +120,7 @@ func (c *cachedChunks) get(i int) (*Chunk, error) {
 			return nil, errors.New(fmt.Sprintf("hash for key [%s] not found", key))
 		}
 		// make a list of chunks to load (extra ones to be pre-loaded)
-		for to := i + 1; to < len(c.chunks) && to < chunkCachePreload+i; to++ {
+		for to := i + 1; to < len(c.chunks) && to < c.ChunkPrefetchCount+i; to++ {
 			if key, ok := c.hashIndex[to]; ok {
 				toGet = append(toGet, key)
 			}

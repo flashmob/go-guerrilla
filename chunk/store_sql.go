@@ -93,9 +93,16 @@ type sqlConfig struct {
 
 // StoreSQL implements the Storage interface
 type StoreSQL struct {
-	config     sqlConfig
-	statements map[string]*sql.Stmt
-	db         *sql.DB
+	config sqlConfig
+	db     *sql.DB
+
+	sqlSelectChunk        []*sql.Stmt
+	sqlInsertEmail        *sql.Stmt
+	sqlInsertChunk        *sql.Stmt
+	sqlFinalizeEmail      *sql.Stmt
+	sqlChunkReferenceIncr *sql.Stmt
+	sqlChunkReferenceDecr *sql.Stmt
+	sqlSelectMail         *sql.Stmt
 }
 
 func (s *StoreSQL) StartWorker() (stop chan bool) {
@@ -150,9 +157,6 @@ func (s *StoreSQL) connect() (*sql.DB, error) {
 }
 
 func (s *StoreSQL) prepareSql() error {
-	if s.statements == nil {
-		s.statements = make(map[string]*sql.Stmt)
-	}
 
 	// begin inserting an email (before saving chunks)
 	if stmt, err := s.db.Prepare(`INSERT INTO ` +
@@ -161,7 +165,7 @@ func (s *StoreSQL) prepareSql() error {
  VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`); err != nil {
 		return err
 	} else {
-		s.statements["insertEmail"] = stmt
+		s.sqlInsertEmail = stmt
 	}
 
 	// insert a chunk of email's data
@@ -171,7 +175,7 @@ func (s *StoreSQL) prepareSql() error {
  VALUES(?, ?)`); err != nil {
 		return err
 	} else {
-		s.statements["insertChunk"] = stmt
+		s.sqlInsertChunk = stmt
 	}
 
 	// finalize the email (the connection closed)
@@ -181,7 +185,7 @@ func (s *StoreSQL) prepareSql() error {
 		WHERE mail_id = ? `); err != nil {
 		return err
 	} else {
-		s.statements["finalizeEmail"] = stmt
+		s.sqlFinalizeEmail = stmt
 	}
 
 	// Check the existence of a chunk (the reference_count col is incremented if it exists)
@@ -193,7 +197,7 @@ func (s *StoreSQL) prepareSql() error {
 		WHERE hash = ? `); err != nil {
 		return err
 	} else {
-		s.statements["chunkReferenceIncr"] = stmt
+		s.sqlChunkReferenceIncr = stmt
 	}
 
 	// If the reference_count is 0 then it means the chunk has been deleted
@@ -204,7 +208,7 @@ func (s *StoreSQL) prepareSql() error {
 		WHERE hash = ? AND reference_count > 0`); err != nil {
 		return err
 	} else {
-		s.statements["chunkReferenceDecr"] = stmt
+		s.sqlChunkReferenceDecr = stmt
 	}
 
 	// fetch an email
@@ -214,17 +218,20 @@ func (s *StoreSQL) prepareSql() error {
 		where mail_id=?`); err != nil {
 		return err
 	} else {
-		s.statements["selectMail"] = stmt
+		s.sqlSelectMail = stmt
 	}
 
-	// fetch a chunk
-	if stmt, err := s.db.Prepare(`
-		SELECT * 
-		from ` + s.config.EmailChunkTable + ` 
-		where hash=?`); err != nil {
-		return err
-	} else {
-		s.statements["selectChunk"] = stmt
+	// fetch a chunk, used in GetChunks
+	// prepare a query for all possible combinations is prepared
+
+	for i := 0; i < chunkPrefetchMax; i++ {
+		if stmt, err := s.db.Prepare(
+			s.getChunksSQL(i + 1),
+		); err != nil {
+			return err
+		} else {
+			s.sqlSelectChunk[i] = stmt
+		}
 	}
 
 	// TODO sweep old chunks
@@ -256,7 +263,7 @@ func (s *StoreSQL) OpenMessage(
 	} else {
 		copy(ip6, ipAddress.IP)
 	}
-	r, err := s.statements["insertEmail"].Exec(
+	r, err := s.sqlInsertEmail.Exec(
 		queuedID.Bytes(),
 		time.Now().Format(mysqlYYYY_m_d_s_H_i_s),
 		from,
@@ -280,7 +287,7 @@ func (s *StoreSQL) OpenMessage(
 // AddChunk implements the Storage interface
 func (s *StoreSQL) AddChunk(data []byte, hash []byte) error {
 	// attempt to increment the reference_count (it means the chunk is already in there)
-	r, err := s.statements["chunkReferenceIncr"].Exec(hash)
+	r, err := s.sqlChunkReferenceIncr.Exec(hash)
 	if err != nil {
 		return err
 	}
@@ -290,7 +297,7 @@ func (s *StoreSQL) AddChunk(data []byte, hash []byte) error {
 	}
 	if affected == 0 {
 		// chunk isn't in there, let's insert it
-		_, err := s.statements["insertChunk"].Exec(data, hash)
+		_, err := s.sqlInsertChunk.Exec(data, hash)
 		if err != nil {
 			return err
 		}
@@ -309,7 +316,7 @@ func (s *StoreSQL) CloseMessage(
 	if err != nil {
 		return err
 	}
-	_, err = s.statements["finalizeEmail"].Exec(size, partsInfoJson, subject, to, from, mailID)
+	_, err = s.sqlFinalizeEmail.Exec(size, partsInfoJson, subject, to, from, mailID)
 	if err != nil {
 		return err
 	}
@@ -332,6 +339,8 @@ func (s *StoreSQL) Initialize(cfg backends.ConfigGroup) error {
 	if s.config.Driver == "" {
 		s.config.Driver = "mysql"
 	}
+	// because it uses an IN(?) query, so we need a different query for each possible ? combination (max chunkPrefetchMax)
+	s.sqlSelectChunk = make([]*sql.Stmt, chunkPrefetchMax)
 
 	s.db, err = s.connect()
 	if err != nil {
@@ -353,8 +362,18 @@ func (s *StoreSQL) Shutdown() (err error) {
 			err = closeErr
 		}
 	}()
-	for i := range s.statements {
-		if err = s.statements[i].Close(); err != nil {
+	toClose := []*sql.Stmt{
+		s.sqlInsertEmail,
+		s.sqlFinalizeEmail,
+		s.sqlInsertChunk,
+		s.sqlChunkReferenceIncr,
+		s.sqlChunkReferenceDecr,
+		s.sqlSelectMail,
+	}
+	toClose = append(toClose, s.sqlSelectChunk...)
+
+	for i := range toClose {
+		if err = toClose[i].Close(); err != nil {
 			backends.Log().WithError(err).Error("failed to close sql statement")
 		}
 	}
@@ -362,13 +381,13 @@ func (s *StoreSQL) Shutdown() (err error) {
 }
 
 // GetEmail implements the Storage interface
-func (s *StoreSQL) GetEmail(mailID uint64) (*Email, error) {
+func (s *StoreSQL) GetMessage(mailID uint64) (*Email, error) {
 
 	email := &Email{}
 	var createdAt mysql.NullTime
 	var transport transportType
 	var protocol protocol
-	err := s.statements["selectMail"].QueryRow(mailID).Scan(
+	err := s.sqlSelectMail.QueryRow(mailID).Scan(
 		&email.mailID,
 		&createdAt,
 		&email.size,
@@ -411,6 +430,13 @@ func (v chunkData) Value() (driver.Value, error) {
 	return v[:], nil
 }
 
+func (s *StoreSQL) getChunksSQL(size int) string {
+	return fmt.Sprintf("SELECT modified_at, reference_count, data, `hash` FROM %s WHERE `hash` in (%s)",
+		s.config.EmailChunkTable,
+		"?"+strings.Repeat(",?", size-1),
+	)
+}
+
 // GetChunks implements the Storage interface
 func (s *StoreSQL) GetChunks(hash ...HashKey) ([]*Chunk, error) {
 	result := make([]*Chunk, len(hash))
@@ -419,11 +445,7 @@ func (s *StoreSQL) GetChunks(hash ...HashKey) ([]*Chunk, error) {
 	for i := range hash {
 		args[i] = &hash[i]
 	}
-	query := fmt.Sprintf("SELECT modified_at, reference_count, data, `hash` FROM %s WHERE `hash` in (%s)",
-		s.config.EmailChunkTable,
-		"?"+strings.Repeat(",?", len(hash)-1),
-	)
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.sqlSelectChunk[len(args)-1].Query(args...)
 	defer func() {
 		if rows != nil {
 			_ = rows.Close()

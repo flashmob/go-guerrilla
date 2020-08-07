@@ -44,8 +44,7 @@ type Config struct {
 	// ChunkMaxBytes controls the maximum buffer size for saving
 	// 16KB default.
 	ChunkMaxBytes int `json:"chunk_size,omitempty"`
-	// ChunkPrefetchCount specifies how many chunks to pre-fetch when reading from storage.
-	// It may reduce the number of trips required to storage
+	// ChunkPrefetchCount specifies how many chunks to pre-fetch when reading from storage. Default: 2, Max: 32
 	ChunkPrefetchCount int `json:"chunk_prefetch_count,omitempty"`
 	// StorageEngine specifies which storage engine to use (see the StorageEngines map)
 	StorageEngine string `json:"storage_engine,omitempty"`
@@ -121,13 +120,20 @@ func Chunksaver() *backends.StreamDecorator {
 		if database == nil {
 			return nil, errors.New("database is nil")
 		}
-		email, err := database.GetEmail(emailID)
+		email, err := database.GetMessage(emailID)
 		if err != nil {
 			return nil, errors.New("email not found")
 
 		}
 		r, err := NewChunkedReader(database, email, 0)
-		r.ChunkPrefetchCount = config.ChunkPrefetchCount
+		if r != nil && config.ChunkPrefetchCount > 0 {
+			// override the default with the configured value
+			r.ChunkPrefetchCount = config.ChunkPrefetchCount
+			if r.ChunkPrefetchCount > chunkPrefetchMax {
+				r.ChunkPrefetchCount = chunkPrefetchMax
+			}
+		}
+
 		return r, err
 	}
 

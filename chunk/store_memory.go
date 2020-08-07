@@ -176,7 +176,7 @@ func (m *StoreMemory) Shutdown() (err error) {
 }
 
 // GetEmail implements the Storage interface
-func (m *StoreMemory) GetEmail(mailID uint64) (*Email, error) {
+func (m *StoreMemory) GetMessage(mailID uint64) (*Email, error) {
 	if count := len(m.emails); count == 0 {
 		return nil, errors.New("storage is empty")
 	} else if overflow := uint64(count) - m.offset; overflow > mailID-m.offset {

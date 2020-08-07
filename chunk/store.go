@@ -36,7 +36,7 @@ type Storage interface {
 	// AddChunk saves a chunk of bytes to a given hash key
 	AddChunk(data []byte, hash []byte) error
 	// GetEmail returns an email that's been saved
-	GetEmail(mailID uint64) (*Email, error)
+	GetMessage(mailID uint64) (*Email, error)
 	// GetChunks loads in the specified chunks of bytes from storage
 	GetChunks(hash ...HashKey) ([]*Chunk, error)
 	// Initialize is called when the backend is started

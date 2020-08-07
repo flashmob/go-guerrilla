@@ -60,28 +60,8 @@ func TestSQLStore(t *testing.T) {
 		_ = chunksaver.Close()
 
 		fmt.Println("written:", written)
-		/*
-			total := 0
-			for _, chunk := range storeMemory.chunks {
-				total += len(chunk.data)
-			}
-			fmt.Println("compressed", total, "saved:", written-int64(total))
-		*/
 
-		/*
-
-			part 5 (gif)
-			5a94c939c7101636fc19f266f701968b
-			45c5d2a84119b3a21b0306a9524b361a
-			74eb56d4dd331e3d8c76a373556d6bcb
-
-			hash 5a94c939c7101636fc19f266f701968b h 45c5d2a84119b3a21b0306a9524b361a i 0
-			hash 45c5d2a84119b3a21b0306a9524b361a h 5a94c939c7101636fc19f266f701968b i 1
-
-			hash 74eb56d4dd331e3d8c76a373556d6bcb h 74eb56d4dd331e3d8c76a373556d6bcb i 0
-		*/
-
-		email, err := storeSql.GetEmail(e.MessageID)
+		email, err := storeSql.GetMessage(e.MessageID)
 
 		if err != nil {
 			t.Error("email not found")

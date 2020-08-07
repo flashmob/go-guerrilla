@@ -423,7 +423,7 @@ func TestTransformer(t *testing.T) {
 		_ = mimeanalyzer.Close()
 		_ = chunksaver.Close()
 
-		email, err := store.GetEmail(1)
+		email, err := store.GetMessage(1)
 		if err != nil {
 			t.Error("email not found")
 			return
@@ -459,7 +459,7 @@ func TestChunkSaverReader(t *testing.T) {
 		_ = mimeanalyzer.Close()
 		_ = chunksaver.Close()
 
-		email, err := store.GetEmail(1)
+		email, err := store.GetMessage(1)
 		if err != nil {
 			t.Error("email not found")
 			return
@@ -558,7 +558,7 @@ func TestChunkSaverWrite(t *testing.T) {
 			total += len(chunk.data)
 		}
 		fmt.Println("compressed", total, "saved:", written-int64(total))
-		email, err := store.GetEmail(1)
+		email, err := store.GetMessage(1)
 		if err != nil {
 			t.Error("email not found")
 			return
