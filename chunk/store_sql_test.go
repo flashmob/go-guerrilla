@@ -7,7 +7,6 @@ import (
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -86,7 +85,7 @@ func TestSQLStore(t *testing.T) {
 			t.Error("The email didn't decode properly, expecting R0lGODlhEAA")
 		}
 		out.Reset()
-		return
+		//return
 		// test the seek feature
 		r, err = NewChunkedReader(storeSql, email, 0)
 		if err != nil {
@@ -127,7 +126,7 @@ func TestSQLStore(t *testing.T) {
 		}
 		//var decoded bytes.Buffer
 		//io.Copy(&decoded, dr)
-		io.Copy(os.Stdout, dr)
+		//io.Copy(os.Stdout, dr)
 
 	}
 }

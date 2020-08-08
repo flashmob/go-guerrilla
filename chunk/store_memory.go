@@ -23,12 +23,11 @@ type storeMemoryConfig struct {
 
 // A StoreMemory stores emails and chunked data in memory
 type StoreMemory struct {
-	chunks        map[HashKey]*memoryChunk
-	emails        []*memoryEmail
-	nextID        uint64
-	offset        uint64
-	CompressLevel int
-	config        storeMemoryConfig
+	chunks map[HashKey]*memoryChunk
+	emails []*memoryEmail
+	nextID uint64
+	offset uint64
+	config storeMemoryConfig
 }
 
 type memoryEmail struct {
@@ -123,7 +122,7 @@ func (m *StoreMemory) AddChunk(data []byte, hash []byte) error {
 	}
 	key.Pack(hash)
 	var compressed bytes.Buffer
-	zlibw, err := zlib.NewWriterLevel(&compressed, m.CompressLevel)
+	zlibw, err := zlib.NewWriterLevel(&compressed, m.config.CompressLevel)
 	if err != nil {
 		return err
 	}
@@ -164,7 +163,6 @@ func (m *StoreMemory) Initialize(cfg backends.ConfigGroup) error {
 	if m.config.CompressLevel > 9 || m.config.CompressLevel < 0 {
 		m.config.CompressLevel = zlib.BestCompression
 	}
-	m.CompressLevel = m.config.CompressLevel
 	return nil
 }
 
