@@ -1,7 +1,5 @@
 module github.com/flashmob/go-guerrilla
 
-go 1.14
-
 require (
 	github.com/asaskevich/EventBus v0.0.0-20180103000110-68a521d7cbbb
 	github.com/go-sql-driver/mysql v1.4.1
