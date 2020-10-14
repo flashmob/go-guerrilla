@@ -20,10 +20,10 @@ vendor:
 	dep ensure
 
 guerrillad:
-	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
+	$(GO_VARS) $(GO) build -o="guerrillad" -ldflags="$(LD_FLAGS)" ./cmd/guerrillad
 
 guerrilladrace:
-	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" $(ROOT)/cmd/guerrillad
+	$(GO_VARS) $(GO) build -o="guerrillad" -race -ldflags="$(LD_FLAGS)" ./cmd/guerrillad
 
 test:
 	$(GO_VARS) $(GO) test -v .
