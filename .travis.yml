@@ -11,10 +11,6 @@ cache:
     - $HOME/.cache/go-build
     - $HOME/gopath/pkg/mod
 
-install:
-  - go get -u github.com/golang/dep/cmd/dep
-  - dep ensure
-
 script:
   - ./.travis.gofmt.sh
   - make guerrillad
