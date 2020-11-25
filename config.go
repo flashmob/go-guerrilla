@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
@@ -60,6 +61,9 @@ type ServerConfig struct {
 	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
+	// GreeterTemplate will be used to greet the client.
+	// Defaults to defaultGreeterString
+	GreeterTemplate *template.Template `json:"greeter_template"`
 }
 
 type ServerTLSConfig struct {
@@ -151,10 +155,13 @@ var TLSClientAuthTypes = map[string]tls.ClientAuthType{
 	"RequireAndVerifyClientCert": tls.RequireAndVerifyClientCert,
 }
 
-const defaultMaxClients = 100
-const defaultTimeout = 30
-const defaultInterface = "127.0.0.1:2525"
-const defaultMaxSize = int64(10 << 20) // 10 Mebibytes
+const (
+	defaultMaxClients    = 100
+	defaultTimeout       = 30
+	defaultInterface     = "127.0.0.1:2525"
+	defaultMaxSize       = int64(10 << 20) // 10 Mebibytes
+	defaultGreeterString = "220 {{ .Hostname }} SMTP Guerrilla({{ .Version }}) #{{ .ClientID }} ({{ .ActiveClientsCount }}) {{ .Time }}"
+)
 
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
 // also does validation, returns error if validation failed or something went wrong
@@ -279,6 +286,10 @@ func (c *AppConfig) setDefaults() error {
 	if err != nil {
 		return err
 	}
+	defaultGreeterTemplate, err := template.New("greeter").Parse(defaultGreeterString)
+	if err != nil {
+		return fmt.Errorf("unable to parse template: %v", err)
+	}
 	if len(c.Servers) == 0 {
 		sc := ServerConfig{}
 		sc.LogFile = c.LogFile
@@ -288,6 +299,7 @@ func (c *AppConfig) setDefaults() error {
 		sc.MaxClients = defaultMaxClients
 		sc.Timeout = defaultTimeout
 		sc.MaxSize = defaultMaxSize
+		sc.GreeterTemplate = defaultGreeterTemplate
 		c.Servers = append(c.Servers, sc)
 	} else {
 		// make sure each server has defaults correctly configured
@@ -303,6 +315,9 @@ func (c *AppConfig) setDefaults() error {
 			}
 			if c.Servers[i].MaxSize == 0 {
 				c.Servers[i].MaxSize = defaultMaxSize // 10 Mebibytes
+			}
+			if c.Servers[i].GreeterTemplate == nil {
+				c.Servers[i].GreeterTemplate = defaultGreeterTemplate
 			}
 			if c.Servers[i].ListenInterface == "" {
 				return fmt.Errorf("listen interface not specified for server at index %d", i)
