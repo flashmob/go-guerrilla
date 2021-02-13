@@ -21,6 +21,7 @@
         {
             "is_enabled" : true,
             "host_name":"mail.test.com",
+            "greeting_type": "postfix",
             "max_size": 1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
@@ -40,6 +41,7 @@
         {
             "is_enabled" : false,
             "host_name":"mail.test.com",
+            "greeting_type": "postfix",
             "max_size":1000000,
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
