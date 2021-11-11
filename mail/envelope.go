@@ -259,7 +259,6 @@ func (e *Envelope) PopRcpt() Address {
 const (
 	statePlainText = iota
 	stateStartEncodedWord
-	stateEncodedWord
 	stateEncoding
 	stateCharset
 	statePayload
