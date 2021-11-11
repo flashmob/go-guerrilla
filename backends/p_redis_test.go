@@ -1,12 +1,13 @@
 package backends
 
 import (
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
 )
 
 func TestRedisGeneric(t *testing.T) {
@@ -37,7 +38,7 @@ func TestRedisGeneric(t *testing.T) {
 	}()
 	if gateway, ok := g.(*BackendGateway); ok {
 		r := gateway.Process(e)
-		if strings.Index(r.String(), "250 2.0.0 OK") == -1 {
+		if !strings.Contains(r.String(), "250 2.0.0 OK") {
 			t.Error("redis processor didn't result with expected result, it said", r)
 		}
 	}

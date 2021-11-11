@@ -3,14 +3,13 @@ package backends
 import (
 	"database/sql"
 	"fmt"
+	"math/big"
+	"net"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/flashmob/go-guerrilla/mail"
-
-	"math/big"
-	"net"
-	"runtime/debug"
 
 	"github.com/flashmob/go-guerrilla/response"
 )
@@ -299,7 +298,7 @@ func SQL() Decorator {
 					stmt := s.prepareInsertQuery(1, db)
 					err := s.doQuery(1, db, stmt, &vals)
 					if err != nil {
-						return NewResult(fmt.Sprint("554 Error: could not save email")), StorageError
+						return NewResult("554 Error: could not save email"), StorageError
 					}
 				}
 
