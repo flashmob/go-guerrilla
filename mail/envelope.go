@@ -90,10 +90,7 @@ func (a *Address) IsEmpty() bool {
 }
 
 func (a *Address) IsPostmaster() bool {
-	if a.User == "postmaster" {
-		return true
-	}
-	return false
+	return a.User == "postmaster"
 }
 
 // NewAddress takes a string of an RFC 5322 address of the
@@ -372,7 +369,6 @@ func MimeHeaderDecode(str string) string {
 
 	if out != nil && ptextLen > 0 {
 		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
-		ptextLen = 0
 	}
 
 	if out == nil {
