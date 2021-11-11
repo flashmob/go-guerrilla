@@ -1,23 +1,22 @@
 package guerrilla
 
 import (
-	"os"
-	"testing"
-
 	"bufio"
-	"net/textproto"
-	"strings"
-	"sync"
-
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/textproto"
+	"os"
+	"strings"
+	"sync"
+	"testing"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
+	"github.com/stretchr/testify/require"
 )
 
 // getMockServerConfig gets a mock ServerConfig struct used for creating a new server
@@ -312,7 +311,7 @@ func TestGithubIssue197(t *testing.T) {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
-	server.backend().Start()
+	require.NoError(t, server.backend().Start())
 	// we assume that 1.1.1.1 is a domain (ip-literal syntax is incorrect)
 	// [2001:DB8::FF00:42:8329] is an address literal
 	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
@@ -538,7 +537,7 @@ func TestGithubIssue199(t *testing.T) {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
-	server.backend().Start()
+	require.NoError(t, server.backend().Start())
 
 	server.setAllowedHosts([]string{"grr.la", "fake.com", "[1.1.1.1]", "[2001:db8::8a2e:370:7334]", "saggydimes.test.com"})
 
@@ -717,7 +716,7 @@ func TestGithubIssue200(t *testing.T) {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
-	server.backend().Start()
+	require.NoError(t, server.backend().Start())
 	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
 
 	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
@@ -769,7 +768,7 @@ func TestGithubIssue201(t *testing.T) {
 		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
 	}
 	conn, server := getMockServerConn(sc, t)
-	server.backend().Start()
+	require.NoError(t, server.backend().Start())
 	// note that saggydimes.test.com is the hostname of the server, it comes form the config
 	// it will be used for rcpt to:<postmaster> which does not specify a host
 	server.setAllowedHosts([]string{"a.com", "saggydimes.test.com"})
