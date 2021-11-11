@@ -2,12 +2,13 @@ package log
 
 import (
 	"bufio"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // custom logrus hook
@@ -28,8 +29,6 @@ type LogrusHook struct {
 	fname string
 	// txtFormatter that doesn't use colors
 	plainTxtFormatter *log.TextFormatter
-
-	mu sync.Mutex
 }
 
 // newLogrusHook creates a new hook. dest can be a file name or one of the following strings:

@@ -85,7 +85,6 @@ func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
 type redisClient struct {
 	isConnected bool
 	conn        RedisConn
-	time        int
 }
 
 // compressedData struct will be compressed using zlib when printed via fmt
