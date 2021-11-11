@@ -78,10 +78,6 @@ func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (er
 	return nil
 }
 
-func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
-	return g.config.NumberOfWorkers
-}
-
 type redisClient struct {
 	isConnected bool
 	conn        RedisConn

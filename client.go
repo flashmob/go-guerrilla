@@ -49,7 +49,6 @@ type client struct {
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
 	smtpReader *textproto.Reader
-	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
 	log       log.Logger
