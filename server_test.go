@@ -946,48 +946,34 @@ func TestGatewayTimeout(t *testing.T) {
 			t.Error(err)
 		}
 		str, err = in.ReadString('\n')
+		require.NoError(t, err)
 		// perform 2 transactions
 		// both should panic.
 		for i := 0; i < 2; i++ {
-			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
-				t.Error(err)
-			}
-			if str, err = in.ReadString('\n'); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n"); err != nil {
-				t.Error(err)
-			}
-			if str, err = in.ReadString('\n'); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, "DATA\r\n"); err != nil {
-				t.Error(err)
-			}
-			if str, err = in.ReadString('\n'); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, "Subject: Test subject\r\n"); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, "\r\n"); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, "A an email body\r\n"); err != nil {
-				t.Error(err)
-			}
-			if _, err := fmt.Fprint(conn, ".\r\n"); err != nil {
-				t.Error(err)
-			}
+			_, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+			require.NoError(t, err)
+			_, err = in.ReadString('\n')
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
+			require.NoError(t, err)
+			_, err = in.ReadString('\n')
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, "DATA\r\n")
+			require.NoError(t, err)
+			_, err = in.ReadString('\n')
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, "\r\n")
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, "A an email body\r\n")
+			require.NoError(t, err)
+			_, err = fmt.Fprint(conn, ".\r\n")
+			require.NoError(t, err)
 			str, err = in.ReadString('\n')
-			expect := "transaction timeout"
-			if err != nil {
-				t.Error(err)
-			} else if !strings.Contains(str, expect) {
-				t.Error("Expected the reply to have'", expect, "'but got", str)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, "transaction timeout", str)
 		}
-		_ = str
 
 		d.Shutdown()
 	}

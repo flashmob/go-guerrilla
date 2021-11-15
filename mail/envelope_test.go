@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // Test MimeHeader decoding, not using iconv
@@ -55,16 +57,11 @@ func TestAddressNull(t *testing.T) {
 }
 
 func TestNewAddress(t *testing.T) {
+	_, err := NewAddress("<hoop>")
+	require.Error(t, err)
 
-	addr, err := NewAddress("<hoop>")
-	if err == nil {
-		t.Error("there should be an error:", err)
-	}
-
-	addr, err = NewAddress(`Gogh Fir <tesst@test.com>`)
-	if err != nil {
-		t.Error("there should be no error:", addr.Host, err)
-	}
+	_, err = NewAddress(`Gogh Fir <tesst@test.com>`)
+	require.NoError(t, err)
 }
 
 func TestQuotedAddress(t *testing.T) {
