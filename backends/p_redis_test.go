@@ -8,6 +8,8 @@ import (
 
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedisGeneric(t *testing.T) {
@@ -47,14 +49,9 @@ func TestRedisGeneric(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if b, err := ioutil.ReadFile("./test_redis.log"); err != nil {
-		t.Error(err)
-		return
-	} else {
-		if strings.Index(string(b), "SETEX") == -1 {
-			t.Error("Log did not contain SETEX, the log was: ", string(b))
-		}
-	}
+	b, err := ioutil.ReadFile("./test_redis.log")
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "SETEX")
 
 	if err := os.Remove("./test_redis.log"); err != nil {
 		t.Error(err)
