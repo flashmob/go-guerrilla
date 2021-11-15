@@ -1029,9 +1029,6 @@ func TestDataCommand(t *testing.T) {
 		t.FailNow()
 	}
 	defer cleanTestArtifacts(t)
-	testHeader :=
-		"Subject: =?Shift_JIS?B?W4NYg06DRYNGg0GBRYNHg2qDYoNOg1ggg0GDSoNFg5ODZ12DQYNKg0WDk4Nn?=\r\n" +
-			"\t=?Shift_JIS?B?k2+YXoqul7mCzIKokm2C54K5?=\r\n"
 
 	email :=
 		"Delivered-To: test@sharklasers.com\r\n" +
@@ -1062,59 +1059,32 @@ func TestDataCommand(t *testing.T) {
 			"lamail.com=0ABlock or report abuse: https://www.guerrillamail.com//abuse/?a=\r\n" +
 			"=3DVURnES0HUaZbhA8%3D=0A\r\n.\r\n"
 
-	if startErrors := app.Start(); startErrors == nil {
-		conn, bufin, err := Connect(config.Servers[0], 20)
-		if err != nil {
-			// handle error
-			t.Error(err.Error(), config.Servers[0].ListenInterface)
-			t.FailNow()
-		} else {
-			// client goes into command state
-			if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
-				t.Error("Hello command failed", err.Error())
-			}
+	require.NoError(t, app.Start())
+	defer app.Shutdown()
 
-			response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
-			if err != nil {
-				t.Error("command failed", err.Error())
-			}
-			//fmt.Println(response)
-			response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
-			if err != nil {
-				t.Error("command failed", err.Error())
-			}
-			//fmt.Println(response)
-			response, err = Command(conn, bufin, "DATA")
-			if err != nil {
-				t.Error("command failed", err.Error())
-			}
-			/*
-				response, err = Command(
-					conn,
-					bufin,
-					testHeader+"\r\nHello World\r\n.\r\n")
-			*/
-			_ = testHeader
-			response, err = Command(
-				conn,
-				bufin,
-				email+"\r\n.\r\n")
-			//expected := "500 Line too long"
-			expected := "250 2.0.0 OK: queued as "
-			if strings.Index(response, expected) != 0 {
-				t.Error("Server did not respond with", expected, ", it said:"+response, err)
-			}
-
-		}
-		_ = conn.Close()
-		app.Shutdown()
-	} else {
-		if startErrors := app.Start(); startErrors != nil {
-			t.Error(startErrors)
-			app.Shutdown()
-			t.FailNow()
-		}
+	conn, bufin, err := Connect(config.Servers[0], 20)
+	require.NoError(t, err)
+	// client goes into command state
+	if _, err := Command(conn, bufin, "HELO localtester"); err != nil {
+		t.Error("Hello command failed", err.Error())
 	}
+
+	response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
+	require.NoError(t, err)
+	t.Log(response)
+	response, err = Command(conn, bufin, "RCPT TO:<test@grr.la>")
+	require.NoError(t, err)
+	t.Log(response)
+	response, err = Command(conn, bufin, "DATA")
+	require.NoError(t, err)
+	t.Log(response)
+	response, err = Command(
+		conn,
+		bufin,
+		email+"\r\n.\r\n")
+	require.NoError(t, err)
+	assert.Contains(t, response, "250 2.0.0 OK: queued as ")
+	require.NoError(t, conn.Close())
 }
 
 // Fuzzer crashed the server by submitting "DATA\r\n" as the first command

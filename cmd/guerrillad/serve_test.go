@@ -23,6 +23,7 @@ import (
 	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
 var configJsonA = `
@@ -500,17 +501,13 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		guerrilla.EventConfigServerNew:     false,
 	}
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
+	require.NoError(t, err)
 	app, err := guerrilla.New(oldconf, backend, mainlog)
-	if err != nil {
-		t.Error("Failed to create new app", err)
-	}
+	require.NoError(t, err)
 	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
 	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
 
