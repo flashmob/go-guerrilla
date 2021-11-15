@@ -324,62 +324,53 @@ func TestGithubIssue197(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	line, err := r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
-	if err := w.PrintfLine("HELO test.test.com"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("HELO test.test.com"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
 	// Case 1
-	if err := w.PrintfLine("rcpt to: <hi@[1.1.1.1]>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
-	if client.parser.IP == nil {
-		t.Error("[1.1.1.1] not parsed as address-liteal")
-	}
+	require.NoError(t, w.PrintfLine("rcpt to: <hi@[1.1.1.1]>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+	assert.Nil(t, client.parser.IP, "[1.1.1.1] not parsed as address-literal")
 
 	// case 2, should be parsed as domain
-	if err := w.PrintfLine("rcpt to: <hi@1.1.1.1>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("rcpt to: <hi@1.1.1.1>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
-	if client.parser.IP != nil {
-		t.Error("1.1.1.1 should not be parsed as an IP (syntax requires IP addresses to be in braces, eg <hi@[1.1.1.1]>")
-	}
+	assert.Nil(t, client.parser.IP, "1.1.1.1 should not be parsed as an IP (syntax requires IP addresses to be in braces, eg <hi@[1.1.1.1]>")
 
 	// case 3
 	// prefix ipv6 is case insensitive
-	if err := w.PrintfLine("rcpt to: <hi@[ipv6:2001:DB8::FF00:42:8329]>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
-	if client.parser.IP == nil {
-		t.Error("[ipv6:2001:DB8::FF00:42:8329] should be parsed as an address-literal, it wasnt")
-	}
+	require.NoError(t, w.PrintfLine("rcpt to: <hi@[ipv6:2001:DB8::FF00:42:8329]>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+	assert.NotNil(t, client.parser.IP, "[ipv6:2001:DB8::FF00:42:8329] should be parsed as an address-literal, it wasn't")
 
 	// case 4
-	if err := w.PrintfLine("rcpt to: <hi@[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329]>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("rcpt to: <hi@[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329]>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
 	if client.parser.Domain != "2001:DB8::FF00:42:8329" && client.parser.IP == nil {
 		t.Error("[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329] is same as 2001:DB8::FF00:42:8329, lol")
 	}
 
-	if err := w.PrintfLine("QUIT"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
-	//fmt.Println("line is:", line)
-	expected := "221 2.0.0 Bye"
-	if strings.Index(line, expected) != 0 {
-		t.Error("expected", expected, "but got:", line)
-	}
+	require.NoError(t, w.PrintfLine("QUIT"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+	assert.Equal(t, "221 2.0.0 Bye", line)
 	wg.Wait() // wait for handleClient to exit
 }
 
