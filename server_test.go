@@ -454,29 +454,23 @@ func TestGithubIssue198(t *testing.T) {
 	}
 	/////////////////////
 
-	if err := w.PrintfLine("RSET"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("RSET"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
 	// Test with EHLO & no TLS
-
 	line = sendMessage(t, "EHLO", false, w, line, r, err, client)
 
 	/////////////////////
 
-	if !strings.Contains(githubIssue198data, " ESMTP ") {
-		t.Error("'with ESTMP' not present")
-	}
+	assert.Contains(t, githubIssue198data, " ESMTP ", "'with ESTMP' not present")
 
-	if err := w.PrintfLine("QUIT"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
-	expected := "221 2.0.0 Bye"
-	if strings.Index(line, expected) != 0 {
-		t.Error("expected", expected, "but got:", line)
-	}
+	require.NoError(t, w.PrintfLine("QUIT"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+
+	assert.Equal(t, "221 2.0.0 Bye", line)
 	wg.Wait() // wait for handleClient to exit
 }
 
