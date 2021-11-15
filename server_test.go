@@ -492,7 +492,7 @@ func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, r *t
 	}
 
 	require.NoError(t, w.PrintfLine("MAIL FROM: test@example.com>"))
-	line, err = r.ReadLine()
+	line, err := r.ReadLine()
 	require.NoError(t, err)
 	t.Log(line)
 
