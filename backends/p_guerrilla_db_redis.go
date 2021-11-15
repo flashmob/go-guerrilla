@@ -64,20 +64,6 @@ type guerrillaDBAndRedisConfig struct {
 	BatchTimeout       int    `json:"redis_sql_batch_timeout,omitempty"`
 }
 
-// Load the backend config for the backend. It has already been unmarshalled
-// from the main config file 'backend' config "backend_config"
-// Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
-	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
-	if err != nil {
-		return err
-	}
-	m := bcfg.(*guerrillaDBAndRedisConfig)
-	g.config = m
-	return nil
-}
-
 type redisClient struct {
 	isConnected bool
 	conn        RedisConn
@@ -328,7 +314,7 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
-	if c.isConnected == false {
+	if !c.isConnected {
 		c.conn, err = RedisDialer("tcp", redisInterface)
 		if err != nil {
 			// handle error

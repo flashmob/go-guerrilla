@@ -38,7 +38,7 @@ type dialOptions struct {
 }
 
 type RedisDialOption struct {
-	f func(*dialOptions) //nolint:structcheck
+	f func(*dialOptions) //nolint:structcheck,unused
 }
 
 type redisDial func(network, address string, options ...RedisDialOption) (RedisConn, error)

@@ -4,16 +4,18 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/response"
 	"io/ioutil"
 	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/flashmob/go-guerrilla/response"
+	"github.com/stretchr/testify/require"
 )
 
 // Test Starting smtp without setting up logger / backend
@@ -295,16 +297,12 @@ func TestReopenServerLog(t *testing.T) {
 	if err != nil {
 		t.Error("start error", err)
 	} else {
-		if err := talkToServer("127.0.0.1:2526"); err != nil {
-			t.Error(err)
-		}
+		talkToServer(t, "127.0.0.1:2526")
 		if err = d.ReopenLogs(); err != nil {
 			t.Error(err)
 		}
 		time.Sleep(time.Second * 2)
-		if err := talkToServer("127.0.0.1:2526"); err != nil {
-			t.Error(err)
-		}
+		talkToServer(t, "127.0.0.1:2526")
 		d.Shutdown()
 	}
 
@@ -463,10 +461,8 @@ func TestSetAddProcessor(t *testing.T) {
 	if err := d.Start(); err != nil {
 		t.Error(err)
 	}
-	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525"); err != nil {
-		t.Error(err)
-	}
+	// let's have a talk with the server
+	talkToServer(t, "127.0.0.1:2525")
 
 	d.Shutdown()
 
@@ -493,71 +489,38 @@ func TestSetAddProcessor(t *testing.T) {
 
 }
 
-func talkToServer(address string) (err error) {
-
+func talkToServer(t *testing.T, address string) {
 	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		return
-	}
+	require.NoError(t, err)
 	in := bufio.NewReader(conn)
-	str, err := in.ReadString('\n')
-	if err != nil {
-		return err
-	}
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "HELO maildiranasaurustester\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "DATA\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "\r\n")
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "A an email body\r\n")
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, ".\r\n")
-	if err != nil {
-		return err
-	}
-	str, err = in.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	_ = str
-	return nil
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
 }
 
 // Test hot config reload
@@ -752,10 +715,8 @@ func TestCustomBackendResult(t *testing.T) {
 	if err := d.Start(); err != nil {
 		t.Error(err)
 	}
-	// lets have a talk with the server
-	if err := talkToServer("127.0.0.1:2525"); err != nil {
-		t.Error(err)
-	}
+	// let's have a talk with the server
+	talkToServer(t, "127.0.0.1:2525")
 
 	d.Shutdown()
 

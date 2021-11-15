@@ -16,6 +16,7 @@ import (
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -282,22 +283,20 @@ func TestHandleClient(t *testing.T) {
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
 	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	t.Log(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	if err := w.PrintfLine("HELO test.test.com"); err != nil {
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
-	//fmt.Println(line)
+	t.Log(line)
 	if err := w.PrintfLine("QUIT"); err != nil {
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
-	//fmt.Println("line is:", line)
+	t.Log(line)
 	expected := "221 2.0.0 Bye"
-	if strings.Index(line, expected) != 0 {
-		t.Error("expected", expected, "but got:", line)
-	}
+	assert.Equal(t, expected, line)
 	wg.Wait() // wait for handleClient to exit
 }
 

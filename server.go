@@ -229,10 +229,9 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	}
 }
 
-// Begin accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
+// Start begins accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
 func (s *server) Start(startWG *sync.WaitGroup) error {
-	var clientID uint64
-	clientID = 0
+	var clientID uint64 = 0
 
 	listener, err := net.Listen("tcp", s.listenInterface)
 	s.listener = listener
