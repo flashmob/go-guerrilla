@@ -433,7 +433,7 @@ func TestGithubIssue198(t *testing.T) {
 
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	// Test with HELO greeting
-	line = sendMessage("HELO", true, w, t, line, r, err, client)
+	line = sendMessage(t, "HELO", true, w, line, r, err, client)
 	if !strings.Contains(githubIssue198data, " SMTPS ") {
 		t.Error("'with SMTPS' not present")
 	}
@@ -448,7 +448,7 @@ func TestGithubIssue198(t *testing.T) {
 	}
 	// Test with EHLO
 	line, _ = r.ReadLine()
-	line = sendMessage("EHLO", true, w, t, line, r, err, client)
+	line = sendMessage(t, "EHLO", true, w, line, r, err, client)
 	if !strings.Contains(githubIssue198data, " ESMTPS ") {
 		t.Error("'with ESMTPS' not present")
 	}
@@ -461,7 +461,7 @@ func TestGithubIssue198(t *testing.T) {
 
 	// Test with EHLO & no TLS
 
-	line = sendMessage("EHLO", false, w, t, line, r, err, client)
+	line = sendMessage(t, "EHLO", false, w, line, r, err, client)
 
 	/////////////////////
 
@@ -480,12 +480,11 @@ func TestGithubIssue198(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
-func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line string, r *textproto.Reader, err error, client *client) string {
-	if err := w.PrintfLine(greet + " test.test.com"); err != nil {
-		t.Error(err)
-	}
+func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, line string, r *textproto.Reader, err error, client *client) string {
+	require.NoError(t, w.PrintfLine(greet+" test.test.com"))
 	for {
-		line, _ = r.ReadLine()
+		line, err := r.ReadLine()
+		require.NoError(t, err)
 		if strings.Index(line, "250 ") == 0 {
 			break
 		}
@@ -494,26 +493,26 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 		}
 	}
 
-	if err := w.PrintfLine("MAIL FROM: test@example.com>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("MAIL FROM: test@example.com>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
-	if err := w.PrintfLine("RCPT TO: <hi@[ipv6:2001:DB8::FF00:42:8329]>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("RCPT TO: <hi@[ipv6:2001:DB8::FF00:42:8329]>"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+
 	client.Hashes = append(client.Hashes, "abcdef1526777763")
 	client.TLS = TLS
-	if err := w.PrintfLine("DATA"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("DATA"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
-	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
 	return line
 }
 
@@ -917,57 +916,47 @@ func TestGatewayTimeout(t *testing.T) {
 	cfg.BackendConfig = bcfg
 
 	d := Daemon{Config: cfg}
-	err := d.Start()
+	require.NoError(t, d.Start())
+	defer d.Shutdown()
 
-	if err != nil {
-		t.Error("server didn't start")
-	} else {
-
-		conn, err := net.Dial("tcp", "127.0.0.1:2525")
-		if err != nil {
-
-			return
-		}
-		in := bufio.NewReader(conn)
-		str, err := in.ReadString('\n')
-		if err != nil {
-			t.Error(err)
-		}
-		if _, err := fmt.Fprint(conn, "HELO host\r\n"); err != nil {
-			t.Error(err)
-		}
+	conn, err := net.Dial("tcp", "127.0.0.1:2525")
+	require.NoError(t, err)
+	in := bufio.NewReader(conn)
+	str, err := in.ReadString('\n')
+	require.NoError(t, err)
+	_, err = fmt.Fprint(conn, "HELO host\r\n")
+	require.NoError(t, err)
+	_, err = in.ReadString('\n')
+	require.NoError(t, err)
+	// perform 2 transactions
+	// both should panic.
+	for i := 0; i < 2; i++ {
+		_, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
+		require.NoError(t, err)
+		_, err = in.ReadString('\n')
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
+		require.NoError(t, err)
+		_, err = in.ReadString('\n')
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, "DATA\r\n")
+		require.NoError(t, err)
+		_, err = in.ReadString('\n')
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, "\r\n")
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, "A an email body\r\n")
+		require.NoError(t, err)
+		_, err = fmt.Fprint(conn, ".\r\n")
+		require.NoError(t, err)
 		str, err = in.ReadString('\n')
 		require.NoError(t, err)
-		// perform 2 transactions
-		// both should panic.
-		for i := 0; i < 2; i++ {
-			_, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n")
-			require.NoError(t, err)
-			_, err = in.ReadString('\n')
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, "RCPT TO:<test@grr.la>\r\n")
-			require.NoError(t, err)
-			_, err = in.ReadString('\n')
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, "DATA\r\n")
-			require.NoError(t, err)
-			_, err = in.ReadString('\n')
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, "Subject: Test subject\r\n")
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, "\r\n")
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, "A an email body\r\n")
-			require.NoError(t, err)
-			_, err = fmt.Fprint(conn, ".\r\n")
-			require.NoError(t, err)
-			str, err = in.ReadString('\n')
-			require.NoError(t, err)
-			assert.Equal(t, "transaction timeout", str)
-		}
-
-		d.Shutdown()
+		assert.Equal(t, "transaction timeout", str)
 	}
+
+	d.Shutdown()
 }
 
 // The processor will panic and gateway should recover from it
