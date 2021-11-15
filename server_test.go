@@ -429,11 +429,13 @@ func TestGithubIssue198(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
+	line, err := r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	// Test with HELO greeting
-	line = sendMessage(t, "HELO", true, w, line, r, err, client)
+	_ = sendMessage(t, "HELO", true, w, r, err, client)
 	if !strings.Contains(githubIssue198data, " SMTPS ") {
 		t.Error("'with SMTPS' not present")
 	}
@@ -447,8 +449,10 @@ func TestGithubIssue198(t *testing.T) {
 		t.Error(err)
 	}
 	// Test with EHLO
-	line, _ = r.ReadLine()
-	line = sendMessage(t, "EHLO", true, w, line, r, err, client)
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+	line = sendMessage(t, "EHLO", true, w, r, err, client)
 	if !strings.Contains(githubIssue198data, " ESMTPS ") {
 		t.Error("'with ESMTPS' not present")
 	}
@@ -460,7 +464,7 @@ func TestGithubIssue198(t *testing.T) {
 	t.Log(line)
 
 	// Test with EHLO & no TLS
-	line = sendMessage(t, "EHLO", false, w, line, r, err, client)
+	line = sendMessage(t, "EHLO", false, w, r, err, client)
 
 	/////////////////////
 
@@ -474,7 +478,7 @@ func TestGithubIssue198(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
-func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, line string, r *textproto.Reader, err error, client *client) string {
+func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, r *textproto.Reader, err error, client *client) string {
 	require.NoError(t, w.PrintfLine(greet+" test.test.com"))
 	for {
 		line, err := r.ReadLine()
