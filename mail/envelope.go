@@ -217,7 +217,7 @@ func (e *Envelope) ResetTransaction() {
 	// ensure not processing by the backend, will only get lock if finished, otherwise block
 	e.Lock()
 	// got the lock, it means processing finished
-	e.Unlock()
+	e.Unlock() //nolint:staticcheck
 
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}

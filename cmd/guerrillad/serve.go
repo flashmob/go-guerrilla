@@ -68,7 +68,6 @@ func sigHandler() {
 		syscall.SIGQUIT,
 		syscall.SIGINT,
 		syscall.SIGUSR1,
-		os.Kill,
 	)
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {

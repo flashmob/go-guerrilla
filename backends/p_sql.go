@@ -138,7 +138,7 @@ func (s *SQLProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 	return stmt
 }
 
-func (s *SQLProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) (execErr error) {
+func (s *SQLProcessor) doQuery(c int, db *sql.DB, vals *[]interface{}) (execErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			Log().Error("Recovered form panic:", r, string(debug.Stack()))
@@ -153,7 +153,7 @@ func (s *SQLProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]
 		}
 	}()
 	// prepare the query used to insert when rows reaches batchMax
-	insertStmt = s.prepareInsertQuery(c, db)
+	insertStmt := s.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	if execErr != nil {
 		Log().WithError(execErr).Error("There was a problem the insert")
@@ -295,8 +295,7 @@ func SQL() Decorator {
 						sender,
 					)
 
-					stmt := s.prepareInsertQuery(1, db)
-					err := s.doQuery(1, db, stmt, &vals)
+					err := s.doQuery(1, db, &vals)
 					if err != nil {
 						return NewResult("554 Error: could not save email"), StorageError
 					}

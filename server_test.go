@@ -452,10 +452,8 @@ func TestGithubIssue198(t *testing.T) {
 	line, err = r.ReadLine()
 	require.NoError(t, err)
 	t.Log(line)
-	line = sendMessage(t, "EHLO", true, w, r, err, client)
-	if !strings.Contains(githubIssue198data, " ESMTPS ") {
-		t.Error("'with ESMTPS' not present")
-	}
+	_ = sendMessage(t, "EHLO", true, w, r, err, client)
+	assert.Contains(t, githubIssue198data, " ESMTPS ", "'with ESMTPS' not present")
 	/////////////////////
 
 	require.NoError(t, w.PrintfLine("RSET"))
@@ -464,7 +462,7 @@ func TestGithubIssue198(t *testing.T) {
 	t.Log(line)
 
 	// Test with EHLO & no TLS
-	line = sendMessage(t, "EHLO", false, w, r, err, client)
+	_ = sendMessage(t, "EHLO", false, w, r, err, client)
 
 	/////////////////////
 
@@ -537,20 +535,20 @@ func TestGithubIssue199(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	_, err := r.ReadLine()
+	require.NoError(t, err)
+
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
-	if err := w.PrintfLine("HELO test"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("HELO test"))
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// case 1
-	if err := w.PrintfLine(
-		"MAIL FROM: <\"  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com \"@example.com>"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t,
+		w.PrintfLine("MAIL FROM: <\"  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com \"@example.com>"),
+	)
+	line, err := r.ReadLine()
+	require.NoError(t, err)
 	// [SPACE][SPACE]yo--[SPACE]man[SPACE]wazz'''up?[SPACE]surprise[SPACE]surprise,[SPACE]this[SPACE]is[SPACE]POSSIBLE@fake.com[SPACE]
 	if client.parser.LocalPart != "  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com " {
 		t.Error("expecting local part: [  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com ], got client.parser.LocalPart")
@@ -562,20 +560,18 @@ func TestGithubIssue199(t *testing.T) {
 	if from := client.MailFrom.String(); from != "\"  yo-- man wazz'''up? surprise surprise, this is POSSIBLE@fake.com \"@example.com" {
 		t.Error("mail from was:", from)
 	}
-	if line != "250 2.1.0 OK" {
-		t.Error("line did not have: 250 2.1.0 OK, got", line)
-	}
+	assert.Equal(t, "250 2.1.0 OK", line)
 
-	if err := w.PrintfLine("RSET"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("RSET"))
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// case 2, address literal mailboxes
 	if err := w.PrintfLine("MAIL FROM: <hi@[1.1.1.1]>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// stringer should be aware its an ip and return the host part in angle brackets
 	if from := client.MailFrom.String(); from != "hi@[1.1.1.1]" {
@@ -585,14 +581,16 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("RSET"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// case 3
 
 	if err := w.PrintfLine("MAIL FROM: <hi@[IPv6:2001:0db8:0000:0000:0000:8a2e:0370:7334]>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// stringer should be aware its an ip and return the host part in angle brackets, and ipv6 should be normalized
 	if from := client.MailFrom.String(); from != "hi@[2001:db8::8a2e:370:7334]" {
@@ -602,7 +600,8 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("RSET"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// case 4
 	// rcpt to: <hi@[IPv6:2001:0db8:0000:0000:0000:ff00:0042:8329]>
@@ -610,12 +609,14 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("MAIL FROM: <>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	if err := w.PrintfLine("RCPT TO: <Postmaster>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// stringer should return an empty string
 	if from := client.MailFrom.String(); from != "" {
@@ -639,12 +640,14 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("RSET"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	if err := w.PrintfLine("RCPT TO: <\" al\\ph\\a \"@grr.la>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 	if client.RcptTo[0].User != " alpha " {
 		t.Error(client.RcptTo[0].User)
 	}
@@ -657,12 +660,14 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("RSET"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	if err := w.PrintfLine("RCPT TO: <\"alpha\"@grr.la>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// we don't need to quote, so stringer should return without the quotes
 	if rcpt := client.RcptTo[0].String(); rcpt != "alpha@grr.la" {
@@ -672,13 +677,15 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("RSET"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	if err := w.PrintfLine("RCPT TO: <\"a\\l\\pha\"@grr.la>"); err != nil {
 		t.Error(err)
 	}
 
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// we don't need to quote, so stringer should return without the quotes
 	if rcpt := client.RcptTo[0].String(); rcpt != "alpha@grr.la" {
@@ -688,7 +695,8 @@ func TestGithubIssue199(t *testing.T) {
 	if err := w.PrintfLine("QUIT"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	wg.Wait() // wait for handleClient to exit
 }
@@ -715,16 +723,16 @@ func TestGithubIssue200(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	line, err := r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	if err := w.PrintfLine("HELO test\"><script>alert('hi')</script>test.com"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
-	if line != "550 5.5.2 Syntax error" {
-		t.Error("line expected to be: 550 5.5.2 Syntax error, got", line)
-	}
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	assert.Equal(t, "550 5.5.2 Syntax error", line)
 
 	if err := w.PrintfLine("HELO test.com"); err != nil {
 		t.Error(err)
@@ -769,30 +777,30 @@ func TestGithubIssue201(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	line, err := r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	if err := w.PrintfLine("HELO test"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 
 	// case 1
 	if err := w.PrintfLine("RCPT TO: <postMaStER@a.com>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
-	if line != "250 2.1.5 OK" {
-		t.Error("line did not have: 250 2.1.5 OK, got", line)
-	}
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	assert.Equal(t, "250 2.1.5 OK", line)
 	// case 2
 	if err := w.PrintfLine("RCPT TO: <Postmaster@not-a.com>"); err != nil {
 		t.Error(err)
 	}
-	line, _ = r.ReadLine()
-	if line != "454 4.1.1 Error: Relay access denied: not-a.com" {
-		t.Error("line is not:454 4.1.1 Error: Relay access denied: not-a.com, got", line)
-	}
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	assert.Equal(t, "454 4.1.1 Error: Relay access denied: not-a.com", line)
 	// case 3 (no host specified)
 
 	if err := w.PrintfLine("RCPT TO: <poSTmAsteR>"); err != nil {

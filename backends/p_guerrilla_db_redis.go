@@ -168,7 +168,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	return stmt
 }
 
-func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) error {
+func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, vals *[]interface{}) error {
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
@@ -185,7 +185,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 		}
 	}()
 	// prepare the query used to insert when rows reaches batchMax
-	insertStmt = g.prepareInsertQuery(c, db)
+	insertStmt := g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	//if rand.Intn(2) == 1 {
 	//	return errors.New("uggabooka")
@@ -224,11 +224,11 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 	}
 	t := time.NewTimer(timeo)
 	// prepare the query used to insert when rows reaches batchMax
-	insertStmt := g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
+	_ = g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
 	// inserts executes a batched insert query, clears the vals and resets the count
 	inserter := func(c int) {
 		if c > 0 {
-			err := g.doQuery(c, db, insertStmt, &vals)
+			err := g.doQuery(c, db, &vals)
 			if err != nil {
 				// maybe connection prob?
 				// retry the sql query
@@ -236,7 +236,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 				for i := 0; i < attempts; i++ {
 					Log().Infof("retrying query query rows[%c] ", c)
 					time.Sleep(time.Second)
-					err = g.doQuery(c, db, insertStmt, &vals)
+					err = g.doQuery(c, db, &vals)
 					if err == nil {
 						continue
 					}
