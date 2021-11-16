@@ -338,7 +338,7 @@ func TestGithubIssue197(t *testing.T) {
 	line, err = r.ReadLine()
 	require.NoError(t, err)
 	t.Log(line)
-	assert.Nil(t, client.parser.IP, "[1.1.1.1] not parsed as address-literal")
+	assert.Equal(t, "1.1.1.1", client.parser.IP.String(), "[1.1.1.1] not parsed as address-literal")
 
 	// case 2, should be parsed as domain
 	require.NoError(t, w.PrintfLine("rcpt to: <hi@1.1.1.1>"))
