@@ -910,22 +910,22 @@ func TestNestedMailCmd(t *testing.T) {
 	require.NoError(t, err)
 	response, err := Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 	require.NoError(t, err)
-	assert.Equal(t, "503 5.5.1 Error: nested MAIL command", response)
+	assert.Equal(t, "503 5.5.1 Error: nested MAIL command\r\n", response)
 	// Plot twist: if you EHLO , it should allow MAIL FROM again
 	_, err = Command(conn, bufin, "HELO localtester")
 	require.NoError(t, err)
 	response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 	require.NoError(t, err)
-	assert.Equal(t, "250 2.1.0 OK", response)
+	assert.Equal(t, "250 2.1.0 OK\r\n", response)
 
 	// Plot twist: if you RSET , it should allow MAIL FROM again
 	response, err = Command(conn, bufin, "RSET")
 	require.NoError(t, err)
-	assert.Equal(t, "250 2.1.0 OK", response)
+	assert.Equal(t, "250 2.1.0 OK\r\n", response)
 
 	response, err = Command(conn, bufin, "MAIL FROM:<test@grr.la>")
 	require.NoError(t, err)
-	assert.Equal(t, "250 2.1.0 OK", response)
+	assert.Equal(t, "250 2.1.0 OK\r\n", response)
 	_ = conn.Close()
 	app.Shutdown()
 }
