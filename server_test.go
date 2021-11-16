@@ -435,7 +435,7 @@ func TestGithubIssue198(t *testing.T) {
 
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
 	// Test with HELO greeting
-	_ = sendMessage(t, "HELO", true, w, r, err, client)
+	_ = sendMessage(t, "HELO", true, w, r, client)
 	if !strings.Contains(githubIssue198data, " SMTPS ") {
 		t.Error("'with SMTPS' not present")
 	}
@@ -452,7 +452,7 @@ func TestGithubIssue198(t *testing.T) {
 	line, err = r.ReadLine()
 	require.NoError(t, err)
 	t.Log(line)
-	_ = sendMessage(t, "EHLO", true, w, r, err, client)
+	_ = sendMessage(t, "EHLO", true, w, r, client)
 	assert.Contains(t, githubIssue198data, " ESMTPS ", "'with ESMTPS' not present")
 	/////////////////////
 
@@ -462,7 +462,7 @@ func TestGithubIssue198(t *testing.T) {
 	t.Log(line)
 
 	// Test with EHLO & no TLS
-	_ = sendMessage(t, "EHLO", false, w, r, err, client)
+	_ = sendMessage(t, "EHLO", false, w, r, client)
 
 	/////////////////////
 
@@ -476,7 +476,7 @@ func TestGithubIssue198(t *testing.T) {
 	wg.Wait() // wait for handleClient to exit
 }
 
-func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, r *textproto.Reader, err error, client *client) string {
+func sendMessage(t *testing.T, greet string, TLS bool, w *textproto.Writer, r *textproto.Reader, client *client) string {
 	require.NoError(t, w.PrintfLine(greet+" test.test.com"))
 	for {
 		line, err := r.ReadLine()
@@ -861,42 +861,31 @@ func TestXClient(t *testing.T) {
 	}()
 	// Wait for the greeting from the server
 	r := textproto.NewReader(bufio.NewReader(conn.Client))
-	line, _ := r.ReadLine()
-	//	fmt.Println(line)
+	line, err := r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 	w := textproto.NewWriter(bufio.NewWriter(conn.Client))
-	if err := w.PrintfLine("HELO test.test.com"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
-	//fmt.Println(line)
-	if err := w.PrintfLine("XCLIENT ADDR=212.96.64.216 NAME=[UNAVAILABLE]"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("HELO test.test.com"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
+	require.NoError(t, w.PrintfLine("XCLIENT ADDR=212.96.64.216 NAME=[UNAVAILABLE]"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	t.Log(line)
 
-	if client.RemoteIP != "212.96.64.216" {
-		t.Error("client.RemoteIP should be 212.96.64.216, but got:", client.RemoteIP)
-	}
-	expected := "250 2.1.0 OK"
-	if strings.Index(line, expected) != 0 {
-		t.Error("expected", expected, "but got:", line)
-	}
+	assert.Equal(t, "212.96.64.216", client.RemoteIP)
+	assert.Equal(t, "250 2.1.0 OK", line)
 
 	// try malformed input
-	if err := w.PrintfLine("XCLIENT c"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("XCLIENT c"))
+	line, err = r.ReadLine()
+	require.NoError(t, err)
+	assert.Equal(t, "250 2.1.0 OK", line)
 
-	expected = "250 2.1.0 OK"
-	if strings.Index(line, expected) != 0 {
-		t.Error("expected", expected, "but got:", line)
-	}
-
-	if err := w.PrintfLine("QUIT"); err != nil {
-		t.Error(err)
-	}
-	line, _ = r.ReadLine()
+	require.NoError(t, w.PrintfLine("QUIT"))
+	_, err = r.ReadLine()
+	require.NoError(t, err)
 	wg.Wait() // wait for handleClient to exit
 }
 
@@ -928,7 +917,7 @@ func TestGatewayTimeout(t *testing.T) {
 	conn, err := net.Dial("tcp", "127.0.0.1:2525")
 	require.NoError(t, err)
 	in := bufio.NewReader(conn)
-	str, err := in.ReadString('\n')
+	_, err = in.ReadString('\n')
 	require.NoError(t, err)
 	_, err = fmt.Fprint(conn, "HELO host\r\n")
 	require.NoError(t, err)
@@ -957,7 +946,7 @@ func TestGatewayTimeout(t *testing.T) {
 		require.NoError(t, err)
 		_, err = fmt.Fprint(conn, ".\r\n")
 		require.NoError(t, err)
-		str, err = in.ReadString('\n')
+		str, err := in.ReadString('\n')
 		require.NoError(t, err)
 		assert.Equal(t, "transaction timeout", str)
 	}
