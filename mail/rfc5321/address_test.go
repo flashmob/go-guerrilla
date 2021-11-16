@@ -16,7 +16,7 @@ func TestParseRFC5322(t *testing.T) {
 	a, err := s.Address([]byte("test@tdomain.com"))
 	require.NoError(t, err)
 	require.Len(t, a.List, 1)
-	assert.NotEmpty(t, a.List[0].DisplayName)
+	assert.Empty(t, a.List[0].DisplayName)
 }
 
 func TestParseRFC5322Decoder(t *testing.T) {

@@ -1008,7 +1008,7 @@ func TestDataMaxLength(t *testing.T) {
 					strings.Repeat("n", int(config.Servers[0].MaxSize-20))))
 			require.NoError(t, err)
 
-			assert.Equal(t, "451 4.3.0 Error: maximum DATA size exceeded", response)
+			assert.Contains(t, response, "451 4.3.0 Error: maximum DATA size exceeded")
 
 		}
 		_ = conn.Close()

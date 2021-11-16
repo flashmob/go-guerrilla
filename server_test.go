@@ -948,7 +948,7 @@ func TestGatewayTimeout(t *testing.T) {
 		require.NoError(t, err)
 		str, err := in.ReadString('\n')
 		require.NoError(t, err)
-		assert.Equal(t, "transaction timeout", str)
+		assert.Equal(t, "554 5.5.0 Error: transaction timeout\r\n", str)
 	}
 
 	d.Shutdown()
