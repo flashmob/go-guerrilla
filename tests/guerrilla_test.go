@@ -171,15 +171,13 @@ func (s *GuerrillaSuite) TestStart() {
 	b, err := ioutil.ReadFile(s.config.LogFile)
 	s.Require().NoError(err)
 	logOutput := string(b)
-	s.Assert().Contains(logOutput, fmt.Sprintf("Listening on TCP %s", s.config.Servers[0].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("Listening on TCP %s", s.config.Servers[1].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("[%s] Waiting for a new client", s.config.Servers[0].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("[%s] Waiting for a new client", s.config.Servers[1].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("Server [%s] has stopped accepting new clients", s.config.Servers[0].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("Server [%s] has stopped accepting new clients", s.config.Servers[1].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("shutdown completed for [%s]", s.config.Servers[0].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("shutdown completed for [%s]", s.config.Servers[1].ListenInterface))
-	s.Assert().Contains(logOutput, fmt.Sprintf("shutting down pool [%s]", s.config.Servers[1].ListenInterface))
+	for _, server := range s.config.Servers {
+		s.Assert().Contains(logOutput, fmt.Sprintf("Listening on TCP %s", server.ListenInterface))
+		s.Assert().Contains(logOutput, fmt.Sprintf("[%s] Waiting for a new client", server.ListenInterface))
+		s.Assert().Contains(logOutput, fmt.Sprintf("Server [%s] has stopped accepting new clients", server.ListenInterface))
+		s.Assert().Contains(logOutput, fmt.Sprintf("shutdown completed for [%s]", server.ListenInterface))
+		s.Assert().Contains(logOutput, fmt.Sprintf("shutting down pool [%s]", server.ListenInterface))
+	}
 	s.Assert().Contains(logOutput, "Backend shutdown completed")
 }
 
