@@ -28,7 +28,7 @@ import (
 
 var configJsonA = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -51,7 +51,7 @@ var configJsonA = `
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -66,7 +66,7 @@ var configJsonA = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2228",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
 				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -81,7 +81,7 @@ var configJsonA = `
 // backend config changed, log_received_mails is false
 var configJsonB = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile2.pid",
     "allowed_hosts": [
@@ -104,7 +104,7 @@ var configJsonB = `
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -119,7 +119,7 @@ var configJsonB = `
 // added a server
 var configJsonC = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -150,7 +150,7 @@ var configJsonC = `
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -165,7 +165,7 @@ var configJsonC = `
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -180,7 +180,7 @@ var configJsonC = `
 // adds 127.0.0.1:4655, a secure server
 var configJsonD = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -203,7 +203,7 @@ var configJsonD = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -218,7 +218,7 @@ var configJsonD = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
 				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -233,7 +233,7 @@ var configJsonD = `
 // adds 127.0.0.1:4655, a secure server
 var configJsonE = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile2.pid",
     "allowed_hosts": [
@@ -264,7 +264,7 @@ var configJsonE = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -279,7 +279,7 @@ var configJsonE = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -346,7 +346,7 @@ var grepNotFound error
 //
 func grepTestlog(match string, lineNumber int) (found int, err error) {
 	found = 0
-	fd, err := os.Open("../../tests/testlog")
+	fd, err := os.Open("../../tests/testlog.log")
 	if err != nil {
 		return found, err
 	}
@@ -386,7 +386,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 		_ = mainlog.Reopen()
 
 		// re-open
-		fd, err = os.OpenFile("../../tests/testlog", os.O_RDONLY, 0644)
+		fd, err = os.OpenFile("../../tests/testlog.log", os.O_RDONLY, 0644)
 		if err != nil {
 			return found, err
 		}
@@ -395,7 +395,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 		ln = 0
 	}
 
-	grepNotFound = errors.New("could not find " + match + " in tests/testlog after line" + strconv.Itoa(lineNumber))
+	grepNotFound = errors.New("could not find " + match + " in tests/testlog.log after line" + strconv.Itoa(lineNumber))
 	return found, grepNotFound
 }
 
@@ -416,7 +416,7 @@ func TestFileLimit(t *testing.T) {
 }
 
 func getTestLog() (mainlog log.Logger, err error) {
-	return log.GetLogger("../../tests/testlog", "debug")
+	return log.GetLogger("../../tests/testlog.log", "debug")
 }
 
 func truncateIfExists(filename string) error {
@@ -434,11 +434,11 @@ func deleteIfExists(filename string) error {
 
 func cleanTestArtifacts(t *testing.T) {
 
-	if err := truncateIfExists("../../tests/testlog"); err != nil {
-		t.Error("could not clean tests/testlog:", err)
+	if err := truncateIfExists("../../tests/testlog.log"); err != nil {
+		t.Error("could not clean tests/testlog.log:", err)
 	}
-	if err := truncateIfExists("../../tests/testlog2"); err != nil {
-		t.Error("could not clean tests/testlog2:", err)
+	if err := truncateIfExists("../../tests/testlog2.log"); err != nil {
+		t.Error("could not clean tests/testlog2.log:", err)
 	}
 
 	letters := []byte{'A', 'B', 'C', 'D', 'E'}
@@ -577,7 +577,7 @@ func TestServe(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("listening on TCP 127.0.0.1:3536", 0); err != nil {
 		t.Error("server not started")
 	}
 	data, err := ioutil.ReadFile("pidfile.pid")

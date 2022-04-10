@@ -138,7 +138,7 @@ func deleteIfExists(filename string) error {
 
 func cleanTestArtifacts(t *testing.T) {
 	if err := truncateIfExists("./testlog.log"); err != nil {
-		t.Error("could not clean tests/testlog:", err)
+		t.Error("could not clean tests/testlog.log:", err)
 	}
 
 	letters := []byte{'A', 'B', 'C', 'D', 'E'}

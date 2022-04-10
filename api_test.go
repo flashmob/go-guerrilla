@@ -123,7 +123,7 @@ func TestSMTPCustomBackend(t *testing.T) {
 // with a config from a json file
 func TestSMTPLoadFile(t *testing.T) {
 	json := `{
-    "log_file" : "./tests/testlog",
+    "log_file" : "./tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
@@ -153,7 +153,7 @@ func TestSMTPLoadFile(t *testing.T) {
 
 	`
 	json2 := `{
-    "log_file" : "./tests/testlog2",
+    "log_file" : "./tests/testlog2.log",
     "log_level" : "debug",
     "pid_file" : "tests/go-guerrilla2.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
@@ -201,8 +201,8 @@ func TestSMTPLoadFile(t *testing.T) {
 		return
 	} else {
 		time.Sleep(time.Second * 2)
-		if d.Config.LogFile != "./tests/testlog" {
-			t.Error("d.Config.LogFile != \"./tests/testlog\"")
+		if d.Config.LogFile != "./tests/testlog.log" {
+			t.Error("d.Config.LogFile != \"./tests/testlog.log\"")
 		}
 
 		if d.Config.PidFile != "tests/go-guerrilla.pid" {
@@ -219,12 +219,12 @@ func TestSMTPLoadFile(t *testing.T) {
 			t.Error(err)
 		}
 
-		if d.Config.LogFile != "./tests/testlog2" {
-			t.Error("d.Config.LogFile != \"./tests/testlog\"")
+		if d.Config.LogFile != "./tests/testlog2.log" {
+			t.Error("d.Config.LogFile != \"./tests/testlog2.og\"")
 		}
 
 		if d.Config.PidFile != "tests/go-guerrilla2.pid" {
-			t.Error("d.Config.LogFile != \"go-guerrilla.pid\"")
+			t.Error("d.Config.LogFile != \"go-guerrilla2.pid\"")
 		}
 
 		d.Shutdown()
@@ -384,11 +384,9 @@ var funkyLogger = func() backends.Decorator {
 
 // How about a custom processor?
 func TestSetAddProcessor(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	cfg := &AppConfig{
-		LogFile:      "tests/testlog",
+		LogFile:      "tests/testlog.log",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":     "HeadersParser|Debugger|FunkyLogger",
@@ -406,7 +404,7 @@ func TestSetAddProcessor(t *testing.T) {
 
 	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog")
+	b, err := ioutil.ReadFile("tests/testlog.log")
 	if err != nil {
 		t.Error("could not read logfile")
 		return
@@ -465,10 +463,10 @@ func talkToServer(t *testing.T, address string) {
 
 // Test hot config reload
 // Here we forgot to add FunkyLogger so backend will fail to init
-// it will log to stderr at the beginning, but then change to tests/testlog
+// it will log to stderr at the beginning, but then change to tests/testlog.log
 
 func TestReloadConfig(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := os.Truncate("tests/testlog.log", 0); err != nil {
 		t.Error(err)
 	}
 	d := Daemon{}
@@ -477,7 +475,7 @@ func TestReloadConfig(t *testing.T) {
 	}
 	defer d.Shutdown()
 	cfg := AppConfig{
-		LogFile:      "tests/testlog",
+		LogFile:      "tests/testlog.log",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":     "HeadersParser|Debugger|FunkyLogger",
@@ -493,11 +491,11 @@ func TestReloadConfig(t *testing.T) {
 
 func TestPubSubAPI(t *testing.T) {
 
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := os.Truncate("tests/testlog.log", 0); err != nil {
 		t.Error(err)
 	}
 
-	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog"}}
+	d := Daemon{Config: &AppConfig{LogFile: "tests/testlog.log"}}
 	if err := d.Start(); err != nil {
 		t.Error(err)
 	}
@@ -505,7 +503,7 @@ func TestPubSubAPI(t *testing.T) {
 	// new config
 	cfg := AppConfig{
 		PidFile:      "tests/pidfilex.pid",
-		LogFile:      "tests/testlog",
+		LogFile:      "tests/testlog.log",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":     "HeadersParser|Debugger|FunkyLogger",
@@ -538,7 +536,7 @@ func TestPubSubAPI(t *testing.T) {
 		t.Error(err)
 	}
 
-	b, err := ioutil.ReadFile("tests/testlog")
+	b, err := ioutil.ReadFile("tests/testlog.log")
 	if err != nil {
 		t.Error("could not read logfile")
 		return
@@ -551,7 +549,7 @@ func TestPubSubAPI(t *testing.T) {
 }
 
 func TestAPILog(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := os.Truncate("tests/testlog.log", 0); err != nil {
 		t.Error(err)
 	}
 	d := Daemon{}
@@ -561,17 +559,17 @@ func TestAPILog(t *testing.T) {
 		t.Error("Log level does not eq info, it is ", l.GetLevel())
 	}
 	d.Logger = nil
-	d.Config = &AppConfig{LogFile: "tests/testlog"}
+	d.Config = &AppConfig{LogFile: "tests/testlog.log"}
 	l = d.Log()
-	l.Info("logtest1") // to tests/testlog
+	l.Info("logtest1") // to tests/testlog.log
 
 	//
 	l = d.Log()
-	if l.GetLogDest() != "tests/testlog" {
-		t.Error("log dest is not tests/testlog, it was ", l.GetLogDest())
+	if l.GetLogDest() != "tests/testlog.log" {
+		t.Error("log dest is not tests/testlog.log, it was ", l.GetLogDest())
 	}
 
-	b, err := ioutil.ReadFile("tests/testlog")
+	b, err := ioutil.ReadFile("tests/testlog.log")
 	if err != nil {
 		t.Error("could not read logfile")
 		return
@@ -638,11 +636,11 @@ var customBackend2 = func() backends.Decorator {
 
 // Test a custom backend response
 func TestCustomBackendResult(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
+	if err := os.Truncate("tests/testlog.log", 0); err != nil {
 		t.Error(err)
 	}
 	cfg := &AppConfig{
-		LogFile:      "tests/testlog",
+		LogFile:      "tests/testlog.log",
 		AllowedHosts: []string{"grr.la"},
 		BackendConfig: backends.BackendConfig{
 			"save_process":     "HeadersParser|Debugger|Custom",
@@ -660,7 +658,7 @@ func TestCustomBackendResult(t *testing.T) {
 
 	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog")
+	b, err := ioutil.ReadFile("tests/testlog.log")
 	if err != nil {
 		t.Error("could not read logfile")
 		return

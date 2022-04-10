@@ -35,7 +35,7 @@ func getMockServerConfig() *ServerConfig {
 		Timeout:         5,
 		ListenInterface: "127.0.0.1:2529",
 		MaxClients:      30, // not tested here
-		LogFile:         "./tests/testlog",
+		LogFile:         "./tests/testlog.log",
 	}
 	return sc
 }
@@ -185,10 +185,10 @@ func cleanTestArtifacts(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := truncateIfExists("./tests/testlog"); err != nil {
+	if err := truncateIfExists("./tests/testlog.log"); err != nil {
 		t.Error(err)
 	}
-	if err := truncateIfExists("./tests/testlog2"); err != nil {
+	if err := truncateIfExists("./tests/testlog2.log"); err != nil {
 		t.Error(err)
 	}
 }
