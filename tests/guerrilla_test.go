@@ -209,7 +209,46 @@ func (s *GuerrillaSuite) TestGreeting() {
 	s.Require().NoError(err)
 	logOutput := string(b)
 	s.Assert().Contains(logOutput, "Handle client [127.0.0.1", "Server did not handle any clients")
+}
 
+// Simple smoke-test to see if the server can listen & issues a greeting on connect
+func (s *GuerrillaSuite) TestCustomGreeting() {
+	config := *s.config
+	config.Servers[0].Greeting = "Custom"
+	logger, err := log.GetLogger(s.config.LogFile, "debug")
+	s.Require().NoError(err)
+	backend := getBackend(s.T(), s.config.BackendConfig, logger)
+	app, err := guerrilla.New(&config, backend, logger)
+	s.Require().NoError(err)
+	s.Require().NoError(app.Start())
+	s.cleanups = append(s.cleanups, func() {
+		app.Shutdown()
+	})
+
+	conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
+	s.Require().NoError(err)
+	s.Require().NoError(conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)))
+	greeting, err := bufio.NewReader(conn).ReadString('\n')
+	s.Require().NoError(err)
+	s.Assert().Contains(greeting, "220 mail.guerrillamail.com Custom")
+	s.Require().NoError(conn.Close())
+
+	// 2. tls connection
+	//	roots, err := x509.SystemCertPool()
+	conn, err = tls.Dial("tcp", config.Servers[1].ListenInterface, &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         "127.0.0.1",
+	})
+	s.Require().NoError(err)
+	s.Require().NoError(conn.SetReadDeadline(time.Now().Add(time.Millisecond * 500)))
+	greeting, err = bufio.NewReader(conn).ReadString('\n')
+	s.Require().NoError(err)
+	s.Assert().Contains(greeting, "220 mail.guerrillamail.com SMTP Guerrilla")
+	s.Require().NoError(conn.Close())
+	b, err := ioutil.ReadFile(config.LogFile)
+	s.Require().NoError(err)
+	logOutput := string(b)
+	s.Assert().Contains(logOutput, "Handle client [127.0.0.1", "Server did not handle any clients")
 }
 
 // start up a server, connect a client, greet, then shutdown, then client sends a command
