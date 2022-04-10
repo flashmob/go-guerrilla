@@ -231,7 +231,7 @@ func TestSMTPLoadFile(t *testing.T) {
 	}
 }
 
-// test re-opening the main log
+// TestReopenLog tests re-opening the main log
 func TestReopenLog(t *testing.T) {
 	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	cfg := &AppConfig{LogFile: "tests/testlog.log"}
@@ -247,10 +247,11 @@ func TestReopenLog(t *testing.T) {
 	time.Sleep(time.Second * 2)
 	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog")
+	b, err := ioutil.ReadFile("tests/testlog.log")
 	require.NoError(t, err)
-	assert.Contains(t, string(b), "re-opened log file")
-	assert.Contains(t, string(b), "re-opened main log file")
+	s := string(b)
+	assert.Contains(t, s, "re-opened log file")
+	assert.Contains(t, s, "re-opened main log file")
 }
 
 const testServerLog = "tests/testlog-server.log"
@@ -318,31 +319,29 @@ func TestSetConfig(t *testing.T) {
 }
 
 func TestSetConfigError(t *testing.T) {
-
-	if err := os.Truncate("tests/testlog", 0); err != nil {
-		t.Error(err)
-	}
-	cfg := AppConfig{LogFile: "tests/testlog"}
+	require.NoError(t, truncateIfExists("tests/testlog.log"))
+	cfg := AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: "127.0.0.1:2526",
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	d := Daemon{Config: &cfg}
 
-	// lets add a new server with bad TLS
-	sc.ListenInterface = "127.0.0.1:2527"
-	sc.TLS.StartTLSOn = true
-	sc.TLS.PublicKeyFile = "tests/testlog"  // totally wrong :->
-	sc.TLS.PrivateKeyFile = "tests/testlog" // totally wrong :->
-
-	cfg.Servers = append(cfg.Servers, sc)
-
-	err := d.SetConfig(cfg)
-	if err == nil {
-		t.Error("SetConfig should have returned an error compalning about bad tls settings")
-		return
+	// let's add a new server with bad TLS
+	sc2 := ServerConfig{
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		IsEnabled:       true,
+		TLS: ServerTLSConfig{
+			StartTLSOn:     true,
+			PublicKeyFile:  "tests/testlog.log", // totally wrong :->
+			PrivateKeyFile: "tests/testlog.log", // totally wrong :->
+		},
 	}
+
+	cfg.Servers = append(cfg.Servers, sc2)
+
+	assert.EqualError(t, d.SetConfig(cfg), fmt.Sprintf("cannot use TLS config for [%s], tls: failed to find any PEM data in certificate input", sc2.ListenInterface))
 }
 
 var funkyLogger = func() backends.Decorator {
