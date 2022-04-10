@@ -234,8 +234,8 @@ func TestSMTPLoadFile(t *testing.T) {
 
 // TestReopenLog tests re-opening the main log
 func TestReopenLog(t *testing.T) {
-	require.NoError(t, truncateIfExists("tests/testlog.log"))
-	cfg := &AppConfig{LogFile: "tests/testlog.log"}
+	logFilename := tests.TemporaryFilename(t)
+	cfg := &AppConfig{LogFile: logFilename}
 	sc := ServerConfig{
 		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
@@ -248,7 +248,7 @@ func TestReopenLog(t *testing.T) {
 	time.Sleep(time.Second * 2)
 	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog.log")
+	b, err := ioutil.ReadFile(logFilename)
 	require.NoError(t, err)
 	s := string(b)
 	assert.Contains(t, s, "re-opened log file")
