@@ -15,6 +15,7 @@ import (
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -232,148 +233,88 @@ func TestSMTPLoadFile(t *testing.T) {
 
 // test re-opening the main log
 func TestReopenLog(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
-		t.Error(err)
-	}
-	cfg := &AppConfig{LogFile: "tests/testlog"}
+	require.NoError(t, truncateIfExists("tests/testlog.log"))
+	cfg := &AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: "127.0.0.1:2526",
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	d := Daemon{Config: cfg}
 
-	err := d.Start()
-	if err != nil {
-		t.Error("start error", err)
-	} else {
-		if err = d.ReopenLogs(); err != nil {
-			t.Error(err)
-		}
-		time.Sleep(time.Second * 2)
-
-		d.Shutdown()
-	}
+	require.NoError(t, d.Start())
+	require.NoError(t, d.ReopenLogs())
+	time.Sleep(time.Second * 2)
+	d.Shutdown()
 
 	b, err := ioutil.ReadFile("tests/testlog")
-	if err != nil {
-		t.Error("could not read logfile")
-		return
-	}
-	if !strings.Contains(string(b), "re-opened log file") {
-		t.Error("Server log did not re-opened, expecting \"re-opened log file\"")
-	}
-	if !strings.Contains(string(b), "re-opened main log file") {
-		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "re-opened log file")
+	assert.Contains(t, string(b), "re-opened main log file")
 }
 
 const testServerLog = "tests/testlog-server.log"
 
 // test re-opening the individual server log
 func TestReopenServerLog(t *testing.T) {
-	if err := os.Truncate("tests/testlog", 0); err != nil {
-		t.Error(err)
-	}
-
+	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	defer func() {
-		if _, err := os.Stat(testServerLog); err == nil {
-			if err = os.Remove(testServerLog); err != nil {
-				t.Error(err)
-			}
-		}
+		require.NoError(t, deleteIfExists(testServerLog))
 	}()
 
-	cfg := &AppConfig{LogFile: "tests/testlog", LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
+	cfg := &AppConfig{LogFile: "tests/testlog.log", LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
 	sc := ServerConfig{
-		ListenInterface: "127.0.0.1:2526",
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
 		IsEnabled:       true,
 		LogFile:         testServerLog,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	d := Daemon{Config: cfg}
 
-	err := d.Start()
-	if err != nil {
-		t.Error("start error", err)
-	} else {
-		talkToServer(t, "127.0.0.1:2526")
-		if err = d.ReopenLogs(); err != nil {
-			t.Error(err)
-		}
-		time.Sleep(time.Second * 2)
-		talkToServer(t, "127.0.0.1:2526")
-		d.Shutdown()
-	}
+	require.NoError(t, d.Start())
+	talkToServer(t, sc.ListenInterface)
+	require.NoError(t, d.ReopenLogs())
+	time.Sleep(time.Second * 2)
+	talkToServer(t, sc.ListenInterface)
+	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog")
-	if err != nil {
-		t.Error("could not read logfile")
-		return
-	}
-	if !strings.Contains(string(b), "re-opened log file") {
-		t.Error("Server log did not re-opened, expecting \"re-opened log file\"")
-	}
-	if !strings.Contains(string(b), "re-opened main log file") {
-		t.Error("Main log did not re-opened, expecting \"re-opened main log file\"")
-	}
+	b, err := ioutil.ReadFile("tests/testlog.log")
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "re-opened log file")
+	assert.Contains(t, string(b), "re-opened main log file")
 
 	b, err = ioutil.ReadFile(testServerLog)
-	if err != nil {
-		t.Error("could not read logfile")
-		return
-	}
+	require.NoError(t, err)
 
-	if !strings.Contains(string(b), "Handle client") {
-		t.Error("server log does not contain \"handle client\"")
-	}
-
+	assert.Contains(t, string(b), "Handle client")
 }
 
 func TestSetConfig(t *testing.T) {
-
-	if err := os.Truncate("tests/testlog", 0); err != nil {
-		t.Error(err)
-	}
-	cfg := AppConfig{LogFile: "tests/testlog"}
+	require.NoError(t, truncateIfExists("tests/testlog.log"))
+	cfg := AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: "127.0.0.1:2526",
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	d := Daemon{Config: &cfg}
 
 	// lets add a new server
-	sc.ListenInterface = "127.0.0.1:2527"
-	cfg.Servers = append(cfg.Servers, sc)
-
-	err := d.SetConfig(cfg)
-	if err != nil {
-		t.Error("SetConfig returned an error:", err)
-		return
+	sc2 := ServerConfig{
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		IsEnabled:       true,
 	}
+	cfg.Servers = append(cfg.Servers, sc2)
 
-	err = d.Start()
-	if err != nil {
-		t.Error("start error", err)
-	} else {
+	require.NoError(t, d.SetConfig(cfg))
 
-		time.Sleep(time.Second * 2)
+	require.NoError(t, d.Start())
+	time.Sleep(time.Second * 2)
+	d.Shutdown()
 
-		d.Shutdown()
-	}
-
-	b, err := ioutil.ReadFile("tests/testlog")
-	if err != nil {
-		t.Error("could not read logfile")
-		return
-	}
-	//fmt.Println(string(b))
-	// has 127.0.0.1:2527 started?
-	if !strings.Contains(string(b), "127.0.0.1:2527") {
-		t.Error("expecting 127.0.0.1:2527 to start")
-	}
-
+	b, err := ioutil.ReadFile("tests/testlog.log")
+	require.NoError(t, err)
+	assert.Contains(t, string(b), sc2.ListenInterface)
 }
 
 func TestSetConfigError(t *testing.T) {
