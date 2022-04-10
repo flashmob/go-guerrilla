@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -19,10 +20,12 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/internal/tests"
 	"github.com/flashmob/go-guerrilla/log"
 	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -629,23 +632,13 @@ func TestServe(t *testing.T) {
 // then SIGHUP (to reload config & trigger config update events),
 // then connect to it & HELO.
 func TestServerAddEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	if err != nil {
-		t.Error("failed to generate a test certificate", err)
-		t.FailNow()
-	}
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	require.NoError(t, err)
 	defer cleanTestArtifacts(t)
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	// start the server by emulating the serve command
-	if err := ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644))
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
 	go func() {
@@ -653,56 +646,40 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server didn't start")
-	}
+	_, err = grepTestlog("Listening on TCP 127.0.0.1:3536", 0)
+	require.NoError(t, err)
 
 	// now change the config by adding a server
-	conf := &guerrilla.AppConfig{}       // blank one
-	err = conf.Load([]byte(configJsonA)) // load configJsonA
-	if err != nil {
-		t.Error(err)
-	}
-	newServer := conf.Servers[0]                         // copy the first server config
-	newServer.ListenInterface = "127.0.0.1:2526"         // change it
-	newConf := conf                                      // copy the cmdConfg
-	newConf.Servers = append(newConf.Servers, newServer) // add the new server
-	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err := ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
-			t.Error(err)
-		}
-	}
+	conf := &guerrilla.AppConfig{}                                                // blank one
+	require.NoError(t, conf.Load([]byte(configJsonA)))                            // load configJsonA
+	newServer := conf.Servers[0]                                                  // copy the first server config
+	newServer.ListenInterface = fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)) // change it
+	newConf := conf                                                               // copy the cmdConfg
+	newConf.Servers = append(newConf.Servers, newServer)                          // add the new server
+	jsonbytes, err := json.Marshal(newConf)
+	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", jsonbytes, 0644))
+
 	// send a sighup signal to the server
 	sigHup()
-	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
-		t.Error("new server didn't start")
-	}
+	_, err = grepTestlog(fmt.Sprintf("[%s] Waiting for a new client", newServer.ListenInterface), 0)
+	require.NoError(t, err)
 
-	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
-		t.Error("Could not connect to new server", newServer.ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
-			expect := "250 mail.test.com Hello"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
-		} else {
-			t.Error(err)
-		}
-	}
-
+	conn, buffin, err := test.Connect(newServer, 20)
+	require.NoError(t, err)
+	result, err := test.Command(conn, buffin, "HELO example.com")
+	require.NoError(t, err)
+	expect := "250 mail.test.com Hello\r\n"
+	assert.Equal(t, expect, result)
 	// shutdown the server
 	d.Shutdown()
 
 	// did backend started as expected?
-	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-		t.Error("Did not add server [127.0.0.1:2526] after sighup")
-	}
+	_, err = grepTestlog(fmt.Sprintf("New server added [%s]", newServer.ListenInterface), 0)
+	require.NoError(t, err)
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("Server failed to stop")
-	}
-
+	_, err = grepTestlog("Backend shutdown completed", 0)
+	require.NoError(t, err)
 }
 
 // Start with configJsonA.json,

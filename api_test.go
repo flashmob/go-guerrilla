@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/internal/tests"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/flashmob/go-guerrilla/response"
@@ -236,7 +237,7 @@ func TestReopenLog(t *testing.T) {
 	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	cfg := &AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
@@ -265,7 +266,7 @@ func TestReopenServerLog(t *testing.T) {
 
 	cfg := &AppConfig{LogFile: "tests/testlog.log", LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
 	sc := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 		LogFile:         testServerLog,
 	}
@@ -294,7 +295,7 @@ func TestSetConfig(t *testing.T) {
 	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	cfg := AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
@@ -302,7 +303,7 @@ func TestSetConfig(t *testing.T) {
 
 	// lets add a new server
 	sc2 := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc2)
@@ -322,7 +323,7 @@ func TestSetConfigError(t *testing.T) {
 	require.NoError(t, truncateIfExists("tests/testlog.log"))
 	cfg := AppConfig{LogFile: "tests/testlog.log"}
 	sc := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
@@ -330,7 +331,7 @@ func TestSetConfigError(t *testing.T) {
 
 	// let's add a new server with bad TLS
 	sc2 := ServerConfig{
-		ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(t)),
+		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
 		TLS: ServerTLSConfig{
 			StartTLSOn:     true,

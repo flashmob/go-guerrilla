@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/flashmob/go-guerrilla/internal/tests"
 	"github.com/flashmob/go-guerrilla/mail/rfc5321"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -57,7 +58,7 @@ func (s *GuerrillaSuite) SetupTest() {
 					AlwaysOn:   false,
 				},
 				Hostname:        "mail.guerrillamail.com",
-				ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(s.T())),
+				ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(s.T())),
 				MaxSize:         100017,
 				Timeout:         160,
 				MaxClients:      2,
@@ -67,7 +68,7 @@ func (s *GuerrillaSuite) SetupTest() {
 					AlwaysOn: true,
 				},
 				Hostname:        "mail.guerrillamail.com",
-				ListenInterface: fmt.Sprintf("127.0.0.1:%d", GetFreePort(s.T())),
+				ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(s.T())),
 				MaxSize:         1000001,
 				Timeout:         180,
 				MaxClients:      1,
@@ -102,16 +103,6 @@ func (s *GuerrillaSuite) SetupTest() {
 func (s *GuerrillaSuite) TearDownTest() {
 	cleanTestArtifacts(s.T())
 
-}
-
-func GetFreePort(t *testing.T) (port int) {
-	t.Helper()
-	a, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	require.NoError(t, err)
-	l, err := net.ListenTCP("tcp", a)
-	require.NoError(t, err)
-	require.NoError(t, l.Close())
-	return l.Addr().(*net.TCPAddr).Port
 }
 
 func getBackend(t *testing.T, backendConfig map[string]interface{}, l log.Logger) backends.Backend {
