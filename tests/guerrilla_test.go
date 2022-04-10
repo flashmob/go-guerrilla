@@ -101,6 +101,7 @@ func (s *GuerrillaSuite) SetupTest() {
 
 func (s *GuerrillaSuite) TearDownTest() {
 	cleanTestArtifacts(s.T())
+
 }
 
 func GetFreePort(t *testing.T) (port int) {
@@ -120,21 +121,23 @@ func getBackend(t *testing.T, backendConfig map[string]interface{}, l log.Logger
 }
 
 func truncateIfExists(filename string) error {
-	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
+	_, err := os.Stat(filename)
+	if !errors.Is(err, os.ErrNotExist) {
 		return os.Truncate(filename, 0)
 	}
-	return nil
+	return err
 }
 
 func deleteIfExists(filename string) error {
-	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
+	_, err := os.Stat(filename)
+	if !errors.Is(err, os.ErrNotExist) {
 		return os.Remove(filename)
 	}
-	return nil
+	return err
 }
 
 func cleanTestArtifacts(t *testing.T) {
-	if err := truncateIfExists("./testlog"); err != nil {
+	if err := truncateIfExists("./testlog.log"); err != nil {
 		t.Error("could not clean tests/testlog:", err)
 	}
 
