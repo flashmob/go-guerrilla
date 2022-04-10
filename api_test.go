@@ -255,8 +255,6 @@ func TestReopenLog(t *testing.T) {
 	assert.Contains(t, s, "re-opened main log file")
 }
 
-const testServerLog = "tests/testlog-server.log"
-
 // test re-opening the individual server log
 func TestReopenServerLog(t *testing.T) {
 	logFilename := tests.TemporaryFilename(t)
