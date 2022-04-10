@@ -84,6 +84,7 @@ func (c *DataCompressor) String() string {
 }
 
 // clear it, without clearing the pool
+// nolint:unused
 func (c *DataCompressor) clear() {
 	c.ExtraHeaders = []byte{}
 	c.Data = nil

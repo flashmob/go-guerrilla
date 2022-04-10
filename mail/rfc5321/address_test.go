@@ -2,6 +2,9 @@ package rfc5321
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseRFC5322(t *testing.T) {
@@ -10,15 +13,10 @@ func TestParseRFC5322(t *testing.T) {
 		t.Error(err)
 	}
 	// parse a simple address
-	if a, err := s.Address([]byte("test@tdomain.com")); err != nil {
-		t.Error(err)
-	} else {
-		if len(a.List) != 1 {
-			t.Error("expecting 1 address")
-		} else {
-			// display name should be empty
-		}
-	}
+	a, err := s.Address([]byte("test@tdomain.com"))
+	require.NoError(t, err)
+	require.Len(t, a.List, 1)
+	assert.Empty(t, a.List[0].DisplayName)
 }
 
 func TestParseRFC5322Decoder(t *testing.T) {

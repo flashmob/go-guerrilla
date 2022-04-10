@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -48,7 +49,6 @@ type server struct {
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
 	clientPool      *Pool
-	wg              sync.WaitGroup // for waiting to shutdown
 	listener        net.Listener
 	closedListener  chan bool
 	hosts           allowedHosts // stores map[string]bool for faster lookup
@@ -171,7 +171,7 @@ func (s *server) configureTLS() error {
 				tlsConfig.ClientAuth = ca
 			}
 		}
-		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites
+		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites //nolint:staticcheck
 		tlsConfig.Rand = rand.Reader
 		s.tlsConfigStore.Store(tlsConfig)
 	}
@@ -229,10 +229,9 @@ func (s *server) setAllowedHosts(allowedHosts []string) {
 	}
 }
 
-// Begin accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
+// Start begins accepting SMTP clients. Will block unless there is an error or server.Shutdown() is called
 func (s *server) Start(startWG *sync.WaitGroup) error {
-	var clientID uint64
-	clientID = 0
+	var clientID uint64 = 0
 
 	listener, err := net.Listen("tcp", s.listenInterface)
 	s.listener = listener
@@ -251,7 +250,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
-			if e, ok := err.(net.Error); ok && !e.Temporary() {
+			if e, ok := err.(net.Error); ok && !e.Temporary() { //nolint:staticcheck
 				s.log().Infof("Server [%s] has stopped accepting new clients", s.listenInterface)
 				// the listener has been closed, wait for clients to exit
 				s.log().Infof("shutting down pool [%s]", s.listenInterface)

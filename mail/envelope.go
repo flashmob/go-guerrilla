@@ -90,10 +90,7 @@ func (a *Address) IsEmpty() bool {
 }
 
 func (a *Address) IsPostmaster() bool {
-	if a.User == "postmaster" {
-		return true
-	}
-	return false
+	return a.User == "postmaster"
 }
 
 // NewAddress takes a string of an RFC 5322 address of the
@@ -160,7 +157,7 @@ func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
 }
 
 func queuedID(clientID uint64) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
+	return fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprint(time.Now().Unix())+fmt.Sprint(clientID))))
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -220,7 +217,7 @@ func (e *Envelope) ResetTransaction() {
 	// ensure not processing by the backend, will only get lock if finished, otherwise block
 	e.Lock()
 	// got the lock, it means processing finished
-	e.Unlock()
+	e.Unlock() //nolint:staticcheck
 
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}
@@ -259,7 +256,6 @@ func (e *Envelope) PopRcpt() Address {
 const (
 	statePlainText = iota
 	stateStartEncodedWord
-	stateEncodedWord
 	stateEncoding
 	stateCharset
 	statePayload
@@ -373,7 +369,6 @@ func MimeHeaderDecode(str string) string {
 
 	if out != nil && ptextLen > 0 {
 		out = makeAppend(out, len(str), []byte(str[ptextStart:ptextStart+ptextLen]))
-		ptextLen = 0
 	}
 
 	if out == nil {

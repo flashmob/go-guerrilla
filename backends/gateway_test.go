@@ -1,20 +1,17 @@
 package backends
 
 import (
-	"fmt"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStates(t *testing.T) {
 	gw := BackendGateway{}
-	str := fmt.Sprintf("%s", gw.State)
-	if strings.Index(str, "NewState") != 0 {
-		t.Error("Backend should begin in NewState")
-	}
+	assert.Equal(t, "NewState", gw.State.String())
 }
 
 func TestInitialize(t *testing.T) {

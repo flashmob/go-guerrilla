@@ -28,6 +28,7 @@ func (m *RedisMockConn) Do(commandName string, args ...interface{}) (reply inter
 	return nil, nil
 }
 
+//nolint
 type dialOptions struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
@@ -37,7 +38,7 @@ type dialOptions struct {
 }
 
 type RedisDialOption struct {
-	f func(*dialOptions)
+	f func(*dialOptions) //nolint:structcheck,unused
 }
 
 type redisDial func(network, address string, options ...RedisDialOption) (RedisConn, error)

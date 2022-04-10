@@ -64,28 +64,9 @@ type guerrillaDBAndRedisConfig struct {
 	BatchTimeout       int    `json:"redis_sql_batch_timeout,omitempty"`
 }
 
-// Load the backend config for the backend. It has already been unmarshalled
-// from the main config file 'backend' config "backend_config"
-// Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
-func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
-	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
-	if err != nil {
-		return err
-	}
-	m := bcfg.(*guerrillaDBAndRedisConfig)
-	g.config = m
-	return nil
-}
-
-func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
-	return g.config.NumberOfWorkers
-}
-
 type redisClient struct {
 	isConnected bool
 	conn        RedisConn
-	time        int
 }
 
 // compressedData struct will be compressed using zlib when printed via fmt
@@ -187,7 +168,7 @@ func (g *GuerrillaDBAndRedisBackend) prepareInsertQuery(rows int, db *sql.DB) *s
 	return stmt
 }
 
-func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) error {
+func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, vals *[]interface{}) error {
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
@@ -204,7 +185,7 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 		}
 	}()
 	// prepare the query used to insert when rows reaches batchMax
-	insertStmt = g.prepareInsertQuery(c, db)
+	insertStmt := g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
 	//if rand.Intn(2) == 1 {
 	//	return errors.New("uggabooka")
@@ -243,11 +224,11 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 	}
 	t := time.NewTimer(timeo)
 	// prepare the query used to insert when rows reaches batchMax
-	insertStmt := g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
+	_ = g.prepareInsertQuery(GuerrillaDBAndRedisBatchMax, db)
 	// inserts executes a batched insert query, clears the vals and resets the count
 	inserter := func(c int) {
 		if c > 0 {
-			err := g.doQuery(c, db, insertStmt, &vals)
+			err := g.doQuery(c, db, &vals)
 			if err != nil {
 				// maybe connection prob?
 				// retry the sql query
@@ -255,7 +236,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 				for i := 0; i < attempts; i++ {
 					Log().Infof("retrying query query rows[%c] ", c)
 					time.Sleep(time.Second)
-					err = g.doQuery(c, db, insertStmt, &vals)
+					err = g.doQuery(c, db, &vals)
 					if err == nil {
 						continue
 					}
@@ -333,7 +314,7 @@ func (g *GuerrillaDBAndRedisBackend) sqlConnect() (*sql.DB, error) {
 }
 
 func (c *redisClient) redisConnection(redisInterface string) (err error) {
-	if c.isConnected == false {
+	if !c.isConnected {
 		c.conn, err = RedisDialer("tcp", redisInterface)
 		if err != nil {
 			// handle error

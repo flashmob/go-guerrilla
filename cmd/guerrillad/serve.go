@@ -67,9 +67,7 @@ func sigHandler() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 		syscall.SIGINT,
-		syscall.SIGKILL,
 		syscall.SIGUSR1,
-		os.Kill,
 	)
 	for sig := range signalChannel {
 		if sig == syscall.SIGHUP {
@@ -82,15 +80,13 @@ func sigHandler() {
 			if err := d.ReopenLogs(); err != nil {
 				mainlog.WithError(err).Error("reopening logs failed")
 			}
-		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT || sig == os.Kill {
+		} else if sig == syscall.SIGTERM || sig == syscall.SIGQUIT || sig == syscall.SIGINT {
 			mainlog.Infof("Shutdown signal caught")
 			go func() {
-				select {
 				// exit if graceful shutdown not finished in 60 sec.
-				case <-time.After(time.Second * 60):
-					mainlog.Error("graceful shutdown timed out")
-					os.Exit(1)
-				}
+				<-time.After(time.Second * 60)
+				mainlog.Error("graceful shutdown timed out")
+				os.Exit(1)
 			}()
 			d.Shutdown()
 			mainlog.Infof("Shutdown completed, exiting.")

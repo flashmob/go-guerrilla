@@ -505,7 +505,7 @@ func (s *Parser) QcontentSMTP() error {
 			} else if ch == 32 || ch == 33 ||
 				(ch >= 35 && ch <= 91) ||
 				(ch >= 93 && ch <= 126) {
-				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+				if !s.LocalPartQuotes && !s.isAtext(ch) {
 					s.LocalPartQuotes = true
 				}
 				s.accept.WriteByte(ch)
@@ -515,7 +515,7 @@ func (s *Parser) QcontentSMTP() error {
 		case 1:
 			// escaped character state
 			if ch >= 32 && ch <= 126 {
-				if s.LocalPartQuotes == false && !s.isAtext(ch) {
+				if !s.LocalPartQuotes && !s.isAtext(ch) {
 					s.LocalPartQuotes = true
 				}
 				s.accept.WriteByte(ch)

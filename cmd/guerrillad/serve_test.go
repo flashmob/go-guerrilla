@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -19,15 +20,18 @@ import (
 
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/internal/tests"
 	"github.com/flashmob/go-guerrilla/log"
 	test "github.com/flashmob/go-guerrilla/tests"
 	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var configJsonA = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -50,7 +54,7 @@ var configJsonA = `
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -65,7 +69,7 @@ var configJsonA = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2228",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
 				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -80,7 +84,7 @@ var configJsonA = `
 // backend config changed, log_received_mails is false
 var configJsonB = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile2.pid",
     "allowed_hosts": [
@@ -103,7 +107,7 @@ var configJsonB = `
             "timeout":180,
             "listen_interface":"127.0.0.1:3536",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -118,7 +122,7 @@ var configJsonB = `
 // added a server
 var configJsonC = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -149,7 +153,7 @@ var configJsonC = `
             "timeout":180,
             "listen_interface":"127.0.0.1:25",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -164,7 +168,7 @@ var configJsonC = `
             "timeout":180,
             "listen_interface":"127.0.0.1:465",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -179,7 +183,7 @@ var configJsonC = `
 // adds 127.0.0.1:4655, a secure server
 var configJsonD = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile.pid",
     "allowed_hosts": [
@@ -202,7 +206,7 @@ var configJsonD = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -217,7 +221,7 @@ var configJsonD = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
 				"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -232,7 +236,7 @@ var configJsonD = `
 // adds 127.0.0.1:4655, a secure server
 var configJsonE = `
 {
-    "log_file" : "../../tests/testlog",
+    "log_file" : "../../tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "./pidfile2.pid",
     "allowed_hosts": [
@@ -263,7 +267,7 @@ var configJsonE = `
             "timeout":180,
             "listen_interface":"127.0.0.1:2552",
             "max_clients": 200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -278,7 +282,7 @@ var configJsonE = `
             "timeout":180,
             "listen_interface":"127.0.0.1:4655",
             "max_clients":200,
-            "log_file" : "../../tests/testlog",
+            "log_file" : "../../tests/testlog.log",
 			"tls" : {
 				"private_key_file":"../../tests/mail2.guerrillamail.com.key.pem",
             	"public_key_file":"../../tests/mail2.guerrillamail.com.cert.pem",
@@ -345,7 +349,7 @@ var grepNotFound error
 //
 func grepTestlog(match string, lineNumber int) (found int, err error) {
 	found = 0
-	fd, err := os.Open("../../tests/testlog")
+	fd, err := os.Open("../../tests/testlog.log")
 	if err != nil {
 		return found, err
 	}
@@ -385,7 +389,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 		_ = mainlog.Reopen()
 
 		// re-open
-		fd, err = os.OpenFile("../../tests/testlog", os.O_RDONLY, 0644)
+		fd, err = os.OpenFile("../../tests/testlog.log", os.O_RDONLY, 0644)
 		if err != nil {
 			return found, err
 		}
@@ -394,7 +398,7 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 		ln = 0
 	}
 
-	grepNotFound = errors.New("could not find " + match + " in tests/testlog after line" + strconv.Itoa(lineNumber))
+	grepNotFound = errors.New("could not find " + match + " in tests/testlog.log after line" + strconv.Itoa(lineNumber))
 	return found, grepNotFound
 }
 
@@ -415,7 +419,7 @@ func TestFileLimit(t *testing.T) {
 }
 
 func getTestLog() (mainlog log.Logger, err error) {
-	return log.GetLogger("../../tests/testlog", "debug")
+	return log.GetLogger("../../tests/testlog.log", "debug")
 }
 
 func truncateIfExists(filename string) error {
@@ -433,11 +437,11 @@ func deleteIfExists(filename string) error {
 
 func cleanTestArtifacts(t *testing.T) {
 
-	if err := truncateIfExists("../../tests/testlog"); err != nil {
-		t.Error("could not clean tests/testlog:", err)
+	if err := truncateIfExists("../../tests/testlog.log"); err != nil {
+		t.Error("could not clean tests/testlog.log:", err)
 	}
-	if err := truncateIfExists("../../tests/testlog2"); err != nil {
-		t.Error("could not clean tests/testlog2:", err)
+	if err := truncateIfExists("../../tests/testlog2.log"); err != nil {
+		t.Error("could not clean tests/testlog2.log:", err)
 	}
 
 	letters := []byte{'A', 'B', 'C', 'D', 'E'}
@@ -500,17 +504,13 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		guerrilla.EventConfigServerNew:     false,
 	}
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	bcfg := backends.BackendConfig{"log_received_mails": true}
 	backend, err := backends.New(bcfg, mainlog)
+	require.NoError(t, err)
 	app, err := guerrilla.New(oldconf, backend, mainlog)
-	if err != nil {
-		t.Error("Failed to create new app", err)
-	}
+	require.NoError(t, err)
 	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
 	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
 
@@ -557,22 +557,12 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	if err != nil {
-		t.Error("failed to generate a test certificate", err)
-		t.FailNow()
-	}
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	require.NoError(t, err)
 
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
-	if err := ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644))
 
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
@@ -580,26 +570,16 @@ func TestServe(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server not started")
-	}
-	data, err := ioutil.ReadFile("pidfile.pid")
-	if err != nil {
-		t.Error("error reading pidfile.pid", err)
-		t.FailNow()
-	}
-	_, err = strconv.Atoi(string(data))
-	if err != nil {
-		t.Error("could not parse pidfile.pid", err)
-		t.FailNow()
-	}
+	_, err = grepTestlog("Listening on TCP 127.0.0.1:3536", 0)
+	require.NoError(t, err)
+	b, err := ioutil.ReadFile("pidfile.pid")
+	require.NoError(t, err)
+	_, err = strconv.Atoi(string(b))
+	require.NoError(t, err)
 
 	// change the config file
 	err = ioutil.WriteFile("configJsonA.json", []byte(configJsonB), 0644)
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	// test SIGHUP via the kill command
 	// Would not work on windows as kill is not available.
@@ -607,23 +587,20 @@ func TestServe(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		sigHup()
 		// did the pidfile change as expected?
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
-			t.Error("server did not catch sighp")
-		}
+		_, err := grepTestlog("Configuration was reloaded", 0)
+		require.NoError(t, err)
 	}
 	// send kill signal and wait for exit
 	d.Shutdown()
 
 	// did backend started as expected?
 
-	if _, err := grepTestlog("new backend started", 0); err != nil {
-		t.Error("Dummy backend not restarted")
-	}
+	_, err = grepTestlog("new backend started", 0)
+	require.NoError(t, err)
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("server didn't stop")
-	}
+	_, err = grepTestlog("Backend shutdown completed", 0)
+	require.NoError(t, err)
 
 }
 
@@ -632,23 +609,13 @@ func TestServe(t *testing.T) {
 // then SIGHUP (to reload config & trigger config update events),
 // then connect to it & HELO.
 func TestServerAddEvent(t *testing.T) {
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	if err != nil {
-		t.Error("failed to generate a test certificate", err)
-		t.FailNow()
-	}
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	require.NoError(t, err)
 	defer cleanTestArtifacts(t)
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	// start the server by emulating the serve command
-	if err := ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644))
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
 	go func() {
@@ -656,56 +623,40 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server didn't start")
-	}
+	_, err = grepTestlog("Listening on TCP 127.0.0.1:3536", 0)
+	require.NoError(t, err)
 
 	// now change the config by adding a server
-	conf := &guerrilla.AppConfig{}       // blank one
-	err = conf.Load([]byte(configJsonA)) // load configJsonA
-	if err != nil {
-		t.Error(err)
-	}
-	newServer := conf.Servers[0]                         // copy the first server config
-	newServer.ListenInterface = "127.0.0.1:2526"         // change it
-	newConf := conf                                      // copy the cmdConfg
-	newConf.Servers = append(newConf.Servers, newServer) // add the new server
-	if jsonbytes, err := json.Marshal(newConf); err == nil {
-		if err := ioutil.WriteFile("configJsonA.json", jsonbytes, 0644); err != nil {
-			t.Error(err)
-		}
-	}
+	conf := &guerrilla.AppConfig{}                                                // blank one
+	require.NoError(t, conf.Load([]byte(configJsonA)))                            // load configJsonA
+	newServer := conf.Servers[0]                                                  // copy the first server config
+	newServer.ListenInterface = fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)) // change it
+	newConf := conf                                                               // copy the cmdConfg
+	newConf.Servers = append(newConf.Servers, newServer)                          // add the new server
+	jsonbytes, err := json.Marshal(newConf)
+	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", jsonbytes, 0644))
+
 	// send a sighup signal to the server
 	sigHup()
-	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
-		t.Error("new server didn't start")
-	}
+	_, err = grepTestlog(fmt.Sprintf("[%s] Waiting for a new client", newServer.ListenInterface), 0)
+	require.NoError(t, err)
 
-	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
-		t.Error("Could not connect to new server", newServer.ListenInterface, err)
-	} else {
-		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
-			expect := "250 mail.test.com Hello"
-			if strings.Index(result, expect) != 0 {
-				t.Error("Expected", expect, "but got", result)
-			}
-		} else {
-			t.Error(err)
-		}
-	}
-
+	conn, buffin, err := test.Connect(newServer, 20)
+	require.NoError(t, err)
+	result, err := test.Command(conn, buffin, "HELO example.com")
+	require.NoError(t, err)
+	expect := "250 mail.test.com Hello\r\n"
+	assert.Equal(t, expect, result)
 	// shutdown the server
 	d.Shutdown()
 
 	// did backend started as expected?
-	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-		t.Error("Did not add server [127.0.0.1:2526] after sighup")
-	}
+	_, err = grepTestlog(fmt.Sprintf("New server added [%s]", newServer.ListenInterface), 0)
+	require.NoError(t, err)
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("Server failed to stop")
-	}
-
+	_, err = grepTestlog("Backend shutdown completed", 0)
+	require.NoError(t, err)
 }
 
 // Start with configJsonA.json,

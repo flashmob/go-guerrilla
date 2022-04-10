@@ -3,6 +3,8 @@ package rfc5321
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseParam(t *testing.T) {
@@ -34,10 +36,8 @@ func TestParseParam(t *testing.T) {
 	}
 
 	s = NewParser([]byte("SI--ZE-=2000 BODY=8BITMIME")) // illegal - after ZE
-	tup, err = s.parameters()
-	if err == nil {
-		t.Error("error was expected ")
-	}
+	_, err = s.parameters()
+	require.Error(t, err)
 }
 
 func TestParseRcptTo(t *testing.T) {
@@ -641,8 +641,6 @@ func TestHelo(t *testing.T) {
 		t.Error("expecting domain = example.com")
 	}
 
-	domain, err = s.Helo([]byte(" exam_ple.com"))
-	if err == nil {
-		t.Error("expecting domain exam_ple.com to be invalid")
-	}
+	_, err = s.Helo([]byte(" exam_ple.com"))
+	require.Error(t, err)
 }

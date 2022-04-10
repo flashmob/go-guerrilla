@@ -1,14 +1,15 @@
 package guerrilla
 
 import (
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/tests/testcert"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/tests/testcert"
 )
 
 // a configuration file with a dummy backend
@@ -16,7 +17,7 @@ import (
 //
 var configJsonA = `
 {
-    "log_file" : "./tests/testlog",
+    "log_file" : "./tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "tests/go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la"],
@@ -93,7 +94,7 @@ var configJsonA = `
 
 var configJsonB = `
 {
-    "log_file" : "./tests/testlog",
+    "log_file" : "./tests/testlog.log",
     "log_level" : "debug",
     "pid_file" : "tests/different-go-guerrilla.pid",
     "allowed_hosts": ["spam4.me","grr.la","newhost.com"],
@@ -122,7 +123,7 @@ var configJsonB = `
             "max_size": 100017,
             "timeout":160,
             "listen_interface":"127.0.0.1:2527",
-            "log_file" : "./tests/testlog",
+            "log_file" : "./tests/testlog.log",
             "max_clients": 2,
 			"tls" : {
 				"private_key_file":"./tests/mail2.guerrillamail.com.key.pem",

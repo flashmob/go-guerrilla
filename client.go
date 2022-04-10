@@ -49,7 +49,6 @@ type client struct {
 	bufin      *smtpBufferedReader
 	bufout     *bufio.Writer
 	smtpReader *textproto.Reader
-	ar         *adjustableLimitedReader
 	// guards access to conn
 	connGuard sync.Mutex
 	log       log.Logger
@@ -234,9 +233,5 @@ func (c *client) parsePath(in []byte, p pathParser) (mail.Address, error) {
 			IP:         c.parser.IP,
 		}
 	}
-	return address, err
-}
-
-func (s *server) rcptTo() (address mail.Address, err error) {
 	return address, err
 }
