@@ -2,6 +2,7 @@ package tests
 
 import (
 	"errors"
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 // TemporaryFilename returns a name for a temporary file
 func TemporaryFilename(t *testing.T) string {
-	f, err := os.CreateTemp("", "guerrilla-")
+	f, err := ioutil.TempFile("", "guerrilla-")
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	t.Cleanup(func() {
