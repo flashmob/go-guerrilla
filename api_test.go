@@ -259,16 +259,14 @@ const testServerLog = "tests/testlog-server.log"
 
 // test re-opening the individual server log
 func TestReopenServerLog(t *testing.T) {
-	require.NoError(t, truncateIfExists("tests/testlog.log"))
-	defer func() {
-		require.NoError(t, deleteIfExists(testServerLog))
-	}()
+	logFilename := tests.TemporaryFilename(t)
+	logFilename2 := tests.TemporaryFilename(t)
 
-	cfg := &AppConfig{LogFile: "tests/testlog.log", LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
+	cfg := &AppConfig{LogFile: logFilename, LogLevel: log.DebugLevel.String(), AllowedHosts: []string{"grr.la"}}
 	sc := ServerConfig{
 		ListenInterface: fmt.Sprintf("127.0.0.1:%d", tests.GetFreePort(t)),
 		IsEnabled:       true,
-		LogFile:         testServerLog,
+		LogFile:         logFilename2,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 	d := Daemon{Config: cfg}
@@ -280,12 +278,12 @@ func TestReopenServerLog(t *testing.T) {
 	talkToServer(t, sc.ListenInterface)
 	d.Shutdown()
 
-	b, err := ioutil.ReadFile("tests/testlog.log")
+	b, err := ioutil.ReadFile(logFilename)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), "re-opened log file")
 	assert.Contains(t, string(b), "re-opened main log file")
 
-	b, err = ioutil.ReadFile(testServerLog)
+	b, err = ioutil.ReadFile(logFilename2)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(b), "Handle client")
