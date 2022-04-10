@@ -243,7 +243,7 @@ func TestTLSConfig(t *testing.T) {
 	} else if c.CurvePreferences[0] != tls.CurveP521 && c.CurvePreferences[1] != tls.CurveP384 {
 		t.Error("c.CurvePreferences curves not setup")
 	}
-	if !strings.Contains(string(c.RootCAs.Subjects()[0]), "Mountain View") {
+	if !strings.Contains(string(c.RootCAs.Subjects()[0]), "Mountain View") { //nolint:staticcheck
 		t.Error("c.RootCAs not correctly set")
 	}
 	if c.ClientAuth != tls.NoClientCert {
@@ -266,7 +266,7 @@ func TestTLSConfig(t *testing.T) {
 		t.Error("c.MinVersion should be tls.VersionTLS10")
 	}
 
-	if c.PreferServerCipherSuites != false {
+	if c.PreferServerCipherSuites != false { //nolint:staticcheck
 		t.Error("PreferServerCipherSuites should be false")
 	}
 

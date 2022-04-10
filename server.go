@@ -171,7 +171,7 @@ func (s *server) configureTLS() error {
 				tlsConfig.ClientAuth = ca
 			}
 		}
-		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites
+		tlsConfig.PreferServerCipherSuites = sConfig.TLS.PreferServerCipherSuites //nolint:staticcheck
 		tlsConfig.Rand = rand.Reader
 		s.tlsConfigStore.Store(tlsConfig)
 	}
