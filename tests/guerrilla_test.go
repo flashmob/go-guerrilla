@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/fs"
 	"io/ioutil"
 	"net"
 	"os"
@@ -121,14 +120,14 @@ func getBackend(t *testing.T, backendConfig map[string]interface{}, l log.Logger
 }
 
 func truncateIfExists(filename string) error {
-	if _, err := os.Stat(filename); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
 		return os.Truncate(filename, 0)
 	}
 	return nil
 }
 
 func deleteIfExists(filename string) error {
-	if _, err := os.Stat(filename); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
 		return os.Remove(filename)
 	}
 	return nil

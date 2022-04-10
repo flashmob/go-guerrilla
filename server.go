@@ -250,7 +250,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
-			if e, ok := err.(net.Error); ok && !e.Temporary() {
+			if e, ok := err.(net.Error); ok && !e.Temporary() { //nolint:staticcheck
 				s.log().Infof("Server [%s] has stopped accepting new clients", s.listenInterface)
 				// the listener has been closed, wait for clients to exit
 				s.log().Infof("shutting down pool [%s]", s.listenInterface)
