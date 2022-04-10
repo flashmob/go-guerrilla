@@ -125,7 +125,7 @@ func truncateIfExists(filename string) error {
 	if !errors.Is(err, os.ErrNotExist) {
 		return os.Truncate(filename, 0)
 	}
-	return err
+	return nil
 }
 
 func deleteIfExists(filename string) error {
@@ -133,7 +133,7 @@ func deleteIfExists(filename string) error {
 	if !errors.Is(err, os.ErrNotExist) {
 		return os.Remove(filename)
 	}
-	return err
+	return nil
 }
 
 func cleanTestArtifacts(t *testing.T) {
