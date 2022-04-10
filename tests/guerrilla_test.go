@@ -40,8 +40,9 @@ import (
 
 type GuerrillaSuite struct {
 	suite.Suite
-	config *guerrilla.AppConfig
-	app    guerrilla.Guerrilla
+	config   *guerrilla.AppConfig
+	app      guerrilla.Guerrilla
+	cleanups []func()
 }
 
 func TestGuerrillaSuite(t *testing.T) {
@@ -49,6 +50,8 @@ func TestGuerrillaSuite(t *testing.T) {
 }
 
 func (s *GuerrillaSuite) SetupTest() {
+	logFile, cleanup := tests.TemporaryFilenameCleanup(s.T())
+	s.cleanups = append(s.cleanups, cleanup)
 	s.config = &guerrilla.AppConfig{
 		Servers: []guerrilla.ServerConfig{
 			{
@@ -79,7 +82,7 @@ func (s *GuerrillaSuite) SetupTest() {
 			"spam4.me", "grr.la",
 		},
 		PidFile:  "go-guerrilla.pid",
-		LogFile:  "./testlog.log",
+		LogFile:  logFile,
 		LogLevel: "debug",
 		BackendConfig: backends.BackendConfig{
 			"log_received_mails": true,
@@ -102,7 +105,10 @@ func (s *GuerrillaSuite) SetupTest() {
 
 func (s *GuerrillaSuite) TearDownTest() {
 	cleanTestArtifacts(s.T())
-
+	for _, cleanup := range s.cleanups {
+		cleanup()
+	}
+	s.cleanups = nil
 }
 
 func getBackend(t *testing.T, backendConfig map[string]interface{}, l log.Logger) backends.Backend {
