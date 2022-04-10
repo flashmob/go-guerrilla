@@ -557,22 +557,12 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 // start server, change config, send SIG HUP, confirm that the pidfile changed & backend reloaded
 func TestServe(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	var err error
-	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
-	if err != nil {
-		t.Error("failed to generate a test certificate", err)
-		t.FailNow()
-	}
+	err := testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
+	require.NoError(t, err)
 
 	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
-	if err := ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
+	require.NoError(t, ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644))
 
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
@@ -580,26 +570,16 @@ func TestServe(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("listening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server not started")
-	}
-	data, err := ioutil.ReadFile("pidfile.pid")
-	if err != nil {
-		t.Error("error reading pidfile.pid", err)
-		t.FailNow()
-	}
-	_, err = strconv.Atoi(string(data))
-	if err != nil {
-		t.Error("could not parse pidfile.pid", err)
-		t.FailNow()
-	}
+	_, err = grepTestlog("Listening on TCP 127.0.0.1:3536", 0)
+	require.NoError(t, err)
+	b, err := ioutil.ReadFile("pidfile.pid")
+	require.NoError(t, err)
+	_, err = strconv.Atoi(string(b))
+	require.NoError(t, err)
 
 	// change the config file
 	err = ioutil.WriteFile("configJsonA.json", []byte(configJsonB), 0644)
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	// test SIGHUP via the kill command
 	// Would not work on windows as kill is not available.
@@ -607,23 +587,20 @@ func TestServe(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		sigHup()
 		// did the pidfile change as expected?
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
-			t.Error("server did not catch sighp")
-		}
+		_, err := grepTestlog("Configuration was reloaded", 0)
+		require.NoError(t, err)
 	}
 	// send kill signal and wait for exit
 	d.Shutdown()
 
 	// did backend started as expected?
 
-	if _, err := grepTestlog("new backend started", 0); err != nil {
-		t.Error("Dummy backend not restarted")
-	}
+	_, err = grepTestlog("new backend started", 0)
+	require.NoError(t, err)
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("server didn't stop")
-	}
+	_, err = grepTestlog("Backend shutdown completed", 0)
+	require.NoError(t, err)
 
 }
 
