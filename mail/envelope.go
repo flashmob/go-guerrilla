@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime"
 	"net"
+	"net/mail"
 	"net/textproto"
 	"strings"
 	"sync"
@@ -96,6 +97,12 @@ func (a *Address) IsPostmaster() bool {
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
 func NewAddress(str string) (*Address, error) {
+	// we check that this is valid address list and only after that we do the main logic
+	_, err := mail.ParseAddressList(str)
+	if err != nil {
+		return nil, err
+	}
+
 	var ap rfc5321.RFC5322
 	l, err := ap.Address([]byte(str))
 	if err != nil {

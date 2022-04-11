@@ -153,8 +153,9 @@ func TestNewAddressInfiniteLoop(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		a, err := NewAddress("oeexamp")
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		assert.Nil(t, a)
+		close(done)
 	}()
 	select {
 	case <-ctx.Done():
