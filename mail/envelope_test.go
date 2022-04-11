@@ -1,11 +1,14 @@
 package mail
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,4 +145,21 @@ func TestEncodedWordAhead(t *testing.T) {
 		t.Error("expecting an encoded word ahead")
 	}
 
+}
+
+func TestNewAddressInfiniteLoop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		a, err := NewAddress("oeexamp")
+		assert.NoError(t, err)
+		assert.Nil(t, a)
+	}()
+	select {
+	case <-ctx.Done():
+		assert.Fail(t, "timeout reached")
+	case <-done:
+
+	}
 }
