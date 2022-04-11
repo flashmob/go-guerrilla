@@ -87,11 +87,8 @@ func TestQuotedAddress(t *testing.T) {
 func TestAddressWithIP(t *testing.T) {
 	str := `<"  yo-- man wazz'''up? surprise \surprise, this is POSSIBLE@fake.com "@[64.233.160.71]>`
 	addr, err := NewAddress(str)
-	if err != nil {
-		t.Error("there should be no error:", err)
-	} else if addr.IP == nil {
-		t.Error("expecting the address host to be an IP")
-	}
+	assert.Error(t, err)
+	assert.Nil(t, addr)
 }
 
 func TestEnvelope(t *testing.T) {
