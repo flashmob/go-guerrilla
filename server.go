@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -15,6 +14,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pires/go-proxyproto"
+	"github.com/sirupsen/logrus"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -234,8 +236,8 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 	var clientID uint64
 	clientID = 0
 
-	listener, err := net.Listen("tcp", s.listenInterface)
-	s.listener = listener
+	ln, err := net.Listen("tcp", s.listenInterface)
+	s.listener = &proxyproto.Listener{Listener: ln}
 	if err != nil {
 		startWG.Done() // don't wait for me
 		s.state = ServerStateStartError
@@ -248,7 +250,7 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 
 	for {
 		s.log().Debugf("[%s] Waiting for a new client. Next Client ID: %d", s.listenInterface, clientID+1)
-		conn, err := listener.Accept()
+		conn, err := s.listener.Accept()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
