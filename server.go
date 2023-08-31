@@ -367,9 +367,13 @@ func (s *server) handleClient(client *client) {
 	s.log().Infof("Handle client [%s], id: %d", client.RemoteIP, client.ID)
 
 	// Initial greeting
-	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
-		sc.Hostname, Version, client.ID,
-		s.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339))
+	// GreetingType == "postfix" by default
+	greeting := fmt.Sprintf("220 %s ESMTP Postfix", sc.Hostname)
+	if sc.GreetingType == "guerrilla" {
+		greeting = fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
+			sc.Hostname, Version, client.ID,
+			s.clientPool.GetActiveClientsCount(), time.Now().Format(time.RFC3339))
+	}
 
 	helo := fmt.Sprintf("250 %s Hello", sc.Hostname)
 	// ehlo is a multi-line reply and need additional \r\n at the end

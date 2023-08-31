@@ -88,6 +88,7 @@ var configJson = `
         {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
+	    "greeting_type": "postfix",
             "max_size": 100017,
             "timeout":160,
             "listen_interface":"127.0.0.1:2526", 
@@ -104,6 +105,7 @@ var configJson = `
         {
             "is_enabled" : true,
             "host_name":"mail.guerrillamail.com",
+	    "greeting_type": "guerrilla",
             "max_size":1000001,
             "timeout":180,
             "listen_interface":"127.0.0.1:4654",
@@ -242,7 +244,7 @@ func TestGreeting(t *testing.T) {
 	}
 	defer cleanTestArtifacts(t)
 	if startErrors := app.Start(); startErrors == nil {
-		// 1. plaintext connection
+		// 1. plaintext connection, postfix
 		conn, err := net.Dial("tcp", config.Servers[0].ListenInterface)
 		if err != nil {
 			// handle error
@@ -256,14 +258,14 @@ func TestGreeting(t *testing.T) {
 			t.Error(err)
 			t.FailNow()
 		} else {
-			expected := "220 mail.guerrillamail.com SMTP Guerrilla"
+			expected := "220 mail.guerrillamail.com ESMTP Postfix"
 			if strings.Index(greeting, expected) != 0 {
 				t.Error("Server[1] did not have the expected greeting prefix", expected)
 			}
 		}
 		_ = conn.Close()
 
-		// 2. tls connection
+		// 2. tls connection, guerrilla
 		//	roots, err := x509.SystemCertPool()
 		conn, err = tls.Dial("tcp", config.Servers[1].ListenInterface, &tls.Config{
 

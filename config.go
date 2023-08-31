@@ -45,6 +45,9 @@ type ServerConfig struct {
 	// Hostname will also be used to fill the 'Host' property when the "RCPT TO" address is
 	// addressed to just <postmaster>
 	Hostname string `json:"host_name"`
+	// GreetingType sets the greeting message which will be sent to clients.
+	// Currently, the options are "guerrilla" and "postfix". Defaults to "postfix".
+	GreetingType string `json:"greeting_type"`
 	// Listen interface specified in <ip>:<port> - defaults to 127.0.0.1:2525
 	ListenInterface string `json:"listen_interface"`
 	// MaxSize is the maximum size of an email that will be accepted for delivery.
@@ -155,6 +158,7 @@ const defaultMaxClients = 100
 const defaultTimeout = 30
 const defaultInterface = "127.0.0.1:2525"
 const defaultMaxSize = int64(10 << 20) // 10 Mebibytes
+const defaultGreetingType = "postfix"
 
 // Unmarshalls json data into AppConfig struct and any other initialization of the struct
 // also does validation, returns error if validation failed or something went wrong
@@ -288,6 +292,7 @@ func (c *AppConfig) setDefaults() error {
 		sc.MaxClients = defaultMaxClients
 		sc.Timeout = defaultTimeout
 		sc.MaxSize = defaultMaxSize
+		sc.GreetingType = defaultGreetingType
 		c.Servers = append(c.Servers, sc)
 	} else {
 		// make sure each server has defaults correctly configured
@@ -309,6 +314,9 @@ func (c *AppConfig) setDefaults() error {
 			}
 			if c.Servers[i].LogFile == "" {
 				c.Servers[i].LogFile = c.LogFile
+			}
+			if c.Servers[i].GreetingType == "" {
+				c.Servers[i].GreetingType = defaultGreetingType
 			}
 			// validate the server config
 			err = c.Servers[i].Validate()
@@ -451,6 +459,11 @@ func (sc *ServerConfig) Validate() error {
 			errs = append(errs, fmt.Errorf("cannot use TLS config for [%s], %v", sc.ListenInterface, err))
 		}
 	}
+
+	if sc.GreetingType != "postfix" && sc.GreetingType != "guerrilla" {
+		errs = append(errs, errors.New("Unrecognised greeting_type. Valid options are 'postfix' and 'guerrilla'."))
+	}
+
 	if len(errs) > 0 {
 		return errs
 	}
