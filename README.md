@@ -1,5 +1,23 @@
 
-[![Build Status](https://travis-ci.org/flashmob/go-guerrilla.svg?branch=master)](https://travis-ci.org/flashmob/go-guerrilla)
+> [!IMPORTANT]
+> Hi, my name is Philipp and I am one of the contributors to this project.
+> Sadly it seems as if the original owner has abandonded go-guerilla.
+> As I think there are still some nice things to do with it, and there might
+> be some issues here and there, I have decided to revive this project.
+>
+> I've already mirrored the repository to https://github.com/phires/go-guerrilla
+> as I have not complete full access to this repo and don't know if it will
+> disappear at some point.
+> I will also try to migrate all further relevant informations (e.g. Wiki
+> and Issues) over to the new repo.
+>
+> If the original owner decides to come back I'll glady hand over full control
+> of the projekt back to him. This should by no means be misinterpreted as a
+> "hostile takeover" or anything. I just want to get this mighty fine piece
+> of software back to speed and give it some further development.
+>
+>     -- 2023-08-31 Philipp
+
 
 Latest: v1.6.1, tagged on Dec 28, 2019 (Pull requests from #129 to #203)
 
