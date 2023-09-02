@@ -54,7 +54,6 @@ type GuerrillaDBAndRedisBackend struct {
 type stmtCache [GuerrillaDBAndRedisBatchMax]*sql.Stmt
 
 type guerrillaDBAndRedisConfig struct {
-	NumberOfWorkers    int    `json:"save_workers_size"`
 	Table              string `json:"mail_table"`
 	Driver             string `json:"sql_driver"`
 	DSN                string `json:"sql_dsn"`
@@ -69,17 +68,13 @@ type guerrillaDBAndRedisConfig struct {
 // Now we need to convert each type and copy into the guerrillaDBAndRedisConfig struct
 func (g *GuerrillaDBAndRedisBackend) loadConfig(backendConfig BackendConfig) (err error) {
 	configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-	bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+	bcfg, err := Svc.ExtractConfig(ConfigProcessors, "guerrillaredisdb", backendConfig, configType)
 	if err != nil {
 		return err
 	}
 	m := bcfg.(*guerrillaDBAndRedisConfig)
 	g.config = m
 	return nil
-}
-
-func (g *GuerrillaDBAndRedisBackend) getNumberOfWorkers() int {
-	return g.config.NumberOfWorkers
 }
 
 type redisClient struct {
@@ -191,24 +186,23 @@ func (g *GuerrillaDBAndRedisBackend) doQuery(c int, db *sql.DB, insertStmt *sql.
 	var execErr error
 	defer func() {
 		if r := recover(); r != nil {
-			//logln(1, fmt.Sprintf("Recovered in %v", r))
-			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Fields("panic", fmt.Sprintf("%v", r),
+				"size", sum,
+				"error", execErr,
+				"stack", string(debug.Stack())).
+				Error("panic while inserting query")
 			panic("query failed")
 		}
 	}()
 	// prepare the query used to insert when rows reaches batchMax
 	insertStmt = g.prepareInsertQuery(c, db)
 	_, execErr = insertStmt.Exec(*vals...)
-	//if rand.Intn(2) == 1 {
-	//	return errors.New("uggabooka")
-	//}
 	if execErr != nil {
 		Log().WithError(execErr).Error("There was a problem the insert")
 	}
@@ -253,7 +247,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 				// retry the sql query
 				attempts := 3
 				for i := 0; i < attempts; i++ {
-					Log().Infof("retrying query query rows[%c] ", c)
+					Log().Fields("rows", c).Info("retrying query query rows ")
 					time.Sleep(time.Second)
 					err = g.doQuery(c, db, insertStmt, &vals)
 					if err == nil {
@@ -279,7 +273,7 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 		select {
 		// it may panic when reading on a closed feeder channel. feederOK detects if it was closed
 		case <-stop:
-			Log().Infof("MySQL query batcher stopped (#%d)", batcherId)
+			Log().Fields("batcherID", batcherId).Info("MySQL query batcher stopped")
 			// Insert any remaining rows
 			inserter(count)
 			feederOk = false
@@ -289,7 +283,12 @@ func (g *GuerrillaDBAndRedisBackend) insertQueryBatcher(
 
 			vals = append(vals, row...)
 			count++
-			Log().Debug("new feeder row:", row, " cols:", len(row), " count:", count, " worker", batcherId)
+			Log().Fields(
+				"row", row,
+				"cols", len(row),
+				"count", count,
+				"worker", batcherId,
+			).Debug("new feeder row")
 			if count >= GuerrillaDBAndRedisBatchMax {
 				inserter(GuerrillaDBAndRedisBatchMax)
 			}
@@ -365,7 +364,8 @@ func GuerrillaDbRedis() Decorator {
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 
 		configType := BaseConfig(&guerrillaDBAndRedisConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(
+			ConfigProcessors, "guerrillaredisdb", backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -382,7 +382,7 @@ func GuerrillaDbRedis() Decorator {
 			// we loop so that if insertQueryBatcher panics, it can recover and go in again
 			for {
 				if feederOK := g.insertQueryBatcher(feeder, db, qbID, stop); !feederOK {
-					Log().Debugf("insertQueryBatcher exited (#%d)", qbID)
+					Log().Fields("qbID", qbID).Debug("insertQueryBatcher exited")
 					return
 				}
 				Log().Debug("resuming insertQueryBatcher")
@@ -394,16 +394,19 @@ func GuerrillaDbRedis() Decorator {
 	}))
 
 	Svc.AddShutdowner(ShutdownWith(func() error {
-		if err := db.Close(); err != nil {
-			Log().WithError(err).Error("close mysql failed")
-		} else {
-			Log().Infof("closed mysql")
+		if db != nil {
+			if err := db.Close(); err != nil {
+				Log().WithError(err).Error("close sql database")
+			} else {
+				Log().Info("closed sql database")
+			}
 		}
+
 		if redisClient.conn != nil {
 			if err := redisClient.conn.Close(); err != nil {
 				Log().WithError(err).Error("close redis failed")
 			} else {
-				Log().Infof("closed redis")
+				Log().Info("closed redis")
 			}
 		}
 		// send a close signal to all query batchers to exit.
@@ -434,20 +437,12 @@ func GuerrillaDbRedis() Decorator {
 					e.MailFrom.String(),
 					e.Subject,
 					ts)
-				e.QueuedId = hash
-
+				e.QueuedId.FromHex(hash)
 				// Add extra headers
-				protocol := "SMTP"
-				if e.ESMTP {
-					protocol = "E" + protocol
-				}
-				if e.TLS {
-					protocol = protocol + "S"
-				}
 				var addHead string
 				addHead += "Delivered-To: " + to + "\r\n"
 				addHead += "Received: from " + e.RemoteIP + " ([" + e.RemoteIP + "])\r\n"
-				addHead += "	by " + e.RcptTo[0].Host + " with " + protocol + " id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
+				addHead += "	by " + e.RcptTo[0].Host + " with " + e.Protocol().String() + " id " + hash + "@" + e.RcptTo[0].Host + ";\r\n"
 				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\r\n"
 
 				// data will be compressed when printed, with addHead added to beginning

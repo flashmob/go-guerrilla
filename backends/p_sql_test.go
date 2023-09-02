@@ -31,14 +31,15 @@ func TestSQL(t *testing.T) {
 		t.Fatal("get logger:", err)
 	}
 
-	cfg := BackendConfig{
-		"save_process":      "sql",
-		"mail_table":        *mailTableFlag,
-		"primary_mail_host": "example.com",
-		"sql_driver":        *sqlDriverFlag,
-		"sql_dsn":           *sqlDSNFlag,
-	}
-	backend, err := New(cfg, logger)
+	cfg := BackendConfig{}
+
+	cfg.SetValue(ConfigGateways, DefaultGateway, "save_process", "sql")
+	cfg.SetValue(ConfigProcessors, "sql", "mail_table", *mailTableFlag)
+	cfg.SetValue(ConfigProcessors, "sql", "primary_mail_host", "example.com")
+	cfg.SetValue(ConfigProcessors, "sql", "sql_driver", *sqlDriverFlag)
+	cfg.SetValue(ConfigProcessors, "sql", "sql_dsn", *sqlDSNFlag)
+
+	backend, err := New(DefaultGateway, cfg, logger)
 	if err != nil {
 		t.Fatal("new backend:", err)
 	}

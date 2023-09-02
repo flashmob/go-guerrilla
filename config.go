@@ -30,7 +30,7 @@ type AppConfig struct {
 	// "info", "debug", "error", "panic". Default "info"
 	LogLevel string `json:"log_level,omitempty"`
 	// BackendConfig configures the email envelope processing backend
-	BackendConfig backends.BackendConfig `json:"backend_config"`
+	BackendConfig backends.BackendConfig `json:"backend,omitempty"`
 }
 
 // ServerConfig specifies config options for a single server
@@ -60,6 +60,8 @@ type ServerConfig struct {
 	// XClientOn when using a proxy such as Nginx, XCLIENT command is used to pass the
 	// original client's IP address & client's HELO
 	XClientOn bool `json:"xclient_on,omitempty"`
+	// Gateway specifies which backend to use
+	Gateway string `json:"backend,omitempty"`
 }
 
 type ServerTLSConfig struct {
@@ -166,7 +168,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 	if err = c.setDefaults(); err != nil {
 		return err
 	}
-	if err = c.setBackendDefaults(); err != nil {
+	if err = c.BackendConfig.ConfigureDefaults(); err != nil {
 		return err
 	}
 
@@ -190,7 +192,7 @@ func (c *AppConfig) Load(jsonBytes []byte) error {
 func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 	// has backend changed?
 	if !reflect.DeepEqual((*c).BackendConfig, (*oldConfig).BackendConfig) {
-		app.Publish(EventConfigBackendConfig, c)
+		c.emitBackendChangeEvents(oldConfig, app)
 	}
 	// has config changed, general check
 	if !reflect.DeepEqual(oldConfig, c) {
@@ -234,10 +236,24 @@ func (c *AppConfig) EmitChangeEvents(oldConfig *AppConfig, app Guerrilla) {
 }
 
 // EmitLogReopen emits log reopen events using existing config
-func (c *AppConfig) EmitLogReopenEvents(app Guerrilla) {
+func (c *AppConfig) emitLogReopenEvents(app Guerrilla) {
 	app.Publish(EventConfigLogReopen, c)
 	for _, sc := range c.getServers() {
 		app.Publish(EventConfigServerLogReopen, sc)
+	}
+}
+
+func (c *AppConfig) emitBackendChangeEvents(oldConfig *AppConfig, app Guerrilla) {
+	// check what's changed
+	changed, added, removed := c.BackendConfig.Changes(oldConfig.BackendConfig)
+	for b := range changed {
+		app.Publish(EventConfigBackendConfigChanged, c, b)
+	}
+	for b := range added {
+		app.Publish(EventConfigBackendConfigAdded, c, b)
+	}
+	for b := range removed {
+		app.Publish(EventConfigBackendConfigRemoved, c, b)
 	}
 }
 
@@ -288,6 +304,7 @@ func (c *AppConfig) setDefaults() error {
 		sc.MaxClients = defaultMaxClients
 		sc.Timeout = defaultTimeout
 		sc.MaxSize = defaultMaxSize
+		sc.Gateway = backends.DefaultGateway
 		c.Servers = append(c.Servers, sc)
 	} else {
 		// make sure each server has defaults correctly configured
@@ -310,49 +327,14 @@ func (c *AppConfig) setDefaults() error {
 			if c.Servers[i].LogFile == "" {
 				c.Servers[i].LogFile = c.LogFile
 			}
+			if c.Servers[i].Gateway == "" {
+				c.Servers[i].Gateway = backends.DefaultGateway
+			}
 			// validate the server config
 			err = c.Servers[i].Validate()
 			if err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// setBackendDefaults sets default values for the backend config,
-// if no backend config was added before starting, then use a default config
-// otherwise, see what required values were missed in the config and add any missing with defaults
-func (c *AppConfig) setBackendDefaults() error {
-
-	if len(c.BackendConfig) == 0 {
-		h, err := os.Hostname()
-		if err != nil {
-			return err
-		}
-		c.BackendConfig = backends.BackendConfig{
-			"log_received_mails": true,
-			"save_workers_size":  1,
-			"save_process":       "HeadersParser|Header|Debugger",
-			"primary_mail_host":  h,
-		}
-	} else {
-		if _, ok := c.BackendConfig["save_process"]; !ok {
-			c.BackendConfig["save_process"] = "HeadersParser|Header|Debugger"
-		}
-		if _, ok := c.BackendConfig["primary_mail_host"]; !ok {
-			h, err := os.Hostname()
-			if err != nil {
-				return err
-			}
-			c.BackendConfig["primary_mail_host"] = h
-		}
-		if _, ok := c.BackendConfig["save_workers_size"]; !ok {
-			c.BackendConfig["save_workers_size"] = 1
-		}
-
-		if _, ok := c.BackendConfig["log_received_mails"]; !ok {
-			c.BackendConfig["log_received_mails"] = false
 		}
 	}
 	return nil
@@ -400,6 +382,10 @@ func (sc *ServerConfig) emitChangeEvents(oldServer *ServerConfig, app Guerrilla)
 	// max_clients changed
 	if _, ok := changes["MaxClients"]; ok {
 		app.Publish(EventConfigServerMaxClients, sc)
+	}
+
+	if _, ok := changes["Gateway"]; ok {
+		app.Publish(EventConfigServerGatewayConfig, sc)
 	}
 
 	if len(tlsChanges) > 0 {

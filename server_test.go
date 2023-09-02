@@ -1,18 +1,16 @@
 package guerrilla
 
 import (
-	"os"
-	"testing"
-
 	"bufio"
-	"net/textproto"
-	"strings"
-	"sync"
-
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/textproto"
+	"os"
+	"strings"
+	"sync"
+	"testing"
 
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
@@ -48,15 +46,25 @@ func getMockServerConn(sc *ServerConfig, t *testing.T) (*mocks.Conn, *server) {
 	var mainlog log.Logger
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
-	backend, err := backends.New(
-		backends.BackendConfig{"log_received_mails": true, "save_workers_size": 1},
+
+	bcfg := backends.BackendConfig{
+		backends.ConfigProcessors: {
+			"debugger": {"log_received_mails": true},
+		},
+		backends.ConfigGateways: {
+			backends.DefaultGateway: {"save_workers_size": 1},
+		},
+	}
+
+	backend, err := backends.New(backends.DefaultGateway,
+		bcfg,
 		mainlog)
 	if err != nil {
 		t.Error("new dummy backend failed because:", err)
 	}
-	server, err := newServer(sc, backend, mainlog)
+	server, err := newServer(sc, backend, mainlog, 0)
 	if err != nil {
 		//t.Error("new server failed because:", err)
 	} else {
@@ -269,11 +277,11 @@ func TestHandleClient(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -309,7 +317,7 @@ func TestGithubIssue197(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -317,7 +325,7 @@ func TestGithubIssue197(t *testing.T) {
 	// [2001:DB8::FF00:42:8329] is an address literal
 	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
 
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -411,11 +419,15 @@ func TestGithubIssue198(t *testing.T) {
 	backends.Svc.AddProcessor("custom", customBackend)
 
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
-	be, err := backends.New(map[string]interface{}{
-		"save_process": "HeadersParser|Header|custom", "primary_mail_host": "example.com"},
+	cfg := backends.BackendConfig{}
+	cfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Header|debugger|custom")
+	cfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	cfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+
+	be, err := backends.New("default", cfg,
 		mainlog)
 	if err != nil {
 		t.Error(err)
@@ -429,7 +441,7 @@ func TestGithubIssue198(t *testing.T) {
 
 	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
 
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	client.RemoteIP = "127.0.0.1"
 
 	var wg sync.WaitGroup
@@ -504,6 +516,9 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 			t.Error(err)
 		}
 	}
+	if r.R.Buffered() > 0 {
+		line, _ = r.ReadLine()
+	}
 
 	if err := w.PrintfLine("MAIL FROM: test@example.com>"); err != nil {
 		t.Error(err)
@@ -514,17 +529,25 @@ func sendMessage(greet string, TLS bool, w *textproto.Writer, t *testing.T, line
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
-	client.Hashes = append(client.Hashes, "abcdef1526777763")
+	client.Hashes = append(client.Hashes, "abcdef1526777763"+greet)
 	client.TLS = TLS
+	client.QueuedId = mail.QueuedID(1, 1)
 	if err := w.PrintfLine("DATA"); err != nil {
 		t.Error(err)
 	}
 	line, _ = r.ReadLine()
+	if greet == "EHLO" {
+	}
 
-	if err := w.PrintfLine("Subject: Test subject\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
+	if err := w.PrintfLine("Subject: Test subject" + greet + "\r\n\r\nHello Sir,\nThis is a test.\r\n."); err != nil {
 		t.Error(err)
 	}
+	if r.R.Buffered() > 0 {
+		line, _ = r.ReadLine()
+	}
+
 	line, _ = r.ReadLine()
+
 	return line
 }
 
@@ -535,14 +558,14 @@ func TestGithubIssue199(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
 
 	server.setAllowedHosts([]string{"grr.la", "fake.com", "[1.1.1.1]", "[2001:db8::8a2e:370:7334]", "saggydimes.test.com"})
 
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -714,13 +737,13 @@ func TestGithubIssue200(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
 	server.setAllowedHosts([]string{"1.1.1.1", "[2001:DB8::FF00:42:8329]"})
 
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -766,7 +789,7 @@ func TestGithubIssue201(t *testing.T) {
 	sc := getMockServerConfig()
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	server.backend().Start()
@@ -774,7 +797,7 @@ func TestGithubIssue201(t *testing.T) {
 	// it will be used for rcpt to:<postmaster> which does not specify a host
 	server.setAllowedHosts([]string{"a.com", "saggydimes.test.com"})
 
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -854,11 +877,11 @@ func TestXClient(t *testing.T) {
 	sc.XClientOn = true
 	mainlog, logOpenError = log.GetLogger(sc.LogFile, "debug")
 	if logOpenError != nil {
-		mainlog.WithError(logOpenError).Errorf("Failed creating a logger for mock conn [%s]", sc.ListenInterface)
+		mainlog.Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for mock conn")
 	}
 	conn, server := getMockServerConn(sc, t)
 	// call the serve.handleClient() func in a goroutine.
-	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5))
+	client := NewClient(conn.Server, 1, mainlog, mail.NewPool(5), 0)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -911,15 +934,15 @@ func TestXClient(t *testing.T) {
 // a second transaction
 func TestGatewayTimeout(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	bcfg := backends.BackendConfig{
-		"save_workers_size":   1,
-		"save_process":        "HeadersParser|Debugger",
-		"log_received_mails":  true,
-		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "1s",
-		"gw_val_rcpt_timeout": "1s",
-		"sleep_seconds":       2,
-	}
+
+	bcfg := backends.BackendConfig{}
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "val_rcpt_timeout", "1s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
+	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "sleep_seconds", 2)
 
 	cfg := &AppConfig{
 		LogFile:      log.OutputOff.String(),
@@ -951,7 +974,7 @@ func TestGatewayTimeout(t *testing.T) {
 		// perform 2 transactions
 		// both should panic.
 		for i := 0; i < 2; i++ {
-			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n"); err != nil {
 				t.Error(err)
 			}
 			if str, err = in.ReadString('\n'); err != nil {
@@ -998,15 +1021,15 @@ func TestGatewayTimeout(t *testing.T) {
 // The processor will panic and gateway should recover from it
 func TestGatewayPanic(t *testing.T) {
 	defer cleanTestArtifacts(t)
-	bcfg := backends.BackendConfig{
-		"save_workers_size":   1,
-		"save_process":        "HeadersParser|Debugger",
-		"log_received_mails":  true,
-		"primary_mail_host":   "example.com",
-		"gw_save_timeout":     "2s",
-		"gw_val_rcpt_timeout": "2s",
-		"sleep_seconds":       1,
-	}
+
+	bcfg := backends.BackendConfig{}
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "val_rcpt_timeout", "2s")
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_workers_size", 1)
+	bcfg.SetValue(backends.ConfigGateways, backends.DefaultGateway, "save_process", "HeadersParser|Debugger")
+	bcfg.SetValue(backends.ConfigProcessors, "header", "primary_mail_host", "example.com")
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "log_received_mails", true)
+	bcfg.SetValue(backends.ConfigProcessors, "debugger", "sleep_seconds", 1)
 
 	cfg := &AppConfig{
 		LogFile:      log.OutputOff.String(),
@@ -1041,7 +1064,7 @@ func TestGatewayPanic(t *testing.T) {
 		// sure that the client waits until processing finishes, and the
 		// timeout event is captured.
 		for i := 0; i < 2; i++ {
-			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>r\r\n"); err != nil {
+			if _, err := fmt.Fprint(conn, "MAIL FROM:<test@example.com>\r\n"); err != nil {
 				t.Error(err)
 			}
 			if _, err = in.ReadString('\n'); err != nil {

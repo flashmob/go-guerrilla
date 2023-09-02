@@ -142,14 +142,19 @@ func (s *SQLProcessor) prepareInsertQuery(rows int, db *sql.DB) *sql.Stmt {
 func (s *SQLProcessor) doQuery(c int, db *sql.DB, insertStmt *sql.Stmt, vals *[]interface{}) (execErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			Log().Error("Recovered form panic:", r, string(debug.Stack()))
 			sum := 0
 			for _, v := range *vals {
 				if str, ok := v.(string); ok {
 					sum = sum + len(str)
 				}
 			}
-			Log().Errorf("panic while inserting query [%s] size:%d, err %v", r, sum, execErr)
+			Log().Fields(
+				"panic", fmt.Sprintf("%v", r),
+				"size", sum,
+				"error", execErr,
+				"stack", string(debug.Stack()),
+			).
+				Error("panic while inserting query")
 			panic("query failed")
 		}
 	}()
@@ -194,7 +199,7 @@ func SQL() Decorator {
 	// open the database connection (it will also check if we can select the table)
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&SQLProcessorConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "sql", backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -224,9 +229,8 @@ func SQL() Decorator {
 				hash := ""
 				if len(e.Hashes) > 0 {
 					hash = e.Hashes[0]
-					e.QueuedId = e.Hashes[0]
+					e.QueuedId.FromHex(e.Hashes[0])
 				}
-
 				var co *DataCompressor
 				// a compressor was set by the Compress processor
 				if c, ok := e.Values["zlib-compressor"]; ok {

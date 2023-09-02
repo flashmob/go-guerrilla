@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -19,7 +18,7 @@ import (
 	"github.com/flashmob/go-guerrilla/backends"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/flashmob/go-guerrilla/mail/rfc5321"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 	"github.com/flashmob/go-guerrilla/response"
 )
 
@@ -47,6 +46,7 @@ type server struct {
 	tlsConfigStore  atomic.Value
 	timeout         atomic.Value // stores time.Duration
 	listenInterface string
+	serverID        int
 	clientPool      *Pool
 	wg              sync.WaitGroup // for waiting to shutdown
 	listener        net.Listener
@@ -84,28 +84,29 @@ var (
 )
 
 func (c command) match(in []byte) bool {
-	return bytes.Index(in, []byte(c)) == 0
+	return bytes.Index(in, c) == 0
 }
 
 // Creates and returns a new ready-to-run Server from a ServerConfig configuration
-func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger) (*server, error) {
+func newServer(sc *ServerConfig, b backends.Backend, mainlog log.Logger, serverID int) (*server, error) {
 	server := &server{
 		clientPool:      NewPool(sc.MaxClients),
 		closedListener:  make(chan bool, 1),
 		listenInterface: sc.ListenInterface,
+		serverID:        serverID,
 		state:           ServerStateNew,
-		envelopePool:    mail.NewPool(sc.MaxClients),
+		envelopePool:    mail.NewPool(sc.MaxClients * 2),
 	}
 	server.mainlogStore.Store(mainlog)
 	server.backendStore.Store(b)
 	if sc.LogFile == "" {
 		// none set, use the mainlog for the server log
 		server.logStore.Store(mainlog)
-		server.log().Info("server [" + sc.ListenInterface + "] did not configure a separate log file, so using the main log")
+		server.log().Fields("iface", sc.ListenInterface).Info("server did not configure a separate log file, so using the main log")
 	} else {
 		// set level to same level as mainlog level
 		if l, logOpenError := log.GetLogger(sc.LogFile, server.mainlog().GetLevel()); logOpenError != nil {
-			server.log().WithError(logOpenError).Errorf("Failed creating a logger for server [%s]", sc.ListenInterface)
+			server.log().Fields("error", logOpenError, "iface", sc.ListenInterface).Error("Failed creating a logger for server")
 			return server, logOpenError
 		} else {
 			server.logStore.Store(l)
@@ -158,7 +159,8 @@ func (s *server) configureTLS() error {
 		if len(sConfig.TLS.RootCAs) > 0 {
 			caCert, err := ioutil.ReadFile(sConfig.TLS.RootCAs)
 			if err != nil {
-				s.log().WithError(err).Errorf("failed opening TLSRootCAs file [%s]", sConfig.TLS.RootCAs)
+				s.log().Fields("error", err, "file", sConfig.TLS.RootCAs).Error("failed opening TLSRootCAs file")
+				return err
 			} else {
 				caCertPool := x509.NewCertPool()
 				caCertPool.AppendCertsFromPEM(caCert)
@@ -239,29 +241,30 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 	if err != nil {
 		startWG.Done() // don't wait for me
 		s.state = ServerStateStartError
-		return fmt.Errorf("[%s] Cannot listen on port: %s ", s.listenInterface, err.Error())
+		return fmt.Errorf("[%s] cannot listen on port: %s ", s.listenInterface, err.Error())
 	}
 
-	s.log().Infof("Listening on TCP %s", s.listenInterface)
+	s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("listening on TCP")
 	s.state = ServerStateRunning
 	startWG.Done() // start successful, don't wait for me
 
 	for {
-		s.log().Debugf("[%s] Waiting for a new client. Next Client ID: %d", s.listenInterface, clientID+1)
+		s.log().Fields("serverID", s.serverID, "nextSeq", clientID+1, "iface", s.listenInterface).
+			Debug("waiting for a new client")
 		conn, err := listener.Accept()
 		clientID++
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				s.log().Infof("Server [%s] has stopped accepting new clients", s.listenInterface)
+				s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("server has stopped accepting new clients")
 				// the listener has been closed, wait for clients to exit
-				s.log().Infof("shutting down pool [%s]", s.listenInterface)
+				s.log().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("shutting down pool")
 				s.clientPool.ShutdownState()
 				s.clientPool.ShutdownWait()
 				s.state = ServerStateStopped
 				s.closedListener <- true
 				return nil
 			}
-			s.mainlog().WithError(err).Info("Temporary error accepting client")
+			s.mainlog().Fields("error", err, "serverID", s.serverID).Error("temporary error accepting client")
 			continue
 		}
 		go func(p Poolable, borrowErr error) {
@@ -271,15 +274,13 @@ func (s *server) Start(startWG *sync.WaitGroup) error {
 				s.envelopePool.Return(c.Envelope)
 				s.clientPool.Return(c)
 			} else {
-				s.log().WithError(borrowErr).Info("couldn't borrow a new client")
+				s.log().Fields("error", borrowErr, "serverID", s.serverID).Error("couldn't borrow a new client")
 				// we could not get a client, so close the connection.
 				_ = conn.Close()
-
 			}
 			// intentionally placed Borrow in args so that it's called in the
 			// same main goroutine.
-		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool))
-
+		}(s.clientPool.Borrow(conn, clientID, s.log(), s.envelopePool, s.serverID))
 	}
 }
 
@@ -360,11 +361,33 @@ func (s *server) isShuttingDown() bool {
 	return s.clientPool.IsShuttingDown()
 }
 
-// Handles an entire client SMTP exchange
+const advertisePipelining = "250-PIPELINING\r\n"
+const advertiseStartTLS = "250-STARTTLS\r\n"
+const advertiseEnhancedStatusCodes = "250-ENHANCEDSTATUSCODES\r\n"
+const advertise8BitMime = "250-8BITMIME\r\n"
+
+// The last line doesn't need \r\n since string will be printed as a new line.
+// Also, Last line has no dash -
+const advertiseHelp = "250 HELP"
+
+// handleClient handles an entire client SMTP exchange
 func (s *server) handleClient(client *client) {
-	defer client.closeConn()
+	defer func() {
+		s.log().Fields(
+			"peer", client.RemoteIP,
+			"event", "disconnect",
+			"id", client.ID,
+			"queuedID", client.QueuedId,
+		).Info("Disconnect client")
+		client.closeConn()
+	}()
 	sc := s.configStore.Load().(ServerConfig)
-	s.log().Infof("Handle client [%s], id: %d", client.RemoteIP, client.ID)
+	s.log().Fields(
+		"peer", client.RemoteIP,
+		"id", client.ID,
+		"event", "connect",
+		"queuedID", client.QueuedId,
+	).Info("handle client")
 
 	// Initial greeting
 	greeting := fmt.Sprintf("220 %s SMTP Guerrilla(%s) #%d (%d) %s",
@@ -377,12 +400,9 @@ func (s *server) handleClient(client *client) {
 
 	// Extended feature advertisements
 	messageSize := fmt.Sprintf("250-SIZE %d\r\n", sc.MaxSize)
-	pipelining := "250-PIPELINING\r\n"
-	advertiseTLS := "250-STARTTLS\r\n"
-	advertiseEnhancedStatusCodes := "250-ENHANCEDSTATUSCODES\r\n"
+	advertiseTLS := advertiseStartTLS
 	// The last line doesn't need \r\n since string will be printed as a new line.
 	// Also, Last line has no dash -
-	help := "250 HELP"
 
 	if sc.TLS.AlwaysOn {
 		tlsConfig, ok := s.tlsConfigStore.Load().(*tls.Config)
@@ -391,7 +411,7 @@ func (s *server) handleClient(client *client) {
 		} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 			advertiseTLS = ""
 		} else {
-			s.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+			s.log().Fields("error", err, "peer", client.RemoteIP).Warn("failed TLS handshake")
 			// server requires TLS, but can't handshake
 			client.kill()
 		}
@@ -409,19 +429,19 @@ func (s *server) handleClient(client *client) {
 		case ClientCmd:
 			client.bufin.setLimit(CommandLineMaxLength)
 			input, err := s.readCommand(client)
-			s.log().Debugf("Client sent: %s", input)
+			s.log().Fields("input", string(input)).Debug("client said")
 			if err == io.EOF {
-				s.log().WithError(err).Warnf("Client closed the connection: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("client closed the connection")
 				return
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				s.log().WithError(err).Warnf("Timeout: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("timeout")
 				return
 			} else if err == LineLimitExceeded {
 				client.sendResponse(r.FailLineTooLong)
 				client.kill()
 				break
 			} else if err != nil {
-				s.log().WithError(err).Warnf("Read error: %s", client.RemoteIP)
+				s.log().Fields("error", err, "peer", client.RemoteIP).Warn("read error")
 				client.kill()
 				break
 			}
@@ -440,7 +460,7 @@ func (s *server) handleClient(client *client) {
 				if h, err := client.parser.Helo(input[4:]); err == nil {
 					client.Helo = h
 				} else {
-					s.log().WithFields(logrus.Fields{"helo": h, "client": client.ID}).Warn("invalid helo")
+					s.log().Fields("helo", h, "seq", client.ID).Warn("invalid helo")
 					client.sendResponse(r.FailSyntaxError)
 					break
 				}
@@ -452,7 +472,7 @@ func (s *server) handleClient(client *client) {
 					client.Helo = h
 				} else {
 					client.sendResponse(r.FailSyntaxError)
-					s.log().WithFields(logrus.Fields{"ehlo": h, "client": client.ID}).Warn("invalid ehlo")
+					s.log().Fields("ehlo", h, "seq", client.ID).Warn("invalid ehlo")
 					client.sendResponse(r.FailSyntaxError)
 					break
 				}
@@ -460,10 +480,11 @@ func (s *server) handleClient(client *client) {
 				client.resetTransaction()
 				client.sendResponse(ehlo,
 					messageSize,
-					pipelining,
+					advertisePipelining,
 					advertiseTLS,
 					advertiseEnhancedStatusCodes,
-					help)
+					advertise8BitMime,
+					advertiseHelp)
 
 			case cmdHELP.match(cmd):
 				quote := response.GetQuote()
@@ -494,23 +515,42 @@ func (s *server) handleClient(client *client) {
 				}
 				client.MailFrom, err = client.parsePath(input[10:], client.parser.MailFrom)
 				if err != nil {
-					s.log().WithError(err).Error("MAIL parse error", "["+string(input[10:])+"]")
+					s.log().Fields("error", err, "raw", string(input[10:])).Error("MAIL parse error")
 					client.sendResponse(err)
 					break
 				} else if client.parser.NullPath {
 					// bounce has empty from address
 					client.MailFrom = mail.Address{}
+				} else {
+					s.log().Fields(
+						"event", "mailfrom",
+						"helo", client.Helo,
+						"domain", client.MailFrom.Host,
+						"address", client.RemoteIP,
+						"id", client.ID,
+						"queuedID", client.QueuedId,
+					).Info("mail from")
+				}
+				client.TransportType = smtp.TransportTypeUnspecified
+				for i := range client.MailFrom.PathParams {
+					if tt := client.MailFrom.PathParams[i].Transport(); tt != smtp.TransportTypeUnspecified {
+						client.TransportType = tt
+						if tt == smtp.TransportTypeInvalid {
+							continue
+						}
+						break
+					}
 				}
 				client.sendResponse(r.SuccessMailCmd)
 
 			case cmdRCPT.match(cmd):
-				if len(client.RcptTo) > rfc5321.LimitRecipients {
+				if len(client.RcptTo) > smtp.LimitRecipients {
 					client.sendResponse(r.ErrorTooManyRecipients)
 					break
 				}
 				to, err := client.parsePath(input[8:], client.parser.RcptTo)
 				if err != nil {
-					s.log().WithError(err).Error("RCPT parse error", "["+string(input[8:])+"]")
+					s.log().Fields("error", err, "raw", string(input[8:])).Error("RCPT parse error")
 					client.sendResponse(err.Error())
 					break
 				}
@@ -563,17 +603,57 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailUnrecognizedCmd)
 				}
 			}
-
 		case ClientData:
-
 			// intentionally placed the limit 1MB above so that reading does not return with an error
 			// if the client goes a little over. Anything above will err
 			client.bufin.setLimit(sc.MaxSize + 1024000) // This a hard limit.
-
-			n, err := client.Data.ReadFrom(client.smtpReader.DotReader())
-			if n > sc.MaxSize {
-				err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
+			be := s.backend()
+			var (
+				n   int64
+				err error
+				res backends.Result
+			)
+			fields := []interface{}{
+				"event", "data",
+				"id", client.ID,
+				"queuedID", client.QueuedId,
+				"messageID", client.MessageID,
+				"peer", client.RemoteIP,
+				"serverID", s.serverID,
 			}
+			s.log().Fields(fields...).Info("receive DATA")
+			if be.StreamOn() {
+				// process the message as a stream
+				res, n, err = be.ProcessStream(client.smtpReader.DotReader(), client.Envelope)
+				if err == nil && res.Code() < 300 {
+					e := s.envelopePool.Borrow(
+						client.Envelope.RemoteIP,
+						client.ID,
+						client.Envelope.ServerID,
+					)
+					s.copyEnvelope(client.Envelope, e)
+					// process in the background then return the envelope
+					go func() {
+						be.ProcessBackground(e)
+						s.envelopePool.Return(e)
+					}()
+				}
+			} else {
+				// or buffer the entire message (parse headers & mime structure as we go along)
+				n, err = client.Data.ReadFrom(client.smtpReader)
+				if n > sc.MaxSize {
+					err = fmt.Errorf("maximum DATA size exceeded (%d)", sc.MaxSize)
+				} else {
+					if p := client.smtpReader.Parts(); p != nil && len(p) > 0 {
+						client.Envelope.Header = p[0].Headers
+					}
+				}
+				// All done. we can close the smtpReader, the protocol will reset the transaction, expecting a new message
+				if closeErr := client.smtpReader.Close(); closeErr != nil {
+					s.log().WithError(closeErr).Error("could not close DATA reader")
+				}
+			}
+
 			if err != nil {
 				if err == LineLimitExceeded {
 					client.sendResponse(r.FailReadLimitExceededDataCmd, " ", LineLimitExceeded.Error())
@@ -585,14 +665,18 @@ func (s *server) handleClient(client *client) {
 					client.sendResponse(r.FailReadErrorDataCmd, " ", err.Error())
 					client.kill()
 				}
-				s.log().WithError(err).Warn("Error reading data")
+				s.log().Fields(append(fields, "error", err)...).Error("error reading DATA")
 				client.resetTransaction()
 				break
 			}
 
-			res := s.backend().Process(client.Envelope)
+			if !be.StreamOn() {
+				res = be.Process(client.Envelope)
+			}
+
 			if res.Code() < 300 {
 				client.messagesSent++
+				s.log().Fields(append(fields, "length", n)...).Info("received message DATA")
 			}
 			client.sendResponse(res)
 			client.state = ClientCmd
@@ -605,12 +689,13 @@ func (s *server) handleClient(client *client) {
 			if !client.TLS && sc.TLS.StartTLSOn {
 				tlsConfig, ok := s.tlsConfigStore.Load().(*tls.Config)
 				if !ok {
-					s.mainlog().Error("Failed to load *tls.Config")
+					s.mainlog().Fields("iface", s.listenInterface).Error("failed to load *tls.Config")
 				} else if err := client.upgradeToTLS(tlsConfig); err == nil {
 					advertiseTLS = ""
 					client.resetTransaction()
 				} else {
-					s.log().WithError(err).Warnf("[%s] Failed TLS handshake", client.RemoteIP)
+					s.log().Fields("error", err, "iface", s.listenInterface, "ip", client.RemoteIP).
+						Warn("failed TLS handshake")
 					// Don't disconnect, let the client decide if it wants to continue
 				}
 			}
@@ -629,7 +714,7 @@ func (s *server) handleClient(client *client) {
 		// flush the response buffer
 		if client.bufout.Buffered() > 0 {
 			if s.log().IsDebug() {
-				s.log().Debugf("Writing response to client: \n%s", client.response.String())
+				s.log().Fields("out", client.response.String()).Debug("writing response to client")
 			}
 			err := s.flushResponse(client)
 			if err != nil {
@@ -675,9 +760,18 @@ func (s *server) defaultHost(a *mail.Address) {
 		sc := s.configStore.Load().(ServerConfig)
 		a.Host = sc.Hostname
 		if !s.allowsHost(a.Host) {
-			s.log().WithFields(
-				logrus.Fields{"hostname": sc.Hostname}).
-				Warn("the hostname is not present in AllowedHosts config setting")
+			s.log().Fields("hostname", sc.Hostname).
+				Warn("the hostname is not present in the AllowedHosts config setting")
 		}
 	}
+}
+
+func (s *server) copyEnvelope(src *mail.Envelope, dest *mail.Envelope) {
+	dest.TLS = src.TLS
+	dest.Helo = src.Helo
+	dest.ESMTP = src.ESMTP
+	dest.RcptTo = src.RcptTo
+	dest.MailFrom = src.MailFrom
+	dest.MessageID = src.MessageID
+	dest.TransportType = src.TransportType
 }

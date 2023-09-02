@@ -61,7 +61,7 @@ func Redis() Decorator {
 	// read the config into RedisProcessorConfig
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
 		configType := BaseConfig(&RedisProcessorConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "redis", backendConfig, configType)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func Redis() Decorator {
 			if task == TaskSaveMail {
 				hash := ""
 				if len(e.Hashes) > 0 {
-					e.QueuedId = e.Hashes[0]
+					e.QueuedId.FromHex(e.Hashes[0])
 					hash = e.Hashes[0]
 					var stringer fmt.Stringer
 					// a compressor was set

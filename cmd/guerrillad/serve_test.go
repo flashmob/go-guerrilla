@@ -29,7 +29,7 @@ var configJsonA = `
 {
     "log_file" : "../../tests/testlog",
     "log_level" : "debug",
-    "pid_file" : "./pidfile.pid",
+    "pid_file" : "pidfile.pid",
     "allowed_hosts": [
       "guerrillamail.com",
       "guerrillamailblock.com",
@@ -37,11 +37,19 @@ var configJsonA = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-    	"save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": true
-    },
+	"backend" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails" : true
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -90,11 +98,19 @@ var configJsonB = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-    	"save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": false
-    },
+    "backend" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails" : false
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -128,19 +144,24 @@ var configJsonC = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config" :
-        {
-            "sql_driver": "mysql",
-            "sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
-            "mail_table":"new_mail",
-            "redis_interface" : "127.0.0.1:6379",
-            "redis_expire_seconds" : 7200,
-            "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com",
-            "save_workers_size" : 1,
-	    	"save_process": "HeadersParser|Debugger",
-	    	"log_received_mails": true
-        },
+	"backend" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails" : true
+			},
+            "sql" : {
+ 				"sql_dsn": "root:ok@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"primary_mail_host":"sharklasers.com"
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 3,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -189,11 +210,19 @@ var configJsonD = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config": {
-        "save_workers_size" : 1,
-    	"save_process": "HeadersParser|Debugger",
-        "log_received_mails": false
-    },
+	"backend" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails" : false
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 1,
+    			"save_process": "HeadersParser|Debugger"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -242,19 +271,33 @@ var configJsonE = `
       "guerrillamail.net",
       "guerrillamail.org"
     ],
-    "backend_config" :
-        {
-            "save_process_old": "HeadersParser|Debugger|Hasher|Header|Compressor|Redis|MySql",
-            "save_process": "GuerrillaRedisDB",
-            "log_received_mails" : true,
-            "sql_driver": "mysql",
-            "sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
-            "mail_table":"new_mail",
-            "redis_interface" : "127.0.0.1:6379",
-            "redis_expire_seconds" : 7200,
-            "save_workers_size" : 3,
-            "primary_mail_host":"sharklasers.com"
-        },
+	"backend" : {
+		"processors" : {
+			"debugger" : {
+				"log_received_mails" : true
+			},
+            "sql" : {
+ 				"sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"sql_driver": "mysql",
+				"primary_mail_host":"sharklasers.com"
+			},
+			"GuerrillaRedisDB" : {
+				"sql_dsn": "root:secret@tcp(127.0.0.1:3306)/gmail_mail?readTimeout=10s&writeTimeout=10s",
+            	"mail_table":"new_mail",
+				"sql_driver": "mysql",
+				"redis_interface" : "127.0.0.1:6379",
+            	"redis_expire_seconds" : 7200,
+				"primary_mail_host":"sharklasers.com"
+			}
+		},
+		"gateways" : {
+			"default" : {
+				"save_workers_size" : 3,
+				"save_process": "GuerrillaRedisDB"
+			}
+		}
+	},
     "servers" : [
         {
             "is_enabled" : true,
@@ -293,29 +336,39 @@ var configJsonE = `
 const testPauseDuration = time.Millisecond * 1010
 
 // reload config
-func sigHup() {
-	if data, err := ioutil.ReadFile("pidfile.pid"); err == nil {
-		mainlog.Infof("pid read is %s", data)
-		ecmd := exec.Command("kill", "-HUP", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			mainlog.Infof("could not SIGHUP", err)
+func sigHup(pidfile string) {
+	if data, err := ioutil.ReadFile(pidfile); err == nil {
+		if pid, err := strconv.Atoi(string(data)); err != nil {
+			mainlog.WithError(err).Error("could not read pid")
+		} else {
+			mainlog.Fields("pid", pid).Info("pid read")
+			ecmd := exec.Command("kill", "-HUP", string(data))
+			_, err = ecmd.Output()
+			if err != nil {
+				mainlog.WithError(err).Error("could not SIGHUP")
+			}
 		}
+
 	} else {
-		mainlog.WithError(err).Info("sighup - Could not read pidfle")
+		mainlog.Fields("error", err, "file", pidfile).Info("sighup - Could not read pidfle")
 	}
 
 }
 
 // shutdown after calling serve()
-func sigKill() {
-	if data, err := ioutil.ReadFile("pidfile.pid"); err == nil {
-		mainlog.Infof("pid read is %s", data)
-		ecmd := exec.Command("kill", string(data))
-		_, err = ecmd.Output()
-		if err != nil {
-			mainlog.Infof("could not sigkill", err)
+func sigKill(pidfile string) {
+	if data, err := ioutil.ReadFile(pidfile); err == nil {
+		if pid, err := strconv.Atoi(string(data)); err != nil {
+			mainlog.WithError(err).Error("could not read pid")
+		} else {
+			mainlog.Fields("pid", pid).Info("pid read")
+			ecmd := exec.Command("kill", string(data))
+			_, err = ecmd.Output()
+			if err != nil {
+				mainlog.WithError(err).Info("could not sigkill")
+			}
 		}
+
 	} else {
 		mainlog.WithError(err).Info("sigKill - Could not read pidfle")
 	}
@@ -332,6 +385,42 @@ func Round(x float64) float64 {
 // exponentialBackoff sleeps in nanoseconds, according to this formula 2^(i-1) * 25 / 2
 func exponentialBackoff(i int) {
 	time.Sleep(time.Duration(Round(math.Pow(3.0, float64(i))-1.0)*100.0/2.0) * time.Millisecond)
+}
+
+func matchTestlog(startLine int, args ...interface{}) (bool, error) {
+	fd, err := os.Open("../../tests/testlog")
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = fd.Close()
+	}()
+	for tries := 0; tries < 6; tries++ {
+		if b, err := ioutil.ReadAll(fd); err != nil {
+			return false, err
+		} else {
+			if test.MatchLog(string(b), startLine, args...) {
+				return true, nil
+			}
+		}
+		// close and reopen
+		err = fd.Close()
+		if err != nil {
+			return false, err
+		}
+		fd = nil
+
+		// sleep
+		exponentialBackoff(tries)
+		_ = mainlog.Reopen()
+
+		// re-open
+		fd, err = os.OpenFile("../../tests/testlog", os.O_RDONLY, 0644)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 var grepNotFound error
@@ -356,7 +445,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 	var ln int
 	var line string
 	for tries := 0; tries < 6; tries++ {
-		//fmt.Println("try..", tries)
 		for {
 			ln++
 			line, err = buff.ReadString('\n')
@@ -364,7 +452,6 @@ func grepTestlog(match string, lineNumber int) (found int, err error) {
 				break
 			}
 			if ln > lineNumber {
-				//fmt.Print(ln, line)
 				if i := strings.Index(line, match); i != -1 {
 					return ln, nil
 				}
@@ -496,8 +583,8 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	}
 
 	expectedEvents := map[guerrilla.Event]bool{
-		guerrilla.EventConfigBackendConfig: false,
-		guerrilla.EventConfigServerNew:     false,
+		guerrilla.EventConfigBackendConfigChanged: false, // backend_change:backend
+		guerrilla.EventConfigServerNew:            false, // server_change:new_server
 	}
 	mainlog, err = getTestLog()
 	if err != nil {
@@ -505,24 +592,37 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 		t.FailNow()
 	}
 
-	bcfg := backends.BackendConfig{"log_received_mails": true}
-	backend, err := backends.New(bcfg, mainlog)
-	app, err := guerrilla.New(oldconf, backend, mainlog)
+	oldconf.BackendConfig = backends.BackendConfig{
+		backends.ConfigProcessors: {"debugger": {"log_received_mails": true}},
+	}
+	oldconf.BackendConfig.ConfigureDefaults()
+
+	backend, err := backends.New(backends.DefaultGateway, oldconf.BackendConfig, mainlog)
+	if err != nil {
+		t.Error("failed to create backend", err)
+		return
+	}
+	app, err := guerrilla.New(oldconf, mainlog, backend)
 	if err != nil {
 		t.Error("Failed to create new app", err)
 	}
-	toUnsubscribe := map[guerrilla.Event]func(c *guerrilla.AppConfig){}
-	toUnsubscribeS := map[guerrilla.Event]func(c *guerrilla.ServerConfig){}
+	toUnsubscribe := map[guerrilla.Event]interface{}{}
 
 	for event := range expectedEvents {
 		// Put in anon func since range is overwriting event
 		func(e guerrilla.Event) {
-			if strings.Index(e.String(), "server_change") == 0 {
+			if strings.Index(e.String(), "backend_change") == 0 {
+				f := func(c *guerrilla.AppConfig, gateway string) {
+					expectedEvents[e] = true
+				}
+				_ = app.Subscribe(e, f)
+				toUnsubscribe[e] = f
+			} else if strings.Index(e.String(), "server_change") == 0 {
 				f := func(c *guerrilla.ServerConfig) {
 					expectedEvents[e] = true
 				}
 				_ = app.Subscribe(e, f)
-				toUnsubscribeS[e] = f
+				toUnsubscribe[e] = f
 			} else {
 				f := func(c *guerrilla.AppConfig) {
 					expectedEvents[e] = true
@@ -530,7 +630,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 				_ = app.Subscribe(e, f)
 				toUnsubscribe[e] = f
 			}
-
 		}(event)
 	}
 
@@ -541,10 +640,6 @@ func TestCmdConfigChangeEvents(t *testing.T) {
 	for unevent, unfun := range toUnsubscribe {
 		_ = app.Unsubscribe(unevent, unfun)
 	}
-	for unevent, unfun := range toUnsubscribeS {
-		_ = app.Unsubscribe(unevent, unfun)
-	}
-
 	for event, val := range expectedEvents {
 		if val == false {
 			t.Error("Did not fire config change event:", event)
@@ -576,13 +671,18 @@ func TestServe(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	configPath = "configJsonA.json"
-
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("istening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server not started")
 	}
+
+	// wait for the pidfle to be written out
+	if _, err := grepTestlog("pid_file", 0); err != nil {
+		t.Error("pid_file not written")
+	}
+
 	data, err := ioutil.ReadFile("pidfile.pid")
 	if err != nil {
 		t.Error("error reading pidfile.pid", err)
@@ -605,23 +705,22 @@ func TestServe(t *testing.T) {
 	// Would not work on windows as kill is not available.
 	// TODO: Implement an alternative test for windows.
 	if runtime.GOOS != "windows" {
-		sigHup()
+		sigHup("pidfile.pid")
 		// did the pidfile change as expected?
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
-			t.Error("server did not catch sighp")
+		if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
+			t.Error("server did not catch sighup")
 		}
 	}
-	// send kill signal and wait for exit
-	d.Shutdown()
-
-	// did backend started as expected?
-
-	if _, err := grepTestlog("new backend started", 0); err != nil {
+	if _, err := grepTestlog("gateway with new config started", 0); err != nil {
 		t.Error("Dummy backend not restarted")
 	}
 
+	// send kill signal and wait for exit
+	d.Shutdown()
+	// did backend started as expected?
+
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -656,7 +755,7 @@ func TestServerAddEvent(t *testing.T) {
 	}()
 
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -676,13 +775,14 @@ func TestServerAddEvent(t *testing.T) {
 		}
 	}
 	// send a sighup signal to the server
-	sigHup()
-	if _, err := grepTestlog("[127.0.0.1:2526] Waiting for a new client", 0); err != nil {
+	sigHup("./pidfile.pid")
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2526\"", 0); err != nil {
 		t.Error("new server didn't start")
 	}
 
 	if conn, buffin, err := test.Connect(newServer, 20); err != nil {
 		t.Error("Could not connect to new server", newServer.ListenInterface, err)
+		return
 	} else {
 		if result, err := test.Command(conn, buffin, "HELO example.com"); err == nil {
 			expect := "250 mail.test.com Hello"
@@ -696,14 +796,19 @@ func TestServerAddEvent(t *testing.T) {
 
 	// shutdown the server
 	d.Shutdown()
-
-	// did backend started as expected?
-	if _, err := grepTestlog("New server added [127.0.0.1:2526]", 0); err != nil {
-		t.Error("Did not add server [127.0.0.1:2526] after sighup")
+	// sever added as as expected?
+	if matched, err := matchTestlog(
+		1, "msg", "new server added",
+		"iface", "127.0.0.1:2526",
+		"event", "server_change:new_server",
+	); !matched {
+		t.Error("Did not add server [127.0.0.1:2526] after sighup", err)
 	}
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
-		t.Error("Server failed to stop")
+	if matched, err := matchTestlog(
+		1, "msg", "backend shutdown completed",
+	); !matched {
+		t.Error("Server failed to stop", err)
 	}
 
 }
@@ -736,7 +841,7 @@ func TestServerStartEvent(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 	// now change the config by adding a server
@@ -755,10 +860,10 @@ func TestServerStartEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// see if the new server started?
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2228\"", 0); err != nil {
 		t.Error("second server didn't start")
 	}
 
@@ -778,7 +883,7 @@ func TestServerStartEvent(t *testing.T) {
 	// shutdown and wait for exit
 	d.Shutdown()
 
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -817,7 +922,7 @@ func TestServerStopEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// allow the server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:3536\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 	// now change the config by enabling a server
@@ -836,9 +941,9 @@ func TestServerStopEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 	// detect config change
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2228", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2228\"", 0); err != nil {
 		t.Error("new server didn't start")
 	}
 
@@ -869,9 +974,9 @@ func TestServerStopEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server
-	sigHup()
+	sigHup("pidfile.pid")
 	// detect config change
-	if _, err := grepTestlog("Server [127.0.0.1:2228] has stopped accepting new clients", 27); err != nil {
+	if _, err := grepTestlog("msg=\"server has stopped accepting new clients\" iface=\"127.0.0.1:2228\"", 27); err != nil {
 		t.Error("127.0.0.1:2228 did not stop")
 	}
 
@@ -883,7 +988,7 @@ func TestServerStopEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 }
@@ -950,7 +1055,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -986,7 +1091,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 
 	if _, err := grepTestlog("allowed_hosts config changed", 0); err != nil {
 		t.Error("allowed_hosts config not changed")
@@ -1017,7 +1122,7 @@ func TestAllowedHostsEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1059,7 +1164,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	}()
 
 	// wait for server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1124,10 +1229,10 @@ func TestTLSConfigEvent(t *testing.T) {
 		t.Error("Did not create cert ", err)
 	}
 
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// wait for config to reload
-	if _, err := grepTestlog("Server [127.0.0.1:4655] re-opened", 0); err != nil {
+	if _, err := matchTestlog(1, "iface", "127.0.0.1:4655", "msg", "server re-opened"); err != nil {
 		t.Error("server didn't catch sighup")
 	}
 
@@ -1148,7 +1253,7 @@ func TestTLSConfigEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1194,7 +1299,7 @@ func TestBadTLSStart(t *testing.T) {
 		// it should exit by now because the TLS config is incorrect
 		time.Sleep(testPauseDuration)
 
-		sigKill()
+		sigKill("pidfile.pid")
 		serveWG.Wait()
 
 		return
@@ -1247,7 +1352,7 @@ func TestBadTLSReload(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for server to start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:4655\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1283,7 +1388,7 @@ func TestBadTLSReload(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 	// did the config reload reload event fire? There should be config read error
 	if _, err := grepTestlog("could not read config file", 0); err != nil {
 		t.Error("was expecting an error reading config")
@@ -1306,7 +1411,7 @@ func TestBadTLSReload(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 
@@ -1343,7 +1448,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 		serve(cmd, []string{})
 	}()
 	// wait for start
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:4655", 0); err != nil {
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:4655\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1360,7 +1465,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	}
 
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 
 	// did config update?
 	if _, err := grepTestlog("a new config has been saved", 0); err != nil {
@@ -1392,7 +1497,7 @@ func TestSetTimeoutEvent(t *testing.T) {
 	d.Shutdown()
 
 	// wait for shutdown
-	if _, err := grepTestlog("Backend shutdown completed", 0); err != nil {
+	if _, err := grepTestlog("backend shutdown completed", 0); err != nil {
 		t.Error("server didn't stop")
 	}
 	// so the connection we have opened should timeout by now
@@ -1435,7 +1540,8 @@ func TestDebugLevelChange(t *testing.T) {
 	go func() {
 		serve(cmd, []string{})
 	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:2552", 0); err != nil {
+
+	if _, err := grepTestlog("msg=\"listening on TCP\" iface=\"127.0.0.1:2552\"", 0); err != nil {
 		t.Error("server didn't start")
 	}
 
@@ -1462,9 +1568,9 @@ func TestDebugLevelChange(t *testing.T) {
 		t.Error(err)
 	}
 	// send a sighup signal to the server to reload config
-	sigHup()
+	sigHup("pidfile.pid")
 	// did the config reload?
-	if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+	if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
 		t.Error("config did not reload")
 		t.FailNow()
 	}
@@ -1484,72 +1590,67 @@ func TestDebugLevelChange(t *testing.T) {
 
 	d.Shutdown()
 
-	// did the log level change to info?
-	if _, err := grepTestlog("log level changed to [info]", 0); err != nil {
-		t.Error("log level did not change to [info]")
+	if ok, err := matchTestlog(1, "msg", "log level changed"); !ok {
+		t.Error("log level did not change", err)
 		t.FailNow()
 	}
 
 }
 
 // When reloading with a bad backend config, it should revert to old backend config
+// using the API way
 func TestBadBackendReload(t *testing.T) {
+
+	defer cleanTestArtifacts(t)
 	var err error
 	err = testcert.GenerateCert("mail2.guerrillamail.com", "", 365*24*time.Hour, false, 2048, "P256", "../../tests/")
 	if err != nil {
 		t.Error("failed to generate a test certificate", err)
 		t.FailNow()
 	}
-	defer cleanTestArtifacts(t)
-
-	mainlog, err = getTestLog()
-	if err != nil {
-		t.Error("could not get logger,", err)
-		t.FailNow()
-	}
-
 	if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonA), 0644); err != nil {
 		t.Error(err)
 	}
-	cmd := &cobra.Command{}
-	configPath = "configJsonA.json"
-	go func() {
-		serve(cmd, []string{})
-	}()
-	if _, err := grepTestlog("Listening on TCP 127.0.0.1:3536", 0); err != nil {
-		t.Error("server didn't start")
-	}
 
-	// change the config file to the one with a broken backend
-	if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644); err != nil {
-		t.Error(err)
+	d := guerrilla.Daemon{}
+	_, err = d.LoadConfig("configJsonA.json")
+	if err != nil {
+		t.Error("ReadConfig error", err)
+		return
 	}
+	err = d.Start()
+	if err != nil {
+		t.Error("start error", err)
+		return
+	} else {
+		if err = ioutil.WriteFile("configJsonA.json", []byte(configJsonE), 0644); err != nil {
+			t.Error(err)
+			return
+		}
+		if err = d.ReloadConfigFile("configJsonA.json"); err != nil {
+			t.Error(err)
+			return
+		}
 
-	// test SIGHUP via the kill command
-	// Would not work on windows as kill is not available.
-	// TODO: Implement an alternative test for windows.
-	if runtime.GOOS != "windows" {
-		sigHup()
-		// did config update?
-		if _, err := grepTestlog("Configuration was reloaded", 0); err != nil {
+		d.Shutdown()
+
+		if _, err := grepTestlog("configuration was reloaded", 0); err != nil {
 			t.Error("config didn't update")
 		}
+
+		// reverted to old gateway config?
+		if _, err := grepTestlog("reverted to old gateway config", 0); err != nil {
+			t.Error("Did not revert to old gateway config")
+		}
+
 		// did the pidfile change as expected?
 
-		if _, err := grepTestlog("pid_file (./pidfile2.pid) written", 0); err != nil {
+		if _, err := grepTestlog("msg=\"pid_file written\" file=./pidfile2.pid", 0); err != nil {
 			t.Error("pid_file (./pidfile2.pid) not written")
 		}
 		if _, err := os.Stat("./pidfile2.pid"); os.IsNotExist(err) {
 			t.Error("pidfile not changed after sighup SIGHUP", err)
 		}
-	}
 
-	// send kill signal and wait for exit
-	d.Shutdown()
-
-	// did backend started as expected?
-	if _, err := grepTestlog("reverted to old backend config", 0); err != nil {
-		t.Error("did not revert to old backend config")
-		t.FailNow()
 	}
 }

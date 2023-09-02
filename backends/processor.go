@@ -2,6 +2,7 @@ package backends
 
 import (
 	"github.com/flashmob/go-guerrilla/mail"
+	"io"
 )
 
 type SelectTask int
@@ -9,6 +10,7 @@ type SelectTask int
 const (
 	TaskSaveMail SelectTask = iota
 	TaskValidateRcpt
+	TaskSaveMailStream
 )
 
 func (o SelectTask) String() string {
@@ -17,6 +19,8 @@ func (o SelectTask) String() string {
 		return "save mail"
 	case TaskValidateRcpt:
 		return "validate recipient"
+	case TaskSaveMailStream:
+		return "save mail stream"
 	}
 	return "[unnamed task]"
 }
@@ -49,3 +53,27 @@ func (w DefaultProcessor) Process(e *mail.Envelope, task SelectTask) (Result, er
 
 // if no processors specified, skip operation
 type NoopProcessor struct{ DefaultProcessor }
+
+type StreamProcessor interface {
+	io.Writer
+}
+
+type StreamProcessWith func(p []byte) (n int, err error)
+
+func (f StreamProcessWith) Write(p []byte) (n int, err error) {
+	// delegate to the anonymous function
+	return f(p)
+}
+
+type DefaultStreamProcessor struct{}
+
+func (w DefaultStreamProcessor) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+// NoopStreamProcessor does nothing, it's a placeholder when no stream processors have been configured
+type NoopStreamProcessor struct{ DefaultStreamProcessor }
+
+type ValidatingProcessor interface {
+	Processor
+}

@@ -13,9 +13,9 @@ import (
 // Daemon provides a convenient API when using go-guerrilla as a package in your Go project.
 // Is's facade for Guerrilla, AppConfig, backends.Backend and log.Logger
 type Daemon struct {
-	Config  *AppConfig
-	Logger  log.Logger
-	Backend backends.Backend
+	Config   *AppConfig
+	Logger   log.Logger
+	Backends []backends.Backend
 
 	// Guerrilla will be managed through the API
 	g Guerrilla
@@ -51,16 +51,11 @@ func (d *Daemon) Start() (err error) {
 				return err
 			}
 		}
-		if d.Backend == nil {
-			d.Backend, err = backends.New(d.Config.BackendConfig, d.Logger)
-			if err != nil {
-				return err
-			}
-		}
-		d.g, err = New(d.Config, d.Backend, d.Logger)
+		d.g, err = New(d.Config, d.Logger, d.Backends...)
 		if err != nil {
 			return err
 		}
+
 		for i := range d.subs {
 			_ = d.Subscribe(d.subs[i].topic, d.subs[i].fn)
 
@@ -70,9 +65,8 @@ func (d *Daemon) Start() (err error) {
 	err = d.g.Start()
 	if err == nil {
 		if err := d.resetLogger(); err == nil {
-			d.Log().Infof("main log configured to %s", d.Config.LogFile)
+			d.Log().Fields("file", d.Config.LogFile).Info("main log configured")
 		}
-
 	}
 	return err
 }
@@ -128,7 +122,7 @@ func (d *Daemon) ReloadConfig(c AppConfig) error {
 		d.Log().WithError(err).Error("Error while reloading config")
 		return err
 	}
-	d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+	d.Log().Info("configuration was reloaded")
 	d.Config.EmitChangeEvents(&oldConfig, d.g)
 
 	return nil
@@ -143,7 +137,7 @@ func (d *Daemon) ReloadConfigFile(path string) error {
 	} else if d.Config != nil {
 		oldConfig := *d.Config
 		d.Config = &ac
-		d.Log().Infof("Configuration was reloaded at %s", d.configLoadTime)
+		d.Log().Info("configuration was reloaded")
 		d.Config.EmitChangeEvents(&oldConfig, d.g)
 	}
 	return nil
@@ -155,7 +149,7 @@ func (d *Daemon) ReopenLogs() error {
 	if d.Config == nil {
 		return errors.New("d.Config nil")
 	}
-	d.Config.EmitLogReopenEvents(d.g)
+	d.Config.emitLogReopenEvents(d.g)
 	return nil
 }
 
@@ -217,8 +211,10 @@ func (d *Daemon) configureDefaults() error {
 	if err != nil {
 		return err
 	}
-	if d.Backend == nil {
-		err = d.Config.setBackendDefaults()
+	if d.Backends == nil {
+		d.Backends = make([]backends.Backend, 0)
+		// the config will be used to make backends
+		err = d.Config.BackendConfig.ConfigureDefaults()
 		if err != nil {
 			return err
 		}

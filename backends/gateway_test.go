@@ -1,9 +1,12 @@
 package backends
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -19,9 +22,17 @@ func TestStates(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	c := BackendConfig{
-		"save_process":       "HeadersParser|Debugger",
-		"log_received_mails": true,
-		"save_workers_size":  "1",
+		ConfigProcessors: {
+			"Debugger": {
+				"log_received_mails": true,
+			},
+		},
+		ConfigGateways: {
+			"default": {
+				"save_process":      "HeadersParser|Debugger",
+				"save_workers_size": "1",
+			},
+		},
 	}
 
 	gateway := &BackendGateway{}
@@ -38,7 +49,7 @@ func TestInitialize(t *testing.T) {
 
 	if gateway.conveyor == nil {
 		t.Error("gateway.conveyor should not be nil")
-	} else if cap(gateway.conveyor) != gateway.workersSize() {
+	} else if cap(gateway.conveyor) != gateway.gwConfig.saveProcessSize() {
 		t.Error("gateway.conveyor channel buffer cap does not match worker size, cap was", cap(gateway.conveyor))
 	}
 
@@ -50,9 +61,17 @@ func TestInitialize(t *testing.T) {
 
 func TestStartProcessStop(t *testing.T) {
 	c := BackendConfig{
-		"save_process":       "HeadersParser|Debugger",
-		"log_received_mails": true,
-		"save_workers_size":  2,
+		ConfigProcessors: {
+			"Debugger": {
+				"log_received_mails": true,
+			},
+		},
+		ConfigGateways: {
+			"default": {
+				"save_process":      "HeadersParser|Debugger",
+				"save_workers_size": "2",
+			},
+		},
 	}
 
 	gateway := &BackendGateway{}
@@ -71,22 +90,31 @@ func TestStartProcessStop(t *testing.T) {
 		t.Fail()
 	}
 	if gateway.State != BackendStateRunning {
-		t.Error("gateway.State is not in rinning state, got ", gateway.State)
+		t.Error("gateway.State is not in running state, got ", gateway.State)
 	}
 	// can we place an envelope on the conveyor channel?
 
 	e := &mail.Envelope{
 		RemoteIP: "127.0.0.1",
-		QueuedId: "abc12345",
+		QueuedId: mail.QueuedID(1, 2),
 		Helo:     "helo.example.com",
 		MailFrom: mail.Address{User: "test", Host: "example.com"},
 		TLS:      true,
 	}
 	e.PushRcpt(mail.Address{User: "test", Host: "example.com"})
-	e.Data.WriteString("Subject:Test\n\nThis is a test.")
+	//e.Data.WriteString("Subject:Test\n\nThis is a test.")
+	in := "Subject: Test\n\nThis is a test.\n.\n"
+	mdr := mail.NewMimeDotReader(bufio.NewReader(bytes.NewBufferString(in)), 1)
+	i, err := io.Copy(&e.Data, mdr)
+	if err != nil && err != io.EOF {
+		t.Error(err, "cannot copy buffer", i, err)
+	}
+	if p := mdr.Parts(); p != nil && len(p) > 0 {
+		e.Header = p[0].Headers
+	}
 	notify := make(chan *notifyMsg)
 
-	gateway.conveyor <- &workerMsg{e, notify, TaskSaveMail}
+	gateway.conveyor <- &workerMsg{e, notify, TaskSaveMail, nil}
 
 	// it should not produce any errors
 	// headers (subject) should be parsed.

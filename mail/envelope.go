@@ -1,11 +1,13 @@
 package mail
 
 import (
-	"bufio"
 	"bytes"
-	"crypto/md5"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"io"
 	"mime"
 	"net"
@@ -14,7 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flashmob/go-guerrilla/mail/rfc5321"
+	"github.com/flashmob/go-guerrilla/mail/mimeparse"
+	"github.com/flashmob/go-guerrilla/mail/smtp"
 )
 
 // A WordDecoder decodes MIME headers containing RFC 2047 encoded-words.
@@ -27,9 +30,9 @@ var Dec mime.WordDecoder
 func init() {
 	// use the default decoder, without Gnu inconv. Import the mail/inconv package to use iconv.
 	Dec = mime.WordDecoder{}
+	// for QueuedID generation
+	hasher.h = fnv.New128a()
 }
-
-const maxHeaderChunk = 1 + (4 << 10) // 4KB
 
 // Address encodes an email address of the form `<user@host>`
 type Address struct {
@@ -40,7 +43,7 @@ type Address struct {
 	// ADL is at-domain list if matched
 	ADL []string
 	// PathParams contains any ESTMP parameters that were matched
-	PathParams [][]string
+	PathParams []smtp.PathParam
 	// NullPath is true if <> was received
 	NullPath bool
 	// Quoted indicates if the local-part needs quotes
@@ -99,7 +102,8 @@ func (a *Address) IsPostmaster() bool {
 // NewAddress takes a string of an RFC 5322 address of the
 // form "Gogh Fir <gf@example.com>" or "foo@example.com".
 func NewAddress(str string) (*Address, error) {
-	var ap rfc5321.RFC5322
+
+	var ap smtp.RFC5322
 	l, err := ap.Address([]byte(str))
 	if err != nil {
 		return nil, err
@@ -119,8 +123,45 @@ func NewAddress(str string) (*Address, error) {
 	return a, nil
 }
 
+type Hash128 [16]byte
+
+func (h Hash128) String() string {
+	return fmt.Sprintf("%x", h[:])
+}
+
+// FromHex converts the, string must be 32 bytes
+func (h *Hash128) FromHex(s string) {
+	if len(s) != 32 {
+		panic("hex string must be 32 bytes")
+	}
+	_, _ = hex.Decode(h[:], []byte(s))
+}
+
+// Bytes returns the raw bytes
+func (h Hash128) Bytes() []byte { return h[:] }
+
 // Envelope of Email represents a single SMTP message.
 type Envelope struct {
+	// Data stores the header and message body (when using the non-streaming processor)
+	Data bytes.Buffer
+	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
+	Subject string
+	// Header stores the results from ParseHeaders()
+	Header textproto.MIMEHeader
+	// Values hold the values generated when processing the envelope by the backend
+	Values map[string]interface{}
+	// Hashes of each email on the rcpt
+	Hashes []string
+	// DeliveryHeader stores additional delivery header that may be added (used by non-streaming processor)
+	DeliveryHeader string
+	// Size is the length of message, after being written
+	Size int64
+	// MimeParts contain the information about the mime-parts after they have been parsed
+	MimeParts *mimeparse.Parts
+	// MimeError contains any error encountered when parsing mime using the mimeanalyzer
+	MimeError error
+	// MessageID contains the id of the message after it has been written
+	MessageID uint64
 	// Remote IP address
 	RemoteIP string
 	// Message sent in EHLO command
@@ -129,38 +170,52 @@ type Envelope struct {
 	MailFrom Address
 	// Recipients
 	RcptTo []Address
-	// Data stores the header and message body
-	Data bytes.Buffer
-	// Subject stores the subject of the email, extracted and decoded after calling ParseHeaders()
-	Subject string
 	// TLS is true if the email was received using a TLS connection
 	TLS bool
-	// Header stores the results from ParseHeaders()
-	Header textproto.MIMEHeader
-	// Values hold the values generated when processing the envelope by the backend
-	Values map[string]interface{}
-	// Hashes of each email on the rcpt
-	Hashes []string
-	// additional delivery header that may be added
-	DeliveryHeader string
 	// Email(s) will be queued with this id
-	QueuedId string
+	QueuedId Hash128
+	// TransportType indicates whenever 8BITMIME extension has been signaled
+	TransportType smtp.TransportType
 	// ESMTP: true if EHLO was used
 	ESMTP bool
+	// ServerID records the server's index in the configuration
+	ServerID int
+
 	// When locked, it means that the envelope is being processed by the backend
+	sync.WaitGroup
+}
+
+type queuedIDGenerator struct {
+	h hash.Hash
+	n [24]byte
 	sync.Mutex
 }
 
-func NewEnvelope(remoteAddr string, clientID uint64) *Envelope {
+var hasher queuedIDGenerator
+
+func NewEnvelope(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	return &Envelope{
 		RemoteIP: remoteAddr,
 		Values:   make(map[string]interface{}),
-		QueuedId: queuedID(clientID),
+		ServerID: serverID,
+		QueuedId: QueuedID(clientID, serverID),
 	}
 }
 
-func queuedID(clientID uint64) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(string(time.Now().Unix())+string(clientID))))
+func QueuedID(clientID uint64, serverID int) Hash128 {
+	hasher.Lock()
+	defer func() {
+		hasher.h.Reset()
+		hasher.Unlock()
+	}()
+	h := Hash128{}
+	// pack the seeds and hash'em
+	binary.BigEndian.PutUint64(hasher.n[0:8], uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(hasher.n[8:16], clientID)
+	binary.BigEndian.PutUint64(hasher.n[16:24], uint64(serverID))
+	hasher.h.Write(hasher.n[:])
+	copy(h[:], hasher.h.Sum([]byte{}))
+	return h
 }
 
 // ParseHeaders parses the headers into Header field of the Envelope struct.
@@ -168,31 +223,17 @@ func queuedID(clientID uint64) string {
 // It assumes that at most 30kb of email data can be a header
 // Decoding of encoding to UTF is only done on the Subject, where the result is assigned to the Subject field
 func (e *Envelope) ParseHeaders() error {
-	var err error
-	if e.Header != nil {
-		return errors.New("headers already parsed")
+	if e.Header == nil {
+		return errors.New("headers not parsed")
 	}
-	buf := e.Data.Bytes()
-	// find where the header ends, assuming that over 30 kb would be max
-	if len(buf) > maxHeaderChunk {
-		buf = buf[:maxHeaderChunk]
+	if len(e.Header) == 0 {
+		return errors.New("header not found")
 	}
-
-	headerEnd := bytes.Index(buf, []byte{'\n', '\n'}) // the first two new-lines chars are the End Of Header
-	if headerEnd > -1 {
-		header := buf[0 : headerEnd+2]
-		headerReader := textproto.NewReader(bufio.NewReader(bytes.NewBuffer(header)))
-		e.Header, err = headerReader.ReadMIMEHeader()
-		if err == nil || err == io.EOF {
-			// decode the subject
-			if subject, ok := e.Header["Subject"]; ok {
-				e.Subject = MimeHeaderDecode(subject[0])
-			}
-		}
-	} else {
-		err = errors.New("header not found")
+	// decode the subject
+	if subject, ok := e.Header["Subject"]; ok {
+		e.Subject = MimeHeaderDecode(subject[0])
 	}
-	return err
+	return nil
 }
 
 // Len returns the number of bytes that would be in the reader returned by NewReader()
@@ -218,9 +259,7 @@ func (e *Envelope) String() string {
 func (e *Envelope) ResetTransaction() {
 
 	// ensure not processing by the backend, will only get lock if finished, otherwise block
-	e.Lock()
-	// got the lock, it means processing finished
-	e.Unlock()
+	e.Wait()
 
 	e.MailFrom = Address{}
 	e.RcptTo = []Address{}
@@ -232,13 +271,18 @@ func (e *Envelope) ResetTransaction() {
 	e.Header = nil
 	e.Hashes = make([]string, 0)
 	e.DeliveryHeader = ""
+	e.Size = 0
+	e.MessageID = 0
+	e.MimeParts = nil
+	e.MimeError = nil
 	e.Values = make(map[string]interface{})
 }
 
 // Reseed is called when used with a new connection, once it's accepted
-func (e *Envelope) Reseed(remoteIP string, clientID uint64) {
+func (e *Envelope) Reseed(remoteIP string, clientID uint64, serverID int) {
 	e.RemoteIP = remoteIP
-	e.QueuedId = queuedID(clientID)
+	e.ServerID = serverID
+	e.QueuedId = QueuedID(clientID, serverID)
 	e.Helo = ""
 	e.TLS = false
 	e.ESMTP = false
@@ -256,10 +300,68 @@ func (e *Envelope) PopRcpt() Address {
 	return ret
 }
 
+func (e *Envelope) Protocol() Protocol {
+	protocol := ProtocolSMTP
+	switch {
+	case !e.ESMTP && !e.TLS:
+		protocol = ProtocolSMTP
+	case !e.ESMTP && e.TLS:
+		protocol = ProtocolSMTPS
+	case e.ESMTP && !e.TLS:
+		protocol = ProtocolESMTP
+	case e.ESMTP && e.TLS:
+		protocol = ProtocolESMTPS
+	}
+	return protocol
+}
+
+type Protocol int
+
+const (
+	ProtocolSMTP Protocol = iota
+	ProtocolSMTPS
+	ProtocolESMTP
+	ProtocolESMTPS
+	ProtocolLTPS
+	ProtocolUnknown
+)
+
+func (p Protocol) String() string {
+	switch p {
+	case ProtocolSMTP:
+		return "SMTP"
+	case ProtocolSMTPS:
+		return "SMTPS"
+	case ProtocolESMTP:
+		return "ESMTP"
+	case ProtocolESMTPS:
+		return "ESMTPS"
+	case ProtocolLTPS:
+		return "LTPS"
+	}
+	return "unknown"
+}
+
+func ParseProtocolType(str string) Protocol {
+	switch {
+	case str == "SMTP":
+		return ProtocolSMTP
+	case str == "SMTPS":
+		return ProtocolSMTPS
+	case str == "ESMTP":
+		return ProtocolESMTP
+	case str == "ESMTPS":
+		return ProtocolESMTPS
+	case str == "LTPS":
+		return ProtocolLTPS
+	}
+
+	return ProtocolUnknown
+}
+
 const (
 	statePlainText = iota
 	stateStartEncodedWord
-	stateEncodedWord
 	stateEncoding
 	stateCharset
 	statePayload
@@ -432,14 +534,14 @@ func NewPool(poolSize int) *Pool {
 	}
 }
 
-func (p *Pool) Borrow(remoteAddr string, clientID uint64) *Envelope {
+func (p *Pool) Borrow(remoteAddr string, clientID uint64, serverID int) *Envelope {
 	var e *Envelope
 	p.sem <- true // block the envelope until more room
 	select {
 	case e = <-p.pool:
-		e.Reseed(remoteAddr, clientID)
+		e.Reseed(remoteAddr, clientID, serverID)
 	default:
-		e = NewEnvelope(remoteAddr, clientID)
+		e = NewEnvelope(remoteAddr, clientID, serverID)
 	}
 	return e
 }
@@ -455,4 +557,23 @@ func (p *Pool) Return(e *Envelope) {
 	}
 	// take a value off the semaphore to make room for more envelopes
 	<-p.sem
+}
+
+const MostCommonCharset = "ISO-8859-1"
+
+var supportedEncodingsCharsets map[string]bool
+
+func SupportsCharset(charset string) bool {
+	if supportedEncodingsCharsets == nil {
+		supportedEncodingsCharsets = make(map[string]bool)
+	} else if ok, result := supportedEncodingsCharsets[charset]; ok {
+		return result
+	}
+	_, err := Dec.CharsetReader(charset, bytes.NewReader([]byte{}))
+	if err != nil {
+		supportedEncodingsCharsets[charset] = false
+		return false
+	}
+	supportedEncodingsCharsets[charset] = true
+	return true
 }

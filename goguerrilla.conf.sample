@@ -14,8 +14,8 @@
         "save_workers_size": 1,
         "save_process" : "HeadersParser|Header|Debugger",
         "primary_mail_host" : "mail.example.com",
-        "gw_save_timeout" : "30s",
-        "gw_val_rcpt_timeout" : "3s"
+        "save_timeout" : "30s",
+        "val_rcpt_timeout" : "3s"
     },
     "servers" : [
         {

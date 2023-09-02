@@ -1,6 +1,8 @@
 package mail
 
 import (
+	"bufio"
+	"bytes"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -95,9 +97,9 @@ func TestAddressWithIP(t *testing.T) {
 }
 
 func TestEnvelope(t *testing.T) {
-	e := NewEnvelope("127.0.0.1", 22)
+	e := NewEnvelope("127.0.0.1", 22, 0)
 
-	e.QueuedId = "abc123"
+	e.QueuedId = QueuedID(2, 33)
 	e.Helo = "helo.example.com"
 	e.MailFrom = Address{User: "test", Host: "example.com"}
 	e.TLS = true
@@ -107,7 +109,18 @@ func TestEnvelope(t *testing.T) {
 	if to.String() != "test@example.com" {
 		t.Error("to does not equal test@example.com, it was:", to.String())
 	}
-	e.Data.WriteString("Subject: Test\n\nThis is a test nbnb nbnb hgghgh nnnbnb nbnbnb nbnbn.")
+	// we feed the input through the NewMineDotReader, it will parse the headers while reading the input
+	// the input has a single line header and ends with a line with a single .
+	in := "Subject: =?utf-8?B?55So5oi34oCcRXBpZGVtaW9sb2d5IGluIG51cnNpbmcgYW5kIGg=?=\n\nThis is a test nbnb nbnb hgghgh nnnbnb nbnbnb nbnbn.\n.\n"
+	mdr := NewMimeDotReader(bufio.NewReader(bytes.NewBufferString(in)), 1)
+	i, err := io.Copy(&e.Data, mdr)
+	if err != nil && err != io.EOF {
+		t.Error(err, "cannot copy buffer", i, err)
+	}
+	// pass the parsed headers to the envelope
+	if p := mdr.Parts(); p != nil && len(p) > 0 {
+		e.Header = p[0].Headers
+	}
 
 	addHead := "Delivered-To: " + to.String() + "\n"
 	addHead += "Received: from " + e.Helo + " (" + e.Helo + "  [" + e.RemoteIP + "])\n"
@@ -119,12 +132,13 @@ func TestEnvelope(t *testing.T) {
 	if len(data) != e.Len() {
 		t.Error("e.Len() is incorrect, it shown ", e.Len(), " but we wanted ", len(data))
 	}
+
 	if err := e.ParseHeaders(); err != nil && err != io.EOF {
 		t.Error("cannot parse headers:", err)
 		return
 	}
-	if e.Subject != "Test" {
-		t.Error("Subject expecting: Test, got:", e.Subject)
+	if e.Subject != "用户“Epidemiology in nursing and h" {
+		t.Error("Subject expecting: 用户“Epidemiology in nursing and h, got:", e.Subject)
 	}
 
 }
@@ -145,4 +159,27 @@ func TestEncodedWordAhead(t *testing.T) {
 		t.Error("expecting an encoded word ahead")
 	}
 
+}
+
+func TestQueuedID(t *testing.T) {
+	h := QueuedID(5550000000, 1)
+
+	if len(h) != 16 { // silly comparison, but there in case of refactoring
+		t.Error("queuedID needs to be 16 bytes in length")
+	}
+
+	str := h.String()
+	if len(str) != 32 {
+		t.Error("queuedID string should be 32 bytes in length")
+	}
+
+	h2 := QueuedID(5550000000, 1)
+	if bytes.Equal(h[:], h2[:]) {
+		t.Error("hashes should not be equal")
+	}
+
+	h2.FromHex("5a4a2f08784334de5148161943111ad3")
+	if h2.String() != "5a4a2f08784334de5148161943111ad3" {
+		t.Error("hex conversion didnt work")
+	}
 }

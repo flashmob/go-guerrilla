@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -15,18 +16,24 @@ import (
 var (
 	Svc *service
 
-	// Store the constructor for making an new processor decorator.
+	// processors store the constructors for for composing a new processor using a decorator pattern.
 	processors map[string]ProcessorConstructor
 
-	b Backend
+	// Streamers store the constructors for composing a new stream-based processor using a decorator pattern.
+	Streamers map[string]StreamProcessorConstructor
 )
 
 func init() {
 	Svc = &service{}
 	processors = make(map[string]ProcessorConstructor)
+	Streamers = make(map[string]StreamProcessorConstructor)
 }
 
+const DefaultGateway = "default"
+
 type ProcessorConstructor func() Decorator
+
+type StreamProcessorConstructor func() *StreamDecorator
 
 // Backends process received mail. Depending on the implementation, they can store mail in the database,
 // write to a file, check for spam, re-transmit to another server, etc.
@@ -37,6 +44,11 @@ type Backend interface {
 	Process(*mail.Envelope) Result
 	// ValidateRcpt validates the last recipient that was pushed to the mail envelope
 	ValidateRcpt(e *mail.Envelope) RcptError
+	ProcessBackground(e *mail.Envelope)
+	// ProcessStream is the alternative for Process, a stream is read from io.Reader
+	ProcessStream(r io.Reader, e *mail.Envelope) (Result, int64, error)
+	// StreamOn signals if ProcessStream can be used
+	StreamOn() bool
 	// Initializes the backend, eg. creates folders, sets-up database connections
 	Initialize(BackendConfig) error
 	// Initializes the backend after it was Shutdown()
@@ -45,12 +57,9 @@ type Backend interface {
 	Shutdown() error
 	// Start Starts a backend that has been initialized
 	Start() error
+	// returns the name of the backend
+	Name() string
 }
-
-type BackendConfig map[string]interface{}
-
-// All config structs extend from this
-type BaseConfig interface{}
 
 type notifyMsg struct {
 	err      error
@@ -91,19 +100,19 @@ func (r *result) Code() int {
 	return code
 }
 
-func NewResult(r ...interface{}) Result {
-	buf := new(result)
-	for _, item := range r {
+func NewResult(param ...interface{}) Result {
+	r := new(result)
+	for _, item := range param {
 		switch v := item.(type) {
 		case error:
-			_, _ = buf.WriteString(v.Error())
+			_, _ = r.WriteString(v.Error())
 		case fmt.Stringer:
-			_, _ = buf.WriteString(v.String())
+			_, _ = r.WriteString(v.String())
 		case string:
-			_, _ = buf.WriteString(v)
+			_, _ = r.WriteString(v)
 		}
 	}
-	return buf
+	return r
 }
 
 type processorInitializer interface {
@@ -169,7 +178,7 @@ func (s *service) SetMainlog(l log.Logger) {
 	s.mainlog.Store(l)
 }
 
-// AddInitializer adds a function that implements ProcessorShutdowner to be called when initializing
+// AddInitializer adds a function that implements processorInitializer to be called when initializing
 func (s *service) AddInitializer(i processorInitializer) {
 	s.Lock()
 	defer s.Unlock()
@@ -192,10 +201,10 @@ func (s *service) reset() {
 // Initialize initializes all the processors one-by-one and returns any errors.
 // Subsequent calls to Initialize will not call the initializer again unless it failed on the previous call
 // so Initialize may be called again to retry after getting errors
-func (s *service) initialize(backend BackendConfig) Errors {
+func (s *service) Initialize(backend BackendConfig) Errors {
 	s.Lock()
 	defer s.Unlock()
-	var errors Errors
+	var errors Errors = nil
 	failed := make([]processorInitializer, 0)
 	for i := range s.initializers {
 		if err := s.initializers[i].Initialize(backend); err != nil {
@@ -236,17 +245,34 @@ func (s *service) AddProcessor(name string, p ProcessorConstructor) {
 	c = func() Decorator {
 		return p()
 	}
-	// add to our processors list
 	processors[strings.ToLower(name)] = c
 }
 
+func (s *service) AddStreamProcessor(name string, p StreamProcessorConstructor) {
+	// wrap in a constructor since we want to defer calling it
+	var c StreamProcessorConstructor
+	c = func() *StreamDecorator {
+		return p()
+	}
+	Streamers[strings.ToLower(name)] = c
+}
+
 // extractConfig loads the backend config. It has already been unmarshalled
-// configData contains data from the main config file's "backend_config" value
+// "group" refers
+// cfg contains data from the main config file's "backend_config" value
 // configType is a Processor's specific config value.
 // The reason why using reflection is because we'll get a nice error message if the field is missing
 // the alternative solution would be to json.Marshal() and json.Unmarshal() however that will not give us any
 // error messages
-func (s *service) ExtractConfig(configData BackendConfig, configType BaseConfig) (interface{}, error) {
+func (s *service) ExtractConfig(section ConfigSection, group string, cfg BackendConfig, configType BaseConfig) (interface{}, error) {
+	group = strings.ToLower(group)
+
+	var configData ConfigGroup
+	if v, ok := cfg[section][group]; ok {
+		configData = v
+	} else {
+		return configType, nil
+	}
 	// Use reflection so that we can provide a nice error message
 	v := reflect.ValueOf(configType).Elem() // so that we can set the values
 	//m := reflect.ValueOf(configType).Elem()

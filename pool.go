@@ -127,7 +127,7 @@ func (p *Pool) GetActiveClientsCount() int {
 }
 
 // Borrow a Client from the pool. Will block if len(activeClients) > maxClients
-func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger, ep *mail.Pool) (Poolable, error) {
+func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger, ep *mail.Pool, serverID int) (Poolable, error) {
 	p.poolGuard.Lock()
 	defer p.poolGuard.Unlock()
 
@@ -142,7 +142,7 @@ func (p *Pool) Borrow(conn net.Conn, clientID uint64, logger log.Logger, ep *mai
 		case c = <-p.pool:
 			c.init(conn, clientID, ep)
 		default:
-			c = NewClient(conn, clientID, logger, ep)
+			c = NewClient(conn, clientID, logger, ep, serverID)
 		}
 		p.activeClientsAdd(c)
 

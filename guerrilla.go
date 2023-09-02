@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -52,19 +53,20 @@ type guerrilla struct {
 	state int8
 	EventHandler
 	logStore
-	backendStore
+
+	beGuard  sync.Mutex
+	backends BackendContainer
 }
 
 type logStore struct {
 	atomic.Value
 }
 
-type backendStore struct {
-	atomic.Value
-}
+type BackendContainer map[string]backends.Backend
 
 type daemonEvent func(c *AppConfig)
 type serverEvent func(sc *ServerConfig)
+type backendEvent func(c *AppConfig, gateway string)
 
 // Get loads the log.logger in an atomic operation. Returns a stderr logger if not able to load
 func (ls *logStore) mainlog() log.Logger {
@@ -80,13 +82,48 @@ func (ls *logStore) setMainlog(log log.Logger) {
 	ls.Store(log)
 }
 
+// makeConfiguredBackends makes backends from the config
+func (g *guerrilla) makeConfiguredBackends(l log.Logger) ([]backends.Backend, error) {
+	var list []backends.Backend
+	config := g.Config.BackendConfig[backends.ConfigGateways]
+	if len(config) == 0 {
+		return list, errors.New("no backends configured")
+	}
+	list = make([]backends.Backend, 0)
+	for name := range config {
+		if b, err := backends.New(name, g.Config.BackendConfig, l); err != nil {
+			return nil, err
+		} else {
+			list = append(list, b)
+		}
+	}
+	return list, nil
+}
+
+// New creates a new Guerrilla instance configured with backends and a logger
 // Returns a new instance of Guerrilla with the given config, not yet running. Backend started.
-func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
+// b can be nil. If nil. then it will use the config to make the backends
+func New(ac *AppConfig, l log.Logger, b ...backends.Backend) (Guerrilla, error) {
 	g := &guerrilla{
 		Config:  *ac, // take a local copy
 		servers: make(map[string]*server, len(ac.Servers)),
 	}
-	g.backendStore.Store(b)
+	if 0 == len(b) {
+		var err error
+		b, err = g.makeConfiguredBackends(l)
+		if err != nil {
+			return g, err
+		}
+	}
+	if g.backends == nil {
+		g.backends = make(BackendContainer)
+	}
+	for i := range b {
+		if b[i] == nil {
+			return g, errors.New("cannot use a nil backend")
+		}
+		g.storeBackend(b[i])
+	}
 	g.setMainlog(l)
 
 	if ac.LogLevel != "" {
@@ -106,8 +143,11 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 		return g, err
 	}
 
-	// start backend for processing email
-	err = g.backend().Start()
+	// start backends for processing email
+	_, err = g.mapBackends(func(b backends.Backend) error {
+		return b.Start()
+	})
+
 	if err != nil {
 		return g, err
 	}
@@ -122,20 +162,22 @@ func New(ac *AppConfig, b backends.Backend, l log.Logger) (Guerrilla, error) {
 func (g *guerrilla) makeServers() error {
 	g.mainlog().Debug("making servers")
 	var errs Errors
-	for _, sc := range g.Config.Servers {
+	for serverID, sc := range g.Config.Servers {
 		if _, ok := g.servers[sc.ListenInterface]; ok {
 			// server already instantiated
 			continue
 		}
 		if err := sc.Validate(); err != nil {
-			g.mainlog().WithError(errs).Errorf("Failed to create server [%s]", sc.ListenInterface)
+			g.mainlog().Fields("error", errs, "iface", sc.ListenInterface).
+				Error("failed to create server")
 			errs = append(errs, err)
 			continue
 		} else {
 			sc := sc // pin!
-			server, err := newServer(&sc, g.backend(), g.mainlog())
+			server, err := newServer(&sc, g.backend(sc.Gateway), g.mainlog(), serverID)
 			if err != nil {
-				g.mainlog().WithError(err).Errorf("Failed to create server [%s]", sc.ListenInterface)
+				g.mainlog().Fields("error", err, "iface", sc.ListenInterface).
+					Error("failed to create server")
 				errs = append(errs, err)
 			}
 			if server != nil {
@@ -197,6 +239,31 @@ func (g *guerrilla) mapServers(callback func(*server)) map[string]*server {
 	return g.servers
 }
 
+type mapBackendErrors []error
+
+func (e mapBackendErrors) Error() string {
+	data := make([]string, len(e))
+	for i, s := range e {
+		data[i] = fmt.Sprint(s)
+	}
+	return strings.Join(data, ",")
+}
+
+func (g *guerrilla) mapBackends(callback func(backend backends.Backend) error) (BackendContainer, error) {
+	defer g.beGuard.Unlock()
+	g.beGuard.Lock()
+	var e mapBackendErrors
+	for name := range g.backends {
+		if err := callback(g.backends[name]); err != nil {
+			e = append(e, err)
+		}
+	}
+	if len(e) == 0 {
+		return g.backends, nil
+	}
+	return g.backends, e
+}
+
 // subscribeEvents subscribes event handlers for configuration change events
 func (g *guerrilla) subscribeEvents() {
 
@@ -209,8 +276,9 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigAllowedHosts] = daemonEvent(func(c *AppConfig) {
 		g.mapServers(func(server *server) {
 			server.setAllowedHosts(c.AllowedHosts)
+			g.mainlog().Fields("serverID", server.serverID, "event", EventConfigAllowedHosts).
+				Info("allowed_hosts config changed, a new list was set")
 		})
-		g.mainlog().Infof("allowed_hosts config changed, a new list was set")
 	})
 
 	// the main log file changed
@@ -223,9 +291,11 @@ func (g *guerrilla) subscribeEvents() {
 				// it will change server's logger when the next client gets accepted
 				server.mainlogStore.Store(l)
 			})
-			g.mainlog().Infof("main log for new clients changed to [%s]", c.LogFile)
+			g.mainlog().Fields("file", c.LogFile).
+				Info("main log for new clients changed")
 		} else {
-			g.mainlog().WithError(err).Errorf("main logging change failed [%s]", c.LogFile)
+			g.mainlog().Fields("error", err, "file", c.LogFile).
+				Error("main logging change failed")
 		}
 
 	})
@@ -234,10 +304,11 @@ func (g *guerrilla) subscribeEvents() {
 	events[EventConfigLogReopen] = daemonEvent(func(c *AppConfig) {
 		err := g.mainlog().Reopen()
 		if err != nil {
-			g.mainlog().WithError(err).Errorf("main log file [%s] failed to re-open", c.LogFile)
+			g.mainlog().Fields("error", err, "file", c.LogFile).
+				Error("main log file failed to re-open")
 			return
 		}
-		g.mainlog().Infof("re-opened main log file [%s]", c.LogFile)
+		g.mainlog().Fields("file", c.LogFile).Info("re-opened main log file")
 	})
 
 	// when log level changes, apply to mainlog and server logs
@@ -248,7 +319,7 @@ func (g *guerrilla) subscribeEvents() {
 			g.mapServers(func(server *server) {
 				server.logStore.Store(l)
 			})
-			g.mainlog().Infof("log level changed to [%s]", c.LogLevel)
+			g.mainlog().Fields("level", c.LogLevel).Info("log level changed")
 		}
 	})
 
@@ -260,39 +331,51 @@ func (g *guerrilla) subscribeEvents() {
 	// server config was updated
 	events[EventConfigServerConfig] = serverEvent(func(sc *ServerConfig) {
 		g.setServerConfig(sc)
-		g.mainlog().Infof("server %s config change event, a new config has been saved", sc.ListenInterface)
+		g.mainlog().Fields("iface", sc.ListenInterface).
+			Info("server config change event, a new config has been saved")
 	})
 
 	// add a new server to the config & start
 	events[EventConfigServerNew] = serverEvent(func(sc *ServerConfig) {
-		g.mainlog().Debugf("event fired [%s] %s", EventConfigServerNew, sc.ListenInterface)
+		values := []interface{}{"iface", sc.ListenInterface, "event", EventConfigServerNew}
+		g.mainlog().Fields(values...).
+			Debug("event fired")
 		if _, err := g.findServer(sc.ListenInterface); err != nil {
+
 			// not found, lets add it
-			//
 			if err := g.makeServers(); err != nil {
-				g.mainlog().WithError(err).Errorf("cannot add server [%s]", sc.ListenInterface)
+				g.mainlog().Fields(append(values, "error", err)...).
+					Error("cannot add server")
 				return
 			}
-			g.mainlog().Infof("New server added [%s]", sc.ListenInterface)
+			g.mainlog().Fields(values...).Info("new server added")
 			if g.state == daemonStateStarted {
 				err := g.Start()
 				if err != nil {
-					g.mainlog().WithError(err).Info("Event server_change:new_server returned errors when starting")
+					g.mainlog().Fields(append(values, "error", err)...).
+						Error("new server errors when starting")
 				}
 			}
 		} else {
-			g.mainlog().Debugf("new event, but server already fund")
+			g.mainlog().Fields(values...).
+				Debug("new event, but server already fund")
 		}
 	})
 
 	// start a server that already exists in the config and has been enabled
 	events[EventConfigServerStart] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
+			fields := []interface{}{
+				"iface", server.listenInterface,
+				"serverID", server.serverID,
+				"event", EventConfigServerStart}
 			if server.state == ServerStateStopped || server.state == ServerStateNew {
-				g.mainlog().Infof("Starting server [%s]", server.listenInterface)
+				g.mainlog().Fields(fields...).
+					Info("starting server")
 				err := g.Start()
 				if err != nil {
-					g.mainlog().WithError(err).Info("Event server_change:start_server returned errors when starting")
+					g.mainlog().Fields(append(fields, "error", err)...).
+						Info("event server_change:start_server returned errors when starting")
 				}
 			}
 		}
@@ -303,7 +386,11 @@ func (g *guerrilla) subscribeEvents() {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			if server.state == ServerStateRunning {
 				server.Shutdown()
-				g.mainlog().Infof("Server [%s] stopped.", sc.ListenInterface)
+				g.mainlog().Fields(
+					"event", EventConfigServerStop,
+					"server", sc.ListenInterface,
+					"serverID", server.serverID).
+					Info("server stopped.")
 			}
 		}
 	})
@@ -313,24 +400,40 @@ func (g *guerrilla) subscribeEvents() {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
 			server.Shutdown()
 			g.removeServer(sc.ListenInterface)
-			g.mainlog().Infof("Server [%s] removed from config, stopped it.", sc.ListenInterface)
+			g.mainlog().Fields(
+				"event", EventConfigServerRemove,
+				"server", sc.ListenInterface,
+				"serverID", server.serverID).
+				Info("server removed from config, stopped it")
 		}
 	})
 
 	// TLS changes
 	events[EventConfigServerTLSConfig] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
+			fields := []interface{}{
+				"iface", server.listenInterface,
+				"serverID", server.serverID,
+				"event", EventConfigServerTLSConfig}
 			if err := server.configureTLS(); err == nil {
-				g.mainlog().Infof("Server [%s] new TLS configuration loaded", sc.ListenInterface)
+				g.mainlog().Fields(fields...).Info("server new TLS configuration loaded")
 			} else {
-				g.mainlog().WithError(err).Errorf("Server [%s] failed to load the new TLS configuration", sc.ListenInterface)
+				g.mainlog().Fields(append(fields, "error", err)...).
+					Error("Server failed to load the new TLS configuration")
 			}
 		}
 	})
 	// when server's timeout change.
 	events[EventConfigServerTimeout] = serverEvent(func(sc *ServerConfig) {
 		g.mapServers(func(server *server) {
+			fields := []interface{}{
+				"iface", server.listenInterface,
+				"serverID", server.serverID,
+				"event", EventConfigServerTimeout,
+				"timeout", sc.Timeout,
+			}
 			server.setTimeout(sc.Timeout)
+			g.mainlog().Fields(fields...).Info("server timeout set")
 		})
 	})
 	// when server's max clients change.
@@ -345,92 +448,178 @@ func (g *guerrilla) subscribeEvents() {
 			var err error
 			var l log.Logger
 			level := g.mainlog().GetLevel()
+			fields := []interface{}{
+				"iface", server.listenInterface,
+				"serverID", server.serverID,
+				"event", EventConfigServerLogFile,
+				"file", sc.LogFile,
+			}
 			if l, err = log.GetLogger(sc.LogFile, level); err == nil {
 				g.setMainlog(l)
 				backends.Svc.SetMainlog(l)
 				// it will change to the new logger on the next accepted client
 				server.logStore.Store(l)
-				g.mainlog().Infof("Server [%s] changed, new clients will log to: [%s]",
+				g.mainlog().Fields(fields...).Info("server log changed",
 					sc.ListenInterface,
 					sc.LogFile,
 				)
 			} else {
-				g.mainlog().WithError(err).Errorf(
-					"Server [%s] log change failed to: [%s]",
-					sc.ListenInterface,
-					sc.LogFile,
-				)
+				g.mainlog().Fields(append(fields, "error", err)...).Error(
+					"server log change failed")
 			}
 		}
 	})
 	// when the daemon caught a sighup, event for individual server
 	events[EventConfigServerLogReopen] = serverEvent(func(sc *ServerConfig) {
 		if server, err := g.findServer(sc.ListenInterface); err == nil {
+			fields := []interface{}{"file", sc.LogFile,
+				"iface", sc.ListenInterface,
+				"serverID", server.serverID,
+				"file", sc.LogFile,
+				"event", EventConfigServerLogReopen}
 			if err = server.log().Reopen(); err != nil {
-				g.mainlog().WithError(err).Errorf("server [%s] log file [%s] failed to re-open", sc.ListenInterface, sc.LogFile)
+				g.mainlog().Fields(
+					append(fields, "error", err)...).
+					Error("server log file failed to re-open")
 				return
 			}
-			g.mainlog().Infof("Server [%s] re-opened log file [%s]", sc.ListenInterface, sc.LogFile)
+			g.mainlog().Fields(fields).Info("server re-opened log file")
 		}
 	})
-	// when the backend changes
-	events[EventConfigBackendConfig] = daemonEvent(func(appConfig *AppConfig) {
-		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
-		// shutdown the backend first.
-		var err error
-		if err = g.backend().Shutdown(); err != nil {
-			logger.WithError(err).Warn("Backend failed to shutdown")
+
+	// when the server's gateway setting changed
+	events[EventConfigServerGatewayConfig] = serverEvent(func(sc *ServerConfig) {
+		b := g.backend(sc.Gateway)
+		if b == nil {
+			g.mainlog().Fields("gateway", sc.Gateway, "event", EventConfigServerGatewayConfig).
+				Error("could not change to gateway, not configured")
 			return
 		}
-		// init a new backend, Revert to old backend config if it fails
-		if newBackend, newErr := backends.New(appConfig.BackendConfig, logger); newErr != nil {
-			logger.WithError(newErr).Error("Error while loading the backend")
-			err = g.backend().Reinitialize()
+		g.storeBackend(b)
+	})
+
+	revertIfError := func(err error, name string, logger log.Logger, g *guerrilla) {
+		if err != nil {
+			logger.Fields("error", err, "gateway", name, "event", EventConfigServerGatewayConfig).
+				Error("cannot change gateway config, reverting to old config")
+			err = g.backend(name).Reinitialize()
 			if err != nil {
-				logger.WithError(err).Fatal("failed to revert to old backend config")
+				logger.Fields("error", err, "gateway", name, "event", EventConfigServerGatewayConfig).
+					Error("failed to revert to old gateway config")
 				return
 			}
-			err = g.backend().Start()
+			err = g.backend(name).Start()
 			if err != nil {
-				logger.WithError(err).Fatal("failed to start backend with old config")
+				logger.Fields("error", err, "gateway", name, "event", EventConfigServerGatewayConfig).
+					Error("failed to start gateway with old config")
 				return
 			}
-			logger.Info("reverted to old backend config")
+			logger.Fields("gateway", name, "event", EventConfigServerGatewayConfig).
+				Info("reverted to old gateway config")
+		}
+	}
+
+	events[EventConfigBackendConfigChanged] = backendEvent(func(appConfig *AppConfig, name string) {
+		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
+		var err error
+		// shutdown the backend first.
+		if err = g.backend(name).Shutdown(); err != nil {
+			logger.Fields("error", err, "gateway", name, "event", EventConfigBackendConfigChanged).
+				Error("gateway failed to shutdown")
+			return // we can't do anything then
+		}
+		if newBackend, newErr := backends.New(name, appConfig.BackendConfig, logger); newErr != nil {
+			err = newErr
+			revertIfError(newErr, name, logger, g) // revert to old backend
+			return
 		} else {
-			// swap to the bew backend (assuming old backend was shutdown so it can be safely swapped)
-			if err := newBackend.Start(); err != nil {
-				logger.WithError(err).Error("backend could not start")
+			if err = newBackend.Start(); err != nil {
+				logger.Fields("error", err, "gateway", name, "event", EventConfigBackendConfigChanged).
+					Error("gateway could not start")
+				revertIfError(err, name, logger, g) // revert to old backend
+				return
+			} else {
+				logger.Fields("gateway", name, "event", EventConfigBackendConfigChanged).
+					Info("gateway with new config started")
+				g.storeBackend(newBackend)
 			}
-			logger.Info("new backend started")
+		}
+	})
+
+	// a new gateway was added
+	events[EventConfigBackendConfigAdded] = backendEvent(func(appConfig *AppConfig, name string) {
+		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
+		// shutdown any old backend first.
+		if newBackend, newErr := backends.New(name, appConfig.BackendConfig, logger); newErr != nil {
+			logger.Fields("error", newErr, "gateway", name, "event", EventConfigBackendConfigAdded).
+				Error("cannot add new gateway")
+		} else {
+			// swap to the bew gateway (assuming old gateway was shutdown so it can be safely swapped)
+			if err := newBackend.Start(); err != nil {
+				logger.Fields("error", err, "gateway", name, "event", EventConfigBackendConfigAdded).
+					Error("cannot start new gateway")
+			}
+			logger.Fields("gateway", name).Info("new gateway started")
 			g.storeBackend(newBackend)
 		}
 	})
+
+	// remove a gateway (shut it down)
+	events[EventConfigBackendConfigRemoved] = backendEvent(func(appConfig *AppConfig, name string) {
+		logger, _ := log.GetLogger(appConfig.LogFile, appConfig.LogLevel)
+		// shutdown the backend first.
+		var err error
+		// revert
+		defer revertIfError(err, name, logger, g)
+		if err = g.backend(name).Shutdown(); err != nil {
+			logger.Fields("error", err, "gateway", name, "event", EventConfigBackendConfigRemoved).
+				Error("gateway failed to shutdown")
+			return
+		}
+		g.removeBackend(g.backend(name))
+		logger.Fields("gateway", name, "event", EventConfigBackendConfigRemoved).Info("gateway removed")
+	})
+
+	// subscribe all of the above events
 	var err error
 	for topic, fn := range events {
-		switch f := fn.(type) {
-		case daemonEvent:
-			err = g.Subscribe(topic, f)
-		case serverEvent:
-			err = g.Subscribe(topic, f)
-		}
+		err = g.Subscribe(topic, fn)
 		if err != nil {
-			g.mainlog().WithError(err).Errorf("failed to subscribe on topic [%s]", topic)
+			g.mainlog().Fields("error", err, "event", topic).
+				Error("failed to subscribe on topic")
 			break
 		}
 	}
+}
+
+func (g *guerrilla) removeBackend(b backends.Backend) {
+	g.beGuard.Lock()
+	defer g.beGuard.Unlock()
+	delete(g.backends, b.Name())
 
 }
 
 func (g *guerrilla) storeBackend(b backends.Backend) {
-	g.backendStore.Store(b)
+	g.beGuard.Lock()
+	defer g.beGuard.Unlock()
+	g.backends[b.Name()] = b
 	g.mapServers(func(server *server) {
-		server.setBackend(b)
+		sc := server.configStore.Load().(ServerConfig)
+		if b.Name() == sc.Gateway {
+			server.setBackend(b)
+		}
 	})
 }
 
-func (g *guerrilla) backend() backends.Backend {
-	if b, ok := g.backendStore.Load().(backends.Backend); ok {
+func (g *guerrilla) backend(name string) backends.Backend {
+	g.beGuard.Lock()
+	defer g.beGuard.Unlock()
+	if b, ok := g.backends[name]; ok {
 		return b
+	}
+	// if not found, return a random one
+	for b := range g.backends {
+		return g.backends[b]
 	}
 	return nil
 }
@@ -448,10 +637,12 @@ func (g *guerrilla) Start() error {
 	}
 	if g.state == daemonStateStopped {
 		// when a backend is shutdown, we need to re-initialize before it can be started again
-		if err := g.backend().Reinitialize(); err != nil {
-			startErrors = append(startErrors, err)
-		}
-		if err := g.backend().Start(); err != nil {
+		if _, err := g.mapBackends(func(b backends.Backend) error {
+			if err := b.Reinitialize(); err != nil {
+				return err
+			}
+			return b.Start()
+		}); err != nil {
 			startErrors = append(startErrors, err)
 		}
 	}
@@ -471,7 +662,8 @@ func (g *guerrilla) Start() error {
 		}
 		startWG.Add(1)
 		go func(s *server) {
-			g.mainlog().Infof("Starting: %s", s.listenInterface)
+			g.mainlog().Fields("iface", s.listenInterface, "serverID", s.serverID).
+				Info("starting server")
 			if err := s.Start(&startWG); err != nil {
 				errs <- err
 			}
@@ -499,7 +691,7 @@ func (g *guerrilla) Shutdown() {
 	g.mapServers(func(s *server) {
 		if s.state == ServerStateRunning {
 			s.Shutdown()
-			g.mainlog().Infof("shutdown completed for [%s]", s.listenInterface)
+			g.mainlog().Fields("iface", s.listenInterface, "serverID", s.serverID).Info("shutdown completed")
 		}
 	})
 
@@ -508,10 +700,14 @@ func (g *guerrilla) Shutdown() {
 		g.state = daemonStateStopped
 		defer g.guard.Unlock()
 	}()
-	if err := g.backend().Shutdown(); err != nil {
-		g.mainlog().WithError(err).Warn("Backend failed to shutdown")
+
+	if _, err := g.mapBackends(func(b backends.Backend) error {
+		return b.Shutdown()
+	}); err != nil {
+		fmt.Println(err)
+		g.mainlog().Fields("error", err).Error("backend failed to shutdown")
 	} else {
-		g.mainlog().Infof("Backend shutdown completed")
+		g.mainlog().Info("backend shutdown completed")
 	}
 }
 
@@ -532,7 +728,7 @@ func (g *guerrilla) writePid() (err error) {
 			}
 		}
 		if err != nil {
-			g.mainlog().WithError(err).Errorf("error while writing pidFile (%s)", g.Config.PidFile)
+			g.mainlog().Fields("error", err, "file", g.Config.PidFile).Error("error while writing pidFile")
 		}
 	}()
 	if len(g.Config.PidFile) > 0 {
@@ -546,7 +742,7 @@ func (g *guerrilla) writePid() (err error) {
 		if err = f.Sync(); err != nil {
 			return err
 		}
-		g.mainlog().Infof("pid_file (%s) written with pid:%v", g.Config.PidFile, pid)
+		g.mainlog().Fields("file", g.Config.PidFile, "pid", pid).Info("pid_file written")
 	}
 	return nil
 }

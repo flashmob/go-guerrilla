@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type HeaderConfig struct {
+type headerConfig struct {
 	PrimaryHost string `json:"primary_mail_host"`
 }
 
@@ -15,7 +15,7 @@ type HeaderConfig struct {
 // ----------------------------------------------------------------------------------
 // Description   : Adds delivery information headers to e.DeliveryHeader
 // ----------------------------------------------------------------------------------
-// Config Options: none
+// Config Options: primary_mail_host - string of the primary mail hostname
 // --------------:-------------------------------------------------------------------
 // Input         : e.Helo
 //               : e.RemoteAddress
@@ -34,15 +34,15 @@ func init() {
 // Sets e.DeliveryHeader part of the envelope with the generated header
 func Header() Decorator {
 
-	var config *HeaderConfig
+	var config *headerConfig
 
 	Svc.AddInitializer(InitializeWith(func(backendConfig BackendConfig) error {
-		configType := BaseConfig(&HeaderConfig{})
-		bcfg, err := Svc.ExtractConfig(backendConfig, configType)
+		configType := BaseConfig(&headerConfig{})
+		bcfg, err := Svc.ExtractConfig(ConfigProcessors, "header", backendConfig, configType)
 		if err != nil {
 			return err
 		}
-		config = bcfg.(*HeaderConfig)
+		config = bcfg.(*headerConfig)
 		return nil
 	}))
 
@@ -54,18 +54,11 @@ func Header() Decorator {
 				if len(e.Hashes) > 0 {
 					hash = e.Hashes[0]
 				}
-				protocol := "SMTP"
-				if e.ESMTP {
-					protocol = "E" + protocol
-				}
-				if e.TLS {
-					protocol = protocol + "S"
-				}
 				var addHead string
 				addHead += "Delivered-To: " + to + "\n"
 				addHead += "Received: from " + e.RemoteIP + " ([" + e.RemoteIP + "])\n"
 				if len(e.RcptTo) > 0 {
-					addHead += "	by " + e.RcptTo[0].Host + " with " + protocol + " id " + hash + "@" + e.RcptTo[0].Host + ";\n"
+					addHead += "	by " + e.RcptTo[0].Host + " with " + e.Protocol().String() + " id " + hash + "@" + e.RcptTo[0].Host + ";\n"
 				}
 				addHead += "	" + time.Now().Format(time.RFC1123Z) + "\n"
 				// save the result

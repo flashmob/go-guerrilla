@@ -1,7 +1,8 @@
 package log
 
 import (
-	log "github.com/sirupsen/logrus"
+	"fmt"
+	loglib "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net"
@@ -52,14 +53,15 @@ func (level Level) String() string {
 }
 
 type Logger interface {
-	log.FieldLogger
-	WithConn(conn net.Conn) *log.Entry
+	loglib.FieldLogger
+	WithConn(conn net.Conn) *loglib.Entry
 	Reopen() error
 	GetLogDest() string
 	SetLevel(level string)
 	GetLevel() string
 	IsDebug() bool
-	AddHook(h log.Hook)
+	AddHook(h loglib.Hook)
+	Fields(fields ...interface{}) *loglib.Entry
 }
 
 // Implements the Logger interface
@@ -67,7 +69,7 @@ type Logger interface {
 type HookedLogger struct {
 
 	// satisfy the log.FieldLogger interface
-	*log.Logger
+	*loglib.Logger
 
 	h LoggerHook
 
@@ -143,8 +145,8 @@ func GetLogger(dest string, level string) (Logger, error) {
 	return l, nil
 }
 
-func newLogrus(o OutputOption, level string) (*log.Logger, error) {
-	logLevel, err := log.ParseLevel(level)
+func newLogrus(o OutputOption, level string) (*loglib.Logger, error) {
+	logLevel, err := loglib.ParseLevel(level)
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +165,10 @@ func newLogrus(o OutputOption, level string) (*log.Logger, error) {
 		out = ioutil.Discard
 	}
 
-	logger := &log.Logger{
+	logger := &loglib.Logger{
 		Out:       out,
-		Formatter: new(log.TextFormatter),
-		Hooks:     make(log.LevelHooks),
+		Formatter: new(loglib.TextFormatter),
+		Hooks:     make(loglib.LevelHooks),
 		Level:     logLevel,
 	}
 
@@ -174,22 +176,22 @@ func newLogrus(o OutputOption, level string) (*log.Logger, error) {
 }
 
 // AddHook adds a new logrus hook
-func (l *HookedLogger) AddHook(h log.Hook) {
-	log.AddHook(h)
+func (l *HookedLogger) AddHook(h loglib.Hook) {
+	loglib.AddHook(h)
 }
 
 func (l *HookedLogger) IsDebug() bool {
-	return l.GetLevel() == log.DebugLevel.String()
+	return l.GetLevel() == loglib.DebugLevel.String()
 }
 
 // SetLevel sets a log level, one of the LogLevels
 func (l *HookedLogger) SetLevel(level string) {
-	var logLevel log.Level
+	var logLevel loglib.Level
 	var err error
-	if logLevel, err = log.ParseLevel(level); err != nil {
+	if logLevel, err = loglib.ParseLevel(level); err != nil {
 		return
 	}
-	log.SetLevel(logLevel)
+	loglib.SetLevel(logLevel)
 }
 
 // GetLevel gets the current log level
@@ -211,10 +213,33 @@ func (l *HookedLogger) GetLogDest() string {
 }
 
 // WithConn extends logrus to be able to log with a net.Conn
-func (l *HookedLogger) WithConn(conn net.Conn) *log.Entry {
+func (l *HookedLogger) WithConn(conn net.Conn) *loglib.Entry {
 	var addr = "unknown"
 	if conn != nil {
 		addr = conn.RemoteAddr().String()
 	}
 	return l.WithField("addr", addr)
+}
+
+// Fields accepts an even number of arguments in the format of ([<string> <interface{}>)1*
+func (l *HookedLogger) Fields(spec ...interface{}) *loglib.Entry {
+	size := len(spec)
+	if size < 2 || size%2 != 0 {
+		return l.WithField("oops", "wrong fields specified")
+	}
+	fields := make(map[string]interface{}, size/2)
+	for i := range spec {
+		if i%2 != 0 {
+			continue
+		}
+		if key, ok := spec[i].(string); ok {
+			fields[key] = spec[i+1]
+		} else if key, ok := spec[i].(fmt.Stringer); ok {
+			fields[key.String()] = spec[i+1]
+		} else {
+			fields[fmt.Sprintf("%d", i)] = spec[i+1]
+		}
+
+	}
+	return l.WithFields(fields)
 }
